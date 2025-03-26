@@ -24,7 +24,9 @@ CPMAddPackage(
   "WISDOM_BUILD_DOCS OFF"
   "WISDOM_EXPERIMENTAL_CPP_MODULES ON"
 )
-include(cmake/wisdom.cmake)
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${Wisdom_SOURCE_DIR}/lib/cmake/wisdom)
+set(WISDOM_EXPERIMENTAL_CPP_MODULES ON CACHE BOOL "Enable experimental C++ modules support" FORCE)
+find_package(Wisdom 0.6.7 REQUIRED)
 
 # Reflect
 CPMAddPackage(

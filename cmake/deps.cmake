@@ -28,11 +28,7 @@ set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${Wisdom_SOURCE_DIR}/lib/cmake/wisdom
 set(WISDOM_EXPERIMENTAL_CPP_MODULES ON CACHE BOOL "Enable experimental C++ modules support" FORCE)
 find_package(Wisdom 0.6.7 REQUIRED)
 
-# Reflect
 CPMAddPackage(
-  NAME Reflect
-  GITHUB_REPOSITORY qlibs/reflect
-  GIT_TAG v1.2.4
+  GITHUB_REPOSITORY gabime/spdlog 
+  VERSION 1.15.1 
 )
-add_library(Reflect INTERFACE)
-target_include_directories(Reflect INTERFACE ${Reflect_SOURCE_DIR})

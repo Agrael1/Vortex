@@ -1,38 +1,45 @@
 #include <span>
 #include <string_view>
 #include <memory>
-#include <iostream>
-#include <source_location>
 
 import vortex.app;
-
+import vortex.log;
 
 struct MainArgs {
 };
 
-int entry_main(std::span<std::string_view> args) try
-{
+int entry_main(std::span<std::string_view> args)
+try {
     MainArgs main_args;
 
-    // parse args
-    // run main function
-    // return result
+    bool debug = true;
+    vortex::LogOptions options{
+        .name = vortex::app_log_name,
+        .pattern_prefix = "vortex",
+        .output_file_path = debug ? "" : "logs/vortex.log"
+    };
+    vortex::LogOptions options_gfx{
+        .name = vortex::graphics_log_name,
+        .pattern_prefix = "vortex.graphics",
+        .output_file_path = debug ? "" : "logs/vortex.log"
+    };
+    
+    vortex::Log log_global{ options };
+    vortex::Log log_graphics{ options_gfx };
+    log_global.SetAsDefault();
+
     vortex::App a{};
     return 0;
-}
-catch (const std::exception& e)
-{
-    // Handle exceptions
+} catch (const std::exception& e) {
+    vortex::critical(e.what());
     return 1;
-}
-catch (...)
-{
-    // Handle unknown exceptions
+} catch (...) {
+    vortex::critical("Unknown exception");
     return 2;
 }
 
-
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     // Better main function
     auto args = reinterpret_cast<std::string_view*>(alloca(argc * sizeof(std::string_view)));
     for (int i = 0; i < argc; ++i) {

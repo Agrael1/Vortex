@@ -18,8 +18,10 @@ PRIVATE
   
 
   PRIVATE FILE_SET CXX_MODULES FILES
+  "include/util/log.ixx"
   "include/vortex/app.ixx"
-)
+  "include/vortex/swapchain.ixx"
+ "include/vortex/graphics.ixx")
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON
@@ -32,5 +34,12 @@ if (MSVC)
 endif()
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE 
+        spdlog::spdlog
+        
         wis::wisdom-module
+        wis::wisdom-debug-module
+        wis::wisdom-extended-allocation-module
+        wis::wisdom-descriptor-buffer-module
 )
+
+message(STATUS "CMake version: ${CMAKE_VERSION}")

@@ -1,16 +1,15 @@
-#ifndef __INTELLISENSE__
 export module vortex.app;
-import wisdom;
-#else
-#include <wisdom/wisdom.hpp>
-#endif
+
+import vortex.graphics;
 
 namespace vortex {
     export class App {
     public:
-        App() {
+        App()
+            : gfx(nullptr, true)
+        {
         }
     private:
-        wis::Factory factory;
+        vortex::Graphics gfx;
     };
 }

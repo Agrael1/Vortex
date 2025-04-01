@@ -1,6 +1,7 @@
 #include <span>
 #include <string_view>
 #include <memory>
+#include <csignal>
 
 import vortex.app;
 import vortex.log;
@@ -28,8 +29,14 @@ try {
     vortex::Log log_graphics{ options_gfx };
     log_global.SetAsDefault();
 
+    // catch Ctrl+C
+    std::signal(SIGINT, [](int) {
+        vortex::critical("Ctrl+C pressed");
+        vortex::AppExitControl::Exit();
+    });
+
     vortex::App a{};
-    return 0;
+    return a.Run();
 } catch (const std::exception& e) {
     vortex::critical(e.what());
     return 1;

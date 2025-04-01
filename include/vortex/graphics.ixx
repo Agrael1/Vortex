@@ -1,12 +1,20 @@
 module;
 #include <format>
 #include <stdexcept>
+
+#ifdef __INTELLISENSE__
+#include <wisdom/wisdom.hpp>
+#include <wisdom/wisdom_debug.hpp>
+#include <wisdom/wisdom_descriptor_buffer.hpp>
+#include <wisdom/wisdom_extended_allocation.hpp>
+#endif
 export module vortex.graphics;
 
-import wisdom;
+export import wisdom;
 import wisdom.debug;
 import wisdom.descriptor_buffer;
 import wisdom.extended_allocation;
+import wisdom.platform;
 import vortex.log;
 
 export namespace vortex {
@@ -21,7 +29,7 @@ class Debug
 public:
     Debug() = default;
     Debug(wis::Result& result, wis::DebugExtension& debug_ext, vortex::LogView log)
-        : _log(log) 
+        : _log(log)
         , _messenger(debug_ext.CreateDebugMessenger(result, &Debug::DebugCallback, this))
     {
     }
@@ -58,7 +66,7 @@ private:
     wis::DebugMessenger _messenger;
 };
 
-inline bool succeded(wis::Result result) noexcept
+export inline bool succeded(wis::Result result) noexcept
 {
     return int(result.status) >= 0;
 }
@@ -71,6 +79,12 @@ public:
         CreateDevice(platform_extension, debug_extension);
     }
 
+public:
+    const wis::Device& GetDevice() const noexcept
+    {
+        return _device;
+    }
+
 private:
     void CreateDevice(wis::FactoryExtension* platform_extension, bool debug_extension)
     {
@@ -80,7 +94,7 @@ private:
 
         wis::FactoryExtension* extensions[] = { platform_extension, &debug_ext };
         uint32_t extension_count = std::size(extensions) - !debug_extension - !platform_extension; // subtract 1 for each missing extension
-        
+
         wis::Factory factory = wis::CreateFactory(result, debug_extension, extensions + !platform_extension, extension_count);
         if (!succeded(result)) {
             throw std::runtime_error(std::format("Failed to create factory: {}", result.error));
@@ -125,4 +139,5 @@ private:
     wis::DescriptorBufferExtension _descriptor_buffer_ext;
     wis::ExtendedAllocation _extended_allocation_ext;
 };
+
 } // namespace vortex

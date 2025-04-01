@@ -28,7 +28,18 @@ set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${Wisdom_SOURCE_DIR}/lib/cmake/wisdom
 set(WISDOM_EXPERIMENTAL_CPP_MODULES ON CACHE BOOL "Enable experimental C++ modules support" FORCE)
 find_package(Wisdom 0.6.7 REQUIRED)
 
+# spdlog
 CPMAddPackage(
   GITHUB_REPOSITORY gabime/spdlog 
   VERSION 1.15.1 
+)
+
+# SDL3
+CPMAddPackage(
+  NAME SDL3
+  GITHUB_REPOSITORY libsdl-org/SDL
+  GIT_TAG release-3.2.10
+  OPTIONS
+  "SDL_WERROR OFF"
+  "SDL_LEAN_AND_MEAN ON"
 )

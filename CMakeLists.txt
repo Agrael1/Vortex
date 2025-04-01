@@ -21,7 +21,7 @@ PRIVATE
   "include/util/log.ixx"
   "include/vortex/app.ixx"
   "include/vortex/swapchain.ixx"
- "include/vortex/graphics.ixx")
+ "include/vortex/graphics.ixx" "include/vortex/queue.ixx"  "include/vortex/window.ixx")
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON
@@ -35,11 +35,18 @@ endif()
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE 
         spdlog::spdlog
+        SDL3::SDL3
         
         wis::wisdom-module
         wis::wisdom-debug-module
         wis::wisdom-extended-allocation-module
+        wis::wisdom-platform-module
         wis::wisdom-descriptor-buffer-module
 )
 
-message(STATUS "CMake version: ${CMAKE_VERSION}")
+# Copy the SDL3.dll to the output directory
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_FILE:SDL3::SDL3>
+    $<TARGET_FILE_DIR:${PROJECT_NAME}>
+)

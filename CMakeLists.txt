@@ -21,7 +21,9 @@ PRIVATE
   "include/util/log.ixx"
   "include/vortex/app.ixx"
   "include/vortex/swapchain.ixx"
- "include/vortex/graphics.ixx" "include/vortex/queue.ixx"  "include/vortex/window.ixx")
+  
+  "include/vortex/platform.ixx"
+ "include/vortex/graphics.ixx"   "include/vortex/sdl.ixx")
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON
@@ -31,6 +33,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 if (MSVC)
     # Add the /Zc:__cplusplus flag
     target_compile_options(${PROJECT_NAME} PRIVATE "/Zc:__cplusplus")
+    target_compile_options(${PROJECT_NAME} PRIVATE "/wd5050")
 endif()
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE 
@@ -43,6 +46,7 @@ target_link_libraries(${PROJECT_NAME}
         wis::wisdom-platform-module
         wis::wisdom-descriptor-buffer-module
 )
+WIS_INSTALL_DEPS(${PROJECT_NAME})
 
 # Copy the SDL3.dll to the output directory
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

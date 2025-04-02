@@ -14,8 +14,8 @@ export import wisdom;
 import wisdom.debug;
 import wisdom.descriptor_buffer;
 import wisdom.extended_allocation;
-import wisdom.platform;
 import vortex.log;
+import vortex.platform;
 
 export namespace vortex {
 class Debug
@@ -66,7 +66,7 @@ private:
     wis::DebugMessenger _messenger;
 };
 
-export inline bool succeded(wis::Result result) noexcept
+export inline bool success(wis::Result result) noexcept
 {
     return int(result.status) >= 0;
 }
@@ -74,9 +74,9 @@ export inline bool succeded(wis::Result result) noexcept
 export class Graphics
 {
 public:
-    Graphics(wis::FactoryExtension* platform_extension, bool debug_extension)
+    Graphics(bool debug_extension)
     {
-        CreateDevice(platform_extension, debug_extension);
+        CreateDevice(debug_extension);
     }
 
 public:
@@ -84,25 +84,34 @@ public:
     {
         return _device;
     }
+    const vortex::PlatformExtension& GetPlatform() const noexcept
+    {
+        return _platform;
+    }
+    const wis::CommandQueue& GetMainQueue() const noexcept
+    {
+        return _main_queue;
+    }
 
 private:
-    void CreateDevice(wis::FactoryExtension* platform_extension, bool debug_extension)
+    void CreateDevice(bool debug_extension)
     {
         wis::Result result = wis::success;
         wis::DebugExtension debug_ext;
         vortex::LogView log = vortex::GetLog(vortex::graphics_log_name);
 
-        wis::FactoryExtension* extensions[] = { platform_extension, &debug_ext };
-        uint32_t extension_count = std::size(extensions) - !debug_extension - !platform_extension; // subtract 1 for each missing extension
+        wis::FactoryExtension* extensions[] = { _platform.GetExtension(), &debug_ext };
+        uint32_t extension_count = std::size(extensions) - !debug_extension; // subtract 1 for each missing extension
 
-        wis::Factory factory = wis::CreateFactory(result, debug_extension, extensions + !platform_extension, extension_count);
-        if (!succeded(result)) {
+        // Create the factory
+        wis::Factory factory = wis::CreateFactory(result, debug_extension, extensions, extension_count);
+        if (!success(result)) {
             throw std::runtime_error(std::format("Failed to create factory: {}", result.error));
         }
 
         if (debug_extension) {
             std::construct_at<Debug>(&_debug, result, debug_ext, log);
-            if (!succeded(result)) {
+            if (!success(result)) {
                 log.error(std::format("Failed to create debug extension: {}", result.error)); // continue without debug extension
             }
         }
@@ -113,31 +122,40 @@ private:
             &_extended_allocation_ext
         };
 
+        // Get the first adapter that supports the requested features
         for (uint32_t i = 0;; ++i) {
             adapter = factory.GetAdapter(result, i, wis::AdapterPreference::Performance);
-            if (!succeded(result)) { // no more adapters
+            if (!success(result)) { // no more adapters
                 throw std::runtime_error(std::format("Failed to get adapter: {}", result.error));
             }
 
             _device = wis::CreateDevice(result, adapter, device_extensions, std::size(device_extensions));
-            if (succeded(result)) {
+            if (success(result)) {
                 log.info(std::format("Created device on adapter: {}", i));
 
                 wis::AdapterDesc desc;
                 result = adapter.GetDesc(&desc); // almost always succeeds
 
                 log.info(std::format("Adapter description: {}", std::string_view{ desc.description.data() }));
-                return;
+                break;
             }
         }
-    }
 
+        // Create the main queue
+        _main_queue = _device.CreateCommandQueue(result, wis::QueueType::Graphics);
+        if (!success(result)) {
+            throw std::runtime_error(std::format("Failed to create main queue: {}", result.error));
+        }
+    }
 private:
     Debug _debug;
     wis::Device _device;
 
+    vortex::PlatformExtension _platform;
     wis::DescriptorBufferExtension _descriptor_buffer_ext;
     wis::ExtendedAllocation _extended_allocation_ext;
+
+    wis::CommandQueue _main_queue;
 };
 
 } // namespace vortex

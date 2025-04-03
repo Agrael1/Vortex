@@ -43,3 +43,36 @@ CPMAddPackage(
   "SDL_WERROR OFF"
   "SDL_LEAN_AND_MEAN ON"
 )
+
+# NDI SDK
+if (NOT DEFINED ENV{NDI_SDK_DIR})
+  set(NDI_SDK_DIR)
+  message(WARNING "NDI_SDK_DIR environment variable not set. NDI SDK will not be available.")
+
+  # Add dummy imported target for NDI SDK
+  add_library(NDI INTERFACE)
+  add_library(NDI::NDI ALIAS NDI)
+else()
+  set(NDI_SDK_DIR $ENV{NDI_SDK_DIR})
+  message(STATUS "NDI_SDK_DIR: ${NDI_SDK_DIR}")
+
+  # Create imported target for NDI SDK
+  add_library(NDI SHARED IMPORTED)
+  add_library(NDI::NDI ALIAS NDI)
+
+  target_include_directories(NDI INTERFACE
+    "${NDI_SDK_DIR}/Include"
+  )
+  target_compile_definitions(NDI INTERFACE
+    "NDI_AVAILABLE"
+  )
+
+  # Set the location of the NDI SDK library (for now win only)
+  if (WIN32)
+    set_target_properties(NDI PROPERTIES
+      IMPORTED_LOCATION "${NDI_SDK_DIR}/Bin/x64/Processing.NDI.Lib.x64.dll"
+      IMPORTED_IMPLIB "${NDI_SDK_DIR}/Lib/x64/Processing.NDI.Lib.x64.lib"
+      IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+    )
+  endif()
+endif()

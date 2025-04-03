@@ -21,14 +21,17 @@ PRIVATE
   "include/util/log.ixx"
   "include/vortex/app.ixx"
   "include/vortex/swapchain.ixx"
+  "include/vortex/ndi_output.ixx"
   
   "include/vortex/platform.ixx"
- "include/vortex/graphics.ixx"   "include/vortex/sdl.ixx")
+ "include/vortex/graphics.ixx"   "include/vortex/window_output.ixx")
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON
   CXX_EXTENSIONS OFF
   CXX_SCAN_FOR_MODULES ON
+  # Set binary output dir to bin
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 if (MSVC)
     # Add the /Zc:__cplusplus flag
@@ -39,6 +42,7 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE 
         spdlog::spdlog
         SDL3::SDL3
+        NDI::NDI
         
         wis::wisdom-module
         wis::wisdom-debug-module
@@ -48,9 +52,10 @@ target_link_libraries(${PROJECT_NAME}
 )
 WIS_INSTALL_DEPS(${PROJECT_NAME})
 
-# Copy the SDL3.dll to the output directory
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    $<TARGET_FILE:SDL3::SDL3>
-    $<TARGET_FILE_DIR:${PROJECT_NAME}>
-)
+# copy all dlls to the output directory
+if (WIN32)
+  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
+  COMMAND_EXPAND_LISTS
+  )
+endif()

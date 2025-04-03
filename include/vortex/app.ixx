@@ -5,7 +5,7 @@ export module vortex.app;
 
 import vortex.graphics;
 import vortex.sdl;
-import vortex.swapchain;
+import vortex.ndi_output;
 
 namespace vortex {
 export struct AppExitControl {
@@ -33,6 +33,7 @@ public:
         : _gfx(true)
         , _window(_gfx, "Vortex", 1280, 720)
         , _exit(AppExitControl::GetInstance())
+        , _ndi_output("Vortex")
     {
     }
 
@@ -48,9 +49,13 @@ public:
     }
 
 private:
-    vortex::SDLInstance _sdl;
+    vortex::NDILibrary _ndi;
+    vortex::SDLLibrary _sdl;
+
     vortex::Graphics _gfx;
-    vortex::DebugOutput _window;
+
+    vortex::WindowOutput _window;
+    vortex::NDIOutput _ndi_output;
 
 private:
     const AppExitControl& _exit;

@@ -20,14 +20,14 @@ import vortex.log;
 typedef struct HWND__* HWND;
 
 namespace vortex {
-export class SDLInstance
+export class SDLLibrary
 {
 public:
-    SDLInstance()
+    SDLLibrary()
     {
         SDL_Init(SDL_INIT_VIDEO);
     }
-    ~SDLInstance()
+    ~SDLLibrary()
     {
         SDL_Quit();
     }
@@ -121,10 +121,10 @@ private:
 };
 
 // Debug output is a window with a swapchain for rendering contents directly to the screen
-export class DebugOutput
+export class WindowOutput
 {
 public:
-    DebugOutput(vortex::Graphics& gfx, const char* title, int width, int height)
+    WindowOutput(vortex::Graphics& gfx, const char* title, int width, int height)
         : _window(title, width, height, false)
     {
         auto [gfx_width, gfx_height] = _window.PixelSize();

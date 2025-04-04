@@ -15,8 +15,8 @@ include(${GET_CPM_FILE})
 # Wisdom
 CPMAddPackage(
   NAME Wisdom
-  URL https://github.com/Agrael1/Wisdom/releases/download/Latest/Wisdom-0.6.7-win64.zip
-  VERSION 0.6.7
+  URL https://github.com/Agrael1/Wisdom/releases/download/Latest/Wisdom-0.6.8-win64.zip
+  VERSION 0.6.8
 
   OPTIONS
   "WISDOM_BUILD_TESTS OFF"

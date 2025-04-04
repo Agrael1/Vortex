@@ -6,7 +6,7 @@ A demo of software for real-time video stream processing.
 
 ## Build Requirements
 
-- C++23 capable compiler with modules support (MSVC 14+/Clang 17+)
+- C++23 capable compiler with modules support (MSVC 19.36+/Clang 17+)
 - CMake 3.28 or higher or Visual Studio 2022 or higher
 - (optional) NDI SDK for NDI support. Can be downloaded from https://ndi.video/
 

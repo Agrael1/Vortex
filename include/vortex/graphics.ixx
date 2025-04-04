@@ -1,16 +1,18 @@
 module;
 #include <format>
 #include <stdexcept>
-
-#ifdef __INTELLISENSE__
-#include <wisdom/wisdom.hpp>
-#include <wisdom/wisdom_debug.hpp>
-#include <wisdom/wisdom_descriptor_buffer.hpp>
-#include <wisdom/wisdom_extended_allocation.hpp>
-#endif
+//
+// #ifdef __INTELLISENSE__
+// #include <wisdom/wisdom.hpp>
+// #include <wisdom/wisdom_debug.hpp>
+// #include <wisdom/wisdom_descriptor_buffer.hpp>
+// #include <wisdom/wisdom_extended_allocation.hpp>
+// #endif
 export module vortex.graphics;
 
 export import wisdom;
+export import vortex.common;
+
 import wisdom.debug;
 import wisdom.descriptor_buffer;
 import wisdom.extended_allocation;
@@ -66,11 +68,6 @@ private:
     wis::DebugMessenger _messenger;
 };
 
-export inline bool success(wis::Result result) noexcept
-{
-    return int(result.status) >= 0;
-}
-
 export class Graphics
 {
 public:
@@ -92,6 +89,10 @@ public:
     {
         return _main_queue;
     }
+    const wis::ResourceAllocator& GetAllocator() const noexcept
+    {
+        return _allocator;
+    }
 
 private:
     void CreateDevice(bool debug_extension)
@@ -112,7 +113,7 @@ private:
         if (debug_extension) {
             std::construct_at<Debug>(&_debug, result, debug_ext, log);
             if (!success(result)) {
-                log.error(std::format("Failed to create debug extension: {}", result.error)); // continue without debug extension
+                log.error("Failed to create debug extension: {}", result.error); // continue without debug extension
             }
         }
 
@@ -131,12 +132,12 @@ private:
 
             _device = wis::CreateDevice(result, adapter, device_extensions, std::size(device_extensions));
             if (success(result)) {
-                log.info(std::format("Created device on adapter: {}", i));
+                log.info("Created device on adapter: {}", i);
 
                 wis::AdapterDesc desc;
                 result = adapter.GetDesc(&desc); // almost always succeeds
 
-                log.info(std::format("Adapter description: {}", std::string_view{ desc.description.data() }));
+                log.info("Adapter description: {}", std::string_view{ desc.description.data() });
                 break;
             }
         }
@@ -146,16 +147,23 @@ private:
         if (!success(result)) {
             throw std::runtime_error(std::format("Failed to create main queue: {}", result.error));
         }
+
+        // Create the resource allocator
+        _allocator = _device.CreateAllocator(result);
+        if (!success(result)) {
+            throw std::runtime_error(std::format("Failed to create resource allocator: {}", result.error));
+        }
     }
+
 private:
     Debug _debug;
     wis::Device _device;
+    wis::CommandQueue _main_queue;
+    wis::ResourceAllocator _allocator;
 
     vortex::PlatformExtension _platform;
     wis::DescriptorBufferExtension _descriptor_buffer_ext;
     wis::ExtendedAllocation _extended_allocation_ext;
-
-    wis::CommandQueue _main_queue;
 };
 
 } // namespace vortex

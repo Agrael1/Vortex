@@ -3,11 +3,11 @@ module;
 #include <memory>
 #include <format>
 #include <optional>
-
-#ifdef __INTELLISENSE__
-#include <wisdom/wisdom.hpp>
-#include <wisdom/wisdom_platform.hpp>
-#endif
+//
+//#ifdef __INTELLISENSE__
+//#include <wisdom/wisdom.hpp>
+//#include <wisdom/wisdom_platform.hpp>
+//#endif
 export module vortex.sdl;
 
 import wisdom;
@@ -16,6 +16,8 @@ import vortex.platform;
 import vortex.graphics;
 import vortex.swapchain;
 import vortex.log;
+
+export import vortex.node;
 
 typedef struct HWND__* HWND;
 
@@ -98,7 +100,7 @@ public:
             break;
         }
         if (!vortex::success(result)) {
-            vortex::error(std::format("Failed to create swapchain: {}", result.error));
+            vortex::error("Failed to create swapchain: {}", result.error);
         }
         return swapchain;
     }
@@ -121,16 +123,20 @@ private:
 };
 
 // Debug output is a window with a swapchain for rendering contents directly to the screen
-export class WindowOutput
+export class WindowOutput : public vortex::NodeImpl<WindowOutput, IOutput>
 {
 public:
-    WindowOutput(vortex::Graphics& gfx, const char* title, int width, int height)
-        : _window(title, width, height, false)
+    WindowOutput(const vortex::Graphics& gfx, const OutputDesc& out_desc)
+        : _window(out_desc.name, int(out_desc.size.width), int(out_desc.size.height), false)
     {
+        if (out_desc.input != NodeInput::OUTPUT_DESC) {
+            throw std::runtime_error("Invalid input type for WindowOutput");
+        }
+
         auto [gfx_width, gfx_height] = _window.PixelSize();
         wis::SwapchainDesc desc{
             .size = { uint32_t(gfx_width), uint32_t(gfx_height) },
-            .format = wis::DataFormat::RGBA8Unorm, // RGBA8Unorm is the most common format for desktop applications TODO: make this configurable + HDR
+            .format = out_desc.format, // RGBA8Unorm is the most common format for desktop applications TODO: make this configurable + HDR
             .buffer_count = 2, // double buffering, TODO: make this configurable + query for supported buffer counts
             .stereo = false,
             .vsync = true,
@@ -138,6 +144,10 @@ public:
             .scaling = wis::SwapchainScaling::Stretch
         };
         _swapchain.emplace(gfx, _window.CreateSwapchain(gfx, desc), desc);
+    }
+    WindowOutput(const vortex::Graphics& gfx, vortex::NodeDesc* initializers)
+        : WindowOutput(gfx, *reinterpret_cast<OutputDesc*>(initializers))
+    {
     }
 
 public:

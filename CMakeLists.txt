@@ -21,10 +21,18 @@ PRIVATE
   "include/util/log.ixx"
   "include/vortex/app.ixx"
   "include/vortex/swapchain.ixx"
-  "include/vortex/ndi_output.ixx"
+
+  "include/vortex/common.ixx"
+  "include/vortex/node.ixx"
+  "include/vortex/node_registry.ixx"
   
   "include/vortex/platform.ixx"
- "include/vortex/graphics.ixx"   "include/vortex/window_output.ixx")
+  "include/vortex/graphics.ixx"
+
+  "include/vortex/output/ndi_output.ixx"
+  "include/vortex/output/window_output.ixx"
+  
+  )
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON

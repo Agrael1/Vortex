@@ -5,6 +5,7 @@
 
 import vortex.app;
 import vortex.log;
+import vortex.node_registry;
 
 struct MainArgs {
 };
@@ -34,6 +35,9 @@ try {
         vortex::critical("Ctrl+C pressed");
         vortex::AppExitControl::Exit();
     });
+
+    // Initialize Node Library
+    vortex::RegisterHardwareNodes();
 
     vortex::App a{};
     return a.Run();

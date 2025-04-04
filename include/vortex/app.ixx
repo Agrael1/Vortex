@@ -1,6 +1,8 @@
 module;
 #include <stdexcept>
 #include <format>
+#include <vector>
+#include <memory>
 export module vortex.app;
 
 import vortex.graphics;
@@ -31,19 +33,28 @@ export class App
 public:
     App()
         : _gfx(true)
-        , _window(_gfx, "Vortex", 1280, 720)
         , _exit(AppExitControl::GetInstance())
-        , _ndi_output("Vortex")
     {
+        _outputs.reserve(2);
+
+        vortex::OutputDesc window{
+            .format = wis::DataFormat::RGBA8Unorm,
+            .size = { 1280, 720 },
+            .name = "WindowOutput",
+        };
+        vortex::OutputDesc ndi{
+            .format = wis::DataFormat::RGBA8Unorm,
+            .size = { 1280, 720 },
+            .name = "Vortex",
+        };
+        _outputs.emplace_back(NodeFactory::CreateNode("NDIOutput", _gfx, reinterpret_cast<NodeDesc*>(&ndi)));
+        _outputs.emplace_back(NodeFactory::CreateNode("WindowOutput", _gfx, reinterpret_cast<NodeDesc*>(&window)));
     }
 
 public:
     int Run()
     {
-        while (!_window.ProcessEvents()) {
-            if (_exit.exit) {
-                return 1; // exit requested
-            }
+        while (!_exit.exit) {
         }
         return 0;
     }
@@ -54,8 +65,7 @@ private:
 
     vortex::Graphics _gfx;
 
-    vortex::WindowOutput _window;
-    vortex::NDIOutput _ndi_output;
+    std::vector<std::unique_ptr<vortex::INode>> _outputs;
 
 private:
     const AppExitControl& _exit;

@@ -52,6 +52,37 @@ public:
         logger->debug(message);
     }
 
+    template<class... _Types>
+    void info(const std::format_string<_Types...> fmt, _Types&&... args)
+    {
+        info(std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
+    template<class... _Types>
+    void warn(const std::format_string<_Types...> fmt, _Types&&... args)
+    {
+        warn(std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
+    template<class... _Types>
+    void error(const std::format_string<_Types...> fmt, _Types&&... args)
+    {
+        error(std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
+    template<class... _Types>
+    void critical(const std::format_string<_Types...> fmt, _Types&&... args)
+    {
+        critical(std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
+    template<class... _Types>
+    void trace(const std::format_string<_Types...> fmt, _Types&&... args)
+    {
+        trace(std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
+    template<class... _Types>
+    void debug(const std::format_string<_Types...> fmt, _Types&&... args)
+    {
+        debug(std::vformat(fmt.get(), std::make_format_args(args...)));
+    }
+
 private:
     std::shared_ptr<spdlog::logger> logger;
 };
@@ -107,22 +138,18 @@ export void info(std::string_view message)
 {
     spdlog::info(message);
 }
-
 export void warn(std::string_view message)
 {
     spdlog::warn(message);
 }
-
 export void error(std::string_view message)
 {
     spdlog::error(message);
 }
-
 export void critical(std::string_view message)
 {
     spdlog::critical(message);
 }
-
 export void trace(std::string_view message)
 {
     spdlog::trace(message);
@@ -131,6 +158,38 @@ export void trace(std::string_view message)
 export void debug(std::string_view message)
 {
     spdlog::debug(message);
+}
+
+// Template functions for formatted logging
+export template<class... _Types>
+void info(const std::format_string<_Types...> fmt, _Types&&... args)
+{
+    spdlog::info(std::vformat(fmt.get(), std::make_format_args(args...)));
+}
+export template<class... _Types>
+void warn(const std::format_string<_Types...> fmt, _Types&&... args)
+{
+    spdlog::warn(std::vformat(fmt.get(), std::make_format_args(args...)));
+}
+export template<class... _Types>
+void error(const std::format_string<_Types...> fmt, _Types&&... args)
+{
+    spdlog::error(std::vformat(fmt.get(), std::make_format_args(args...)));
+}
+export template<class... _Types>
+void critical(const std::format_string<_Types...> fmt, _Types&&... args)
+{
+    spdlog::critical(std::vformat(fmt.get(), std::make_format_args(args...)));
+}
+export template<class... _Types>
+void trace(const std::format_string<_Types...> fmt, _Types&&... args)
+{
+    spdlog::trace(std::vformat(fmt.get(), std::make_format_args(args...)));
+}
+export template<class... _Types>
+void debug(const std::format_string<_Types...> fmt, _Types&&... args)
+{
+    spdlog::debug(std::vformat(fmt.get(), std::make_format_args(args...)));
 }
 
 export LogView GetLog(std::string_view name)

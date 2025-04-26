@@ -1,16 +1,12 @@
-module;
+#pragma once
 #include <memory>
 #include <SDL3/SDL_platform_defines.h>
-export module vortex.platform;
-
-import wisdom;
-import wisdom.platform;
-import vortex.log;
+#include <wisdom/wisdom_platform.hpp>
 
 namespace vortex {
 
 // Use SDL to detect platform
-export class PlatformExtension
+class PlatformExtension
 {
 public:
     enum class Selector {

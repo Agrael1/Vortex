@@ -1,16 +1,12 @@
-module;
-#include <stdexcept>
-#include <format>
+#pragma once
 #include <vector>
 #include <memory>
-export module vortex.app;
+#include <vortex/graphics.h>
+#include <vortex/node_registry.h>
 
-import vortex.graphics;
-import vortex.sdl;
-import vortex.ndi_output;
 
 namespace vortex {
-export struct AppExitControl {
+struct AppExitControl {
 
     AppExitControl() = default;
     AppExitControl(const AppExitControl&) = delete;
@@ -28,7 +24,8 @@ export struct AppExitControl {
 
     bool exit = false;
 };
-export class App
+
+class App
 {
 public:
     App()

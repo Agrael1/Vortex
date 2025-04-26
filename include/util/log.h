@@ -1,18 +1,17 @@
-module;
+#pragma once
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <filesystem>
 #include <format>
-export module vortex.log;
 
 namespace vortex {
-export struct LogOptions {
+struct LogOptions {
     std::string_view name;
     std::string_view pattern_prefix;
     std::filesystem::path output_file_path;
 };
-export class LogView
+class LogView
 {
 public:
     LogView() = default;
@@ -87,7 +86,7 @@ private:
     std::shared_ptr<spdlog::logger> logger;
 };
 
-export class Log
+class Log
 {
 public:
     Log(const LogOptions& options)
@@ -125,7 +124,7 @@ private:
     std::shared_ptr<spdlog::logger> logger;
 };
 
-export inline Log CreateLog(const LogOptions& options, bool set_default = false)
+inline Log CreateLog(const LogOptions& options, bool set_default = false)
 {
     Log log{ options };
     if (set_default) {
@@ -134,69 +133,69 @@ export inline Log CreateLog(const LogOptions& options, bool set_default = false)
     return log;
 }
 
-export void info(std::string_view message)
+void info(std::string_view message)
 {
     spdlog::info(message);
 }
-export void warn(std::string_view message)
+void warn(std::string_view message)
 {
     spdlog::warn(message);
 }
-export void error(std::string_view message)
+void error(std::string_view message)
 {
     spdlog::error(message);
 }
-export void critical(std::string_view message)
+void critical(std::string_view message)
 {
     spdlog::critical(message);
 }
-export void trace(std::string_view message)
+void trace(std::string_view message)
 {
     spdlog::trace(message);
 }
 
-export void debug(std::string_view message)
+void debug(std::string_view message)
 {
     spdlog::debug(message);
 }
 
 // Template functions for formatted logging
-export template<class... _Types>
+template<class... _Types>
 void info(const std::format_string<_Types...> fmt, _Types&&... args)
 {
     spdlog::info(std::vformat(fmt.get(), std::make_format_args(args...)));
 }
-export template<class... _Types>
+template<class... _Types>
 void warn(const std::format_string<_Types...> fmt, _Types&&... args)
 {
     spdlog::warn(std::vformat(fmt.get(), std::make_format_args(args...)));
 }
-export template<class... _Types>
+template<class... _Types>
 void error(const std::format_string<_Types...> fmt, _Types&&... args)
 {
     spdlog::error(std::vformat(fmt.get(), std::make_format_args(args...)));
 }
-export template<class... _Types>
+template<class... _Types>
 void critical(const std::format_string<_Types...> fmt, _Types&&... args)
 {
     spdlog::critical(std::vformat(fmt.get(), std::make_format_args(args...)));
 }
-export template<class... _Types>
+template<class... _Types>
 void trace(const std::format_string<_Types...> fmt, _Types&&... args)
 {
     spdlog::trace(std::vformat(fmt.get(), std::make_format_args(args...)));
 }
-export template<class... _Types>
+template<class... _Types>
 void debug(const std::format_string<_Types...> fmt, _Types&&... args)
 {
     spdlog::debug(std::vformat(fmt.get(), std::make_format_args(args...)));
 }
 
-export LogView GetLog(std::string_view name)
+LogView GetLog(std::string_view name)
 {
     return LogView{ spdlog::get(name.data()) };
 }
 
-export constexpr inline std::string_view graphics_log_name = "vortex.graphics";
-export constexpr inline std::string_view app_log_name = "vortex";
+constexpr inline std::string_view graphics_log_name = "vortex.graphics";
+constexpr inline std::string_view app_log_name = "vortex";
 } // namespace vortex

@@ -1,13 +1,9 @@
-module;
+#pragma once
 #include <memory>
 #include <functional>
-#include <unordered_map>
 #include <string>
 #include <source_location>
-
-export module vortex.node;
-export import vortex.common;
-import vortex.graphics;
+#include <vortex/common.h>
 
 // Comes from qlibs\reflect
 struct REFLECT_STRUCT {
@@ -62,28 +58,28 @@ template<class T>
         }();
     }
 }
-}
+} // namespace reflect
 
 namespace vortex {
-export enum class NodeType {
+enum class NodeType {
     None,
     Input,
     Output,
     Filter,
 };
-export enum class NodeInput {
+enum class NodeInput {
     INVALID = -1,
     OUTPUT_DESC = 0,
 
     USER_INPUT = 4096,
 };
 
-export struct NodeDesc {
+struct NodeDesc {
     NodeInput input = NodeInput::INVALID;
     void* pNext = nullptr;
 };
 
-export struct OutputDesc {
+struct OutputDesc {
     NodeInput input = NodeInput::OUTPUT_DESC;
     void* pNext = nullptr;
 
@@ -92,13 +88,13 @@ export struct OutputDesc {
     const char* name;
 };
 
-export struct INode {
+struct INode {
     virtual ~INode() = default;
 };
-export struct IOutput : public vortex::INode {
+struct IOutput : public vortex::INode {
 };
 
-export class NodeFactory
+class NodeFactory
 {
     // Use callback to create a node
     using CreateNodeCallback = std::unique_ptr<INode> (*)(const vortex::Graphics& gfx, NodeDesc* initializers);
@@ -126,7 +122,7 @@ private:
     static inline std::unordered_map<std::string, CreateNodeCallback, vortex::string_hash, vortex::string_equal> node_creators;
 };
 
-export template<typename CRTP, typename Base>
+template<typename CRTP, typename Base>
 struct NodeImpl : public Base {
     using Base::Base;
 
@@ -141,6 +137,5 @@ public:
         NodeFactory::RegisterNode(name, callback);
     }
 };
-
 
 } // namespace vortex

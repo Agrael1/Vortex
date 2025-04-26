@@ -1,18 +1,15 @@
-module;
+#pragma once
 #ifdef NDI_AVAILABLE
 #include <Processing.NDI.Lib.h>
 #endif // NDI_AVAILABLE
 
 #include <span>
 #include <stdexcept>
-export module vortex.ndi_output;
-
-import vortex.log;
-import vortex.graphics;
-export import vortex.node;
+#include <vortex/common.h>
+#include <util/log.h>
 
 namespace vortex {
-export class NDILibrary
+class NDILibrary
 {
 public:
     NDILibrary()
@@ -141,7 +138,7 @@ private:
 };
 #endif // NDI_AVAILABLE
 
-export class NDIOutput : public vortex::NodeImpl<NDIOutput, vortex::IOutput>
+class NDIOutput : public vortex::NodeImpl<NDIOutput, vortex::IOutput>
 {
 public:
     NDIOutput(const vortex::Graphics& gfx, NodeDesc* initializers)

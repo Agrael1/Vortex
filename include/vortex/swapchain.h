@@ -1,12 +1,10 @@
-module;
+#pragma once
 #include <utility>
-export module vortex.swapchain;
-
-import wisdom;
-import vortex.graphics;
+#include <wisdom/wisdom.hpp>
 
 namespace vortex {
-export class Swapchain
+class Graphics;
+class Swapchain
 {
 public:
     Swapchain() = default;

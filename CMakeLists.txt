@@ -1,13 +1,12 @@
 ﻿cmake_minimum_required (VERSION 3.22)
 
 # Enable Hot Reload for MSVC compilers if supported.
-if (POLICY CMP0141)
+if (POLICY CMP0141 AND MSVC)
   cmake_policy(SET CMP0141 NEW)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
 project ("Vortex")
-
 include(cmake/deps.cmake)
 
 add_executable(${PROJECT_NAME})
@@ -16,48 +15,39 @@ target_sources(${PROJECT_NAME}
 PRIVATE
   "src/entry_main.cpp"
   
-
-  PRIVATE FILE_SET CXX_MODULES FILES
-  "include/util/log.ixx"
-  "include/vortex/app.ixx"
-  "include/vortex/swapchain.ixx"
-
-  "include/vortex/common.ixx"
-  "include/vortex/node.ixx"
-  "include/vortex/node_registry.ixx"
-  
-  "include/vortex/platform.ixx"
-  "include/vortex/graphics.ixx"
-
-  "include/vortex/output/ndi_output.ixx"
-  "include/vortex/output/window_output.ixx"
-  
-  )
+PUBLIC
+  "include/vortex/app.h"
+  "include/vortex/graphics.h"
+  "include/vortex/common.h"
+  "include/vortex/node.h"
+  "include/vortex/node_registry.h"
+  "include/vortex/platform.h"
+  "include/vortex/swapchain.h"
+  "include/util/log.h"
+)
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON
   CXX_EXTENSIONS OFF
-  CXX_SCAN_FOR_MODULES ON
   # Set binary output dir to bin
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
-if (MSVC)
-    # Add the /Zc:__cplusplus flag
-    target_compile_options(${PROJECT_NAME} PRIVATE "/Zc:__cplusplus")
-    target_compile_options(${PROJECT_NAME} PRIVATE "/wd5050")
-endif()
+# Add the /Zc:__cplusplus flag
+target_compile_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus /wd5050>)
 target_link_libraries(${PROJECT_NAME} 
-    PRIVATE 
-        spdlog::spdlog
-        SDL3::SDL3
-        NDI::NDI
-        
-        wis::wisdom-module
-        wis::wisdom-debug-module
-        wis::wisdom-extended-allocation-module
-        wis::wisdom-platform-module
-        wis::wisdom-descriptor-buffer-module
+  PRIVATE 
+    spdlog::spdlog
+    SDL3::SDL3
+    NDI::NDI
+    
+    wis::wisdom-headers
+    wis::wisdom-debug-headers
+    wis::wisdom-extended-allocation-headers
+    wis::wisdom-platform-headers
+    wis::wisdom-descriptor-buffer-headers
 )
+target_precompile_headers(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/include/vortex/pch.hpp>)
+
 WIS_INSTALL_DEPS(${PROJECT_NAME})
 
 # copy all dlls to the output directory

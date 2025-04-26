@@ -1,28 +1,17 @@
-module;
+#pragma once
 #include <SDL3/SDL.h>
 #include <memory>
 #include <format>
 #include <optional>
-//
-//#ifdef __INTELLISENSE__
-//#include <wisdom/wisdom.hpp>
-//#include <wisdom/wisdom_platform.hpp>
-//#endif
-export module vortex.sdl;
-
-import wisdom;
-import wisdom.platform;
-import vortex.platform;
-import vortex.graphics;
-import vortex.swapchain;
-import vortex.log;
-
-export import vortex.node;
+#include <wisdom/wisdom.hpp>
+#include <wisdom/wisdom_platform.hpp>
+#include <vortex/node.h>
+#include <vortex/swapchain.h>
 
 typedef struct HWND__* HWND;
 
 namespace vortex {
-export class SDLLibrary
+class SDLLibrary
 {
 public:
     SDLLibrary()
@@ -35,7 +24,7 @@ public:
     }
 };
 
-export class SDLWindow
+class SDLWindow
 {
 public:
     SDLWindow(const char* title, int width, int height, bool fullscreen)
@@ -123,7 +112,7 @@ private:
 };
 
 // Debug output is a window with a swapchain for rendering contents directly to the screen
-export class WindowOutput : public vortex::NodeImpl<WindowOutput, IOutput>
+class WindowOutput : public vortex::NodeImpl<WindowOutput, IOutput>
 {
 public:
     WindowOutput(const vortex::Graphics& gfx, const OutputDesc& out_desc)

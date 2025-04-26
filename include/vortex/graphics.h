@@ -1,25 +1,15 @@
-module;
 #include <format>
 #include <stdexcept>
-//
-// #ifdef __INTELLISENSE__
-// #include <wisdom/wisdom.hpp>
-// #include <wisdom/wisdom_debug.hpp>
-// #include <wisdom/wisdom_descriptor_buffer.hpp>
-// #include <wisdom/wisdom_extended_allocation.hpp>
-// #endif
-export module vortex.graphics;
+#include <iterator>
+#include <wisdom/wisdom.hpp>
+#include <wisdom/wisdom_debug.hpp>
+#include <wisdom/wisdom_descriptor_buffer.hpp>
+#include <wisdom/wisdom_extended_allocation.hpp>
+#include <util/log.h>
+#include <vortex/platform.h>
+#include <vortex/common.h>
 
-export import wisdom;
-export import vortex.common;
-
-import wisdom.debug;
-import wisdom.descriptor_buffer;
-import wisdom.extended_allocation;
-import vortex.log;
-import vortex.platform;
-
-export namespace vortex {
+namespace vortex {
 class Debug
 {
     static void DebugCallback(wis::Severity severity, const char* message, void* user_data)
@@ -68,7 +58,7 @@ private:
     wis::DebugMessenger _messenger;
 };
 
-export class Graphics
+class Graphics
 {
 public:
     Graphics(bool debug_extension)

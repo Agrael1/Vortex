@@ -1,9 +1,0 @@
-# SDL3
-CPMAddPackage(
-  NAME SDL3
-  GITHUB_REPOSITORY libsdl-org/SDL
-  GIT_TAG release-3.2.10
-  OPTIONS
-  "SDL_WERROR OFF"
-  "SDL_LEAN_AND_MEAN ON"
-)

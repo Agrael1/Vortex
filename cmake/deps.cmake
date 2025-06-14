@@ -44,6 +44,36 @@ CPMAddPackage(
   "SDL_LEAN_AND_MEAN ON"
 )
 
+
+# zlib
+CPMAddPackage(
+  NAME ZLIB
+  GITHUB_REPOSITORY madler/zlib
+  GIT_TAG v1.3.1
+  OPTIONS
+  "ZLIB_COMPAT ON"
+  "ZLIB_BUILD_TESTS OFF"
+  "ZLIB_BUILD_EXAMPLES OFF"
+)
+# Crutch the ZLIB_INCLUDE_DIR to point to the source directory
+set(ZLIB_INCLUDE_DIR ${ZLIB_SOURCE_DIR})
+set(ZLIB_LIBRARY zlibstatic)
+target_include_directories(zlibstatic PUBLIC ${ZLIB_BINARY_DIR})
+add_library(ZLIB::ZLIB ALIAS zlibstatic)
+
+
+# libpng
+CPMAddPackage(
+  NAME libpng
+  GITHUB_REPOSITORY pnggroup/libpng
+  GIT_TAG v1.6.40
+  OPTIONS
+  "PNG_TESTS OFF"
+  "PNG_SHARED OFF"
+  "SKIP_INSTALL_ALL ON"
+)
+target_include_directories(png_static INTERFACE ${libpng_SOURCE_DIR} ${libpng_BINARY_DIR})
+
 # NDI SDK
 if (NOT DEFINED ENV{NDI_SDK_DIR})
   set(NDI_SDK_DIR)

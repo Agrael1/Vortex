@@ -23,6 +23,11 @@ PUBLIC
   "include/vortex/node_registry.h"
   "include/vortex/platform.h"
   "include/vortex/swapchain.h"
+
+  "include/vortex/codec/codec_png.h"
+  "include/vortex/codec/codec_png.cpp"
+
+  "include/vortex/input/image_input.h"
   "include/util/log.h"
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -39,6 +44,7 @@ target_link_libraries(${PROJECT_NAME}
     spdlog::spdlog
     SDL3::SDL3
     NDI::NDI
+    png_static
     
     wis::wisdom-headers
     wis::wisdom-debug-headers

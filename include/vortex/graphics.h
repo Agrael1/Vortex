@@ -83,6 +83,10 @@ public:
     {
         return _allocator;
     }
+    const wis::ExtendedAllocation& GetExtendedAllocation() const noexcept
+    {
+        return _extended_allocation_ext;
+    }
 
 private:
     void CreateDevice(bool debug_extension)

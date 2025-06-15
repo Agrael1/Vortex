@@ -5,7 +5,7 @@
 
 #include <span>
 #include <stdexcept>
-#include <vortex/common.h>
+#include <util/common.h>
 #include <util/log.h>
 
 namespace vortex {

@@ -161,10 +161,11 @@ enum class PNGColorType {
 };
 
 struct PNGInfo {
-    int width;
-    int height;
-    int bit_depth;
-    int channels;
+    uint32_t width;
+    uint32_t height;
+    uint32_t bit_depth;
+    uint32_t channels;
+    uint32_t row_bytes;
     PNGColorType color_type;
 };
 
@@ -230,6 +231,38 @@ public:
     PNGInfo GetInfo() const noexcept
     {
         return info;
+    }
+    bool ReadImageData(unsigned char* image_data) const
+    {
+        if (!file_ptr || !png_binder) {
+            vortex::error("PNGReader::ReadImageData: File pointer or PNG binder is null");
+            return false;
+        }
+        auto* png_ptr = png_binder.png_ptr;
+        auto* info_ptr = png_binder.info_ptr;
+        png_bytep* row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * info.height);
+
+        // Allocate row pointers
+        if (!row_pointers) {
+            vortex::error("Error: Could not allocate memory for row pointers\n");
+            return false;
+        }
+
+        if (setjmp(png_jmpbuf(png_ptr))) {
+            vortex::error("PNGCodec::ReadImageData: Error during PNG file reading");
+            free(row_pointers);
+            return false;
+        }
+
+        // Set up row pointers
+        for (int y = 0; y < info.height; y++) {
+            row_pointers[y] = image_data + y * info.row_bytes;
+        }
+
+        png_read_image(png_ptr, row_pointers);
+        free(row_pointers);
+        png_read_end(png_ptr, info_ptr); // Finalize reading
+        return true;
     }
 
 private:
@@ -322,6 +355,9 @@ private:
             info.channels++;
         }
 
+        // Update the PNG info after our transformations
+        png_read_update_info(png_ptr, info_ptr);
+        info.row_bytes = png_get_rowbytes(png_ptr, info_ptr);
         return info;
     }
     void Reset()
@@ -333,11 +369,12 @@ private:
 public:
     PNGFile file_ptr{ nullptr, fclose };
     PNGBinder png_binder;
-    PNGInfo info{ 0, 0, 0, 0, PNGColorType::RGB }; // Default to RGB
+    PNGInfo info{ 0, 0, 0, 0, 0, PNGColorType::RGB }; // Default to RGB
 };
 
 wis::Texture vortex::codec::PNGCodec::LoadTexture(const vortex::Graphics& gfx, const std::filesystem::path& file_path)
 {
+    wis::Result result = wis::success;
     const wis::ExtendedAllocation& alloc = gfx.GetExtendedAllocation();
     PNGReader reader{ file_path };
     if (!reader) {
@@ -345,5 +382,40 @@ wis::Texture vortex::codec::PNGCodec::LoadTexture(const vortex::Graphics& gfx, c
     }
 
     PNGInfo info = reader.GetInfo();
-    return {};
+
+    wis::TextureDesc desc{
+        .format = wis::DataFormat::RGBA8Unorm, // Default format, TODO: Handle different formats
+        .size = { info.width, info.height, 1 },
+        .usage = wis::TextureUsage::ShaderResource | wis::TextureUsage::HostCopy | wis::TextureUsage::CopySrc,
+    };
+    wis::Texture texture = alloc.CreateGPUUploadTexture(result, gfx.GetAllocator(), desc);
+    vortex::info("PNGCodec::LoadTexture: Creating GPU upload texture for {}", desc);
+    if (!success(result)) {
+        vortex::error("PNGCodec::LoadTexture: Failed to create GPU upload texture for {}", desc);
+        return {};
+    }
+
+    unsigned char* image_data = (unsigned char*)malloc(info.row_bytes * info.height);
+    if (!image_data) {
+        vortex::error("PNGCodec::LoadTexture: Could not allocate memory for image data\n");
+        return {};
+    }
+    if (!reader.ReadImageData(image_data)) {
+        vortex::error("PNGCodec::LoadTexture: Failed to read image data from PNG file");
+        free(image_data);
+        return {};
+    }
+
+    wis::TextureRegion region{
+        .size = { info.width, info.height, 1 },
+        .format = desc.format,
+    };
+    result = alloc.WriteMemoryToSubresourceDirect(image_data, texture, wis::TextureState::Common, region);
+    free(image_data);
+    if (!success(result)) {
+        vortex::error("PNGCodec::LoadTexture: Failed to write memory region {} to texture {}", region, desc);
+        return {};
+    }
+
+    return texture;
 }

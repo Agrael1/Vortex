@@ -18,7 +18,7 @@ PRIVATE
 PUBLIC
   "include/vortex/app.h"
   "include/vortex/graphics.h"
-  "include/vortex/common.h"
+  "include/util/common.h"
   "include/vortex/node.h"
   "include/vortex/node_registry.h"
   "include/vortex/platform.h"

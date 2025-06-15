@@ -34,6 +34,8 @@ public:
     {
         _outputs.reserve(2);
 
+        auto tex = codec::PNGCodec::LoadTexture(_gfx, "C:/Users/Agrae/Downloads/HDR.png");
+
         vortex::OutputDesc window{
             .format = wis::DataFormat::RGBA8Unorm,
             .size = { 1280, 720 },

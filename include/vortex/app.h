@@ -3,7 +3,7 @@
 #include <memory>
 #include <vortex/graphics.h>
 #include <vortex/node_registry.h>
-
+#include <vortex/codec/codec_png.h>
 
 namespace vortex {
 struct AppExitControl {

@@ -2,6 +2,7 @@
 #include <wisdom/wisdom.hpp>
 #include <filesystem>
 
+typedef struct png_struct_def png_struct;
 typedef png_struct* png_structp;
 typedef const char* png_const_charp;
 

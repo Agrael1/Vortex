@@ -170,34 +170,62 @@ struct PNGInfo {
 
 struct PNGReader {
     static constexpr auto header_size = 8; // PNG header size
-    using PngFile = std::unique_ptr<FILE, decltype(&fclose)>;
-    using PngReadStruct = std::unique_ptr<png_struct, decltype(&png_destroy_read_struct)>;
-    using PngInfo = std::unique_ptr<png_info, decltype(&png_destroy_info_struct)>;
+    using PNGFile = std::unique_ptr<FILE, decltype(&fclose)>;
+
+    struct PNGBinder {
+        png_struct* png_ptr = nullptr;
+        png_info* info_ptr = nullptr;
+
+        ~PNGBinder()
+        {
+            Reset();
+        }
+
+    public:
+        operator bool() const noexcept
+        {
+            return png_ptr && info_ptr;
+        }
+        void Reset()
+        {
+            if (png_ptr) {
+                png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+            }
+            png_ptr = nullptr;
+            info_ptr = nullptr;
+        }
+    };
 
 public:
     PNGReader(const std::filesystem::path& file_path)
         : file_ptr(LoadFile(file_path))
-        , png_ptr(CreatePngReadStruct())
-        , info_ptr(CreatePngInfoStruct(png_ptr.get()))
+        , png_binder(CreatePngBinder())
     {
-        if (setjmp(png_jmpbuf(png_ptr.get()))) {
-            vortex::error("PNGCodec::LoadTexture: Error during PNG file reading for {}", file_path);
+        if (!file_ptr || !png_binder) {
+            return;
+        }
+
+        auto* png_ptr = png_binder.png_ptr;
+        auto* info_ptr = png_binder.info_ptr;
+
+        if (setjmp(png_jmpbuf(png_ptr))) {
+            vortex::error("PNGCodec::LoadTexture: Error during PNG file reading for {}", file_path.string());
             Reset();
             return;
         }
 
-        png_init_io(png_ptr.get(), file_ptr.get());
-        png_set_sig_bytes(png_ptr.get(), header_size);
-        png_read_info(png_ptr.get(), info_ptr.get());
+        png_init_io(png_ptr, file_ptr.get());
+        png_set_sig_bytes(png_ptr, header_size);
+        png_read_info(png_ptr, info_ptr);
 
         // Get image info
-        info = GetInfo();
+        info = CreateInfo();
     }
 
 public:
     operator bool() const noexcept
     {
-        return file_ptr && png_ptr && info_ptr;
+        return file_ptr && bool(png_binder);
     }
     PNGInfo GetInfo() const noexcept
     {
@@ -205,53 +233,62 @@ public:
     }
 
 private:
-    PngFile LoadFile(const std::filesystem::path& file_path)
+    PNGFile LoadFile(const std::filesystem::path& file_path)
     {
-        FILE* file = fopen(file_path.string().c_str(), "rb");
-        if (!file) {
-            vortex::error("PNGReader::LoadFile: Could not open file: {}", file_path.string());
-            return PngFile(nullptr, fclose);
-        }
-        unsigned char header[header_size];
-        fread(header, 1, header_size, file_ptr.get());
-        if (png_sig_cmp(header, 0, header_size)) {
-            vortex::error("PNGCodec::LoadTexture: {} is not a valid PNG file", file_path);
-            return PngFile(nullptr, fclose);
+        std::string file_path_str = file_path.string();
+        if (!std::filesystem::exists(file_path)) {
+            vortex::error("PNGReader::LoadFile: File does not exist: {}", file_path_str);
+            return PNGFile(nullptr, fclose);
         }
 
-        return PngFile(file, fclose);
+        FILE* file = fopen(file_path_str.c_str(), "rb");
+        if (!file) {
+            vortex::error("PNGReader::LoadFile: Could not open file: {}", file_path_str);
+            return PNGFile(nullptr, fclose);
+        }
+        unsigned char header[header_size + 1];
+        fread(header, 1, header_size, file);
+        if (png_sig_cmp(header, 0, header_size)) {
+            vortex::error("PNGCodec::LoadTexture: {} is not a valid PNG file", file_path_str);
+            return PNGFile(nullptr, fclose);
+        }
+
+        return PNGFile(file, fclose);
     }
-    PngReadStruct CreatePngReadStruct()
+    PNGBinder CreatePngBinder()
     {
-        png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, vortex::codec::PNGCodec::ErrorHandler, vortex::codec::PNGCodec::WarningHandler);
-        if (!png_ptr) {
+        PNGBinder binder;
+        if (!file_ptr) {
+            vortex::error("PNGReader::CreatePngBinder: File pointer is null");
+            return binder;
+        }
+
+        binder.png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, vortex::codec::PNGCodec::ErrorHandler, vortex::codec::PNGCodec::WarningHandler);
+        if (!binder.png_ptr) {
             vortex::error("PNGReader::CreatePngReadStruct: png_create_read_struct failed");
-            return PngReadStruct(nullptr, png_destroy_read_struct);
+            return binder;
         }
-        return PngReadStruct(png_ptr, png_destroy_read_struct);
-    }
-    PngInfo CreatePngInfoStruct(png_structp png_ptr)
-    {
-        png_infop info_ptr = png_create_info_struct(png_ptr);
-        if (!info_ptr) {
+        binder.info_ptr = png_create_info_struct(binder.png_ptr);
+        if (!binder.info_ptr) {
             vortex::error("PNGReader::CreatePngInfoStruct: png_create_info_struct failed");
-            return PngInfo(nullptr, png_destroy_info_struct);
         }
-        return PngInfo(info_ptr, png_destroy_info_struct);
+        return binder;
     }
     PNGInfo CreateInfo()
     {
-        if (setjmp(png_jmpbuf(png_ptr.get()))) {
+        auto* png_ptr = png_binder.png_ptr;
+        auto* info_ptr = png_binder.info_ptr;
+        if (setjmp(png_jmpbuf(png_ptr))) {
             vortex::error("PNGCodec::LoadTexture: Error during PNG file info");
             Reset();
-            return;
+            return {};
         }
 
         PNGInfo info{};
-        info.width = png_get_image_width(png_ptr.get(), info_ptr.get());
-        info.height = png_get_image_height(png_ptr.get(), info_ptr.get());
-        info.bit_depth = png_get_bit_depth(png_ptr.get(), info_ptr.get());
-        png_byte color_type = png_get_color_type(png_ptr.get(), info_ptr.get());
+        info.width = png_get_image_width(png_ptr, info_ptr);
+        info.height = png_get_image_height(png_ptr, info_ptr);
+        info.bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+        png_byte color_type = png_get_color_type(png_ptr, info_ptr);
         switch (color_type) {
         case PNG_COLOR_TYPE_GRAY:
             info.channels = 1;
@@ -270,7 +307,7 @@ private:
             info.color_type = PNGColorType::RGBA;
             break;
         case PNG_COLOR_TYPE_PALETTE:
-            png_set_palette_to_rgb(png_ptr.get());
+            png_set_palette_to_rgb(png_ptr);
             info.channels = 3; // After conversion, it becomes RGB
             info.color_type = PNGColorType::RGB;
             break;
@@ -280,8 +317,8 @@ private:
         }
 
         // Handle transparency
-        if (png_get_valid(png_ptr.get(), info_ptr.get(), PNG_INFO_tRNS)) {
-            png_set_tRNS_to_alpha(png_ptr.get());
+        if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
+            png_set_tRNS_to_alpha(png_ptr);
             info.channels++;
         }
 
@@ -290,14 +327,12 @@ private:
     void Reset()
     {
         file_ptr.reset();
-        png_ptr.reset();
-        info_ptr.reset();
+        png_binder.Reset();
     }
 
 public:
-    PngFile file_ptr{ nullptr, fclose };
-    PngReadStruct png_ptr{ nullptr, png_destroy_read_struct };
-    PngInfo info_ptr{ nullptr, png_destroy_info_struct };
+    PNGFile file_ptr{ nullptr, fclose };
+    PNGBinder png_binder;
     PNGInfo info{ 0, 0, 0, 0, PNGColorType::RGB }; // Default to RGB
 };
 
@@ -310,4 +345,5 @@ wis::Texture vortex::codec::PNGCodec::LoadTexture(const vortex::Graphics& gfx, c
     }
 
     PNGInfo info = reader.GetInfo();
+    return {};
 }

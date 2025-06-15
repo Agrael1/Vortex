@@ -66,7 +66,7 @@ add_library(ZLIB::ZLIB ALIAS zlibstatic)
 CPMAddPackage(
   NAME libpng
   GITHUB_REPOSITORY pnggroup/libpng
-  GIT_TAG v1.6.40
+  GIT_TAG v1.6.48
   OPTIONS
   "PNG_TESTS OFF"
   "PNG_SHARED OFF"

@@ -133,28 +133,28 @@ inline Log CreateLog(const LogOptions& options, bool set_default = false)
     return log;
 }
 
-void info(std::string_view message)
+inline void info(std::string_view message)
 {
     spdlog::info(message);
 }
-void warn(std::string_view message)
+inline void warn(std::string_view message)
 {
     spdlog::warn(message);
 }
-void error(std::string_view message)
+inline void error(std::string_view message)
 {
     spdlog::error(message);
 }
-void critical(std::string_view message)
+inline void critical(std::string_view message)
 {
     spdlog::critical(message);
 }
-void trace(std::string_view message)
+inline void trace(std::string_view message)
 {
     spdlog::trace(message);
 }
 
-void debug(std::string_view message)
+inline void debug(std::string_view message)
 {
     spdlog::debug(message);
 }
@@ -191,7 +191,7 @@ void debug(const std::format_string<_Types...> fmt, _Types&&... args)
     spdlog::debug(std::vformat(fmt.get(), std::make_format_args(args...)));
 }
 
-LogView GetLog(std::string_view name)
+inline LogView GetLog(std::string_view name)
 {
     return LogView{ spdlog::get(name.data()) };
 }

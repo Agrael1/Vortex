@@ -34,7 +34,7 @@ public:
     {
         _outputs.reserve(2);
 
-        auto tex = codec::PNGCodec::LoadTexture(_gfx, "C:/Users/Agrae/Downloads/HDR.png");
+        auto tex = codec::PNGCodec::LoadTexture(_gfx, "C:/Users/Agrae/Downloads/png/ntsciccp.png");
 
         vortex::OutputDesc window{
             .format = wis::DataFormat::RGBA8Unorm,

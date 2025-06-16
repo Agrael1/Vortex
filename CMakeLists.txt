@@ -29,7 +29,9 @@ PUBLIC
 
   "include/vortex/input/image_input.h"
   "include/util/log.h"
-)
+  "include/util/lib/stb_image.h"
+  "include/util/lib/stb_image.cpp"
+ "include/vortex/codec/codec_stb.h" "include/vortex/codec/codec_stb.cpp" "include/vortex/codec/codec_common.h")
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON

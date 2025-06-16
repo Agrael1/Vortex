@@ -3,8 +3,7 @@
 #include <string_view>
 #include <wisdom/generated/api/api.hpp>
 #include <format>
-#include <util/reflect.h>
-#include <bit>
+#include <util/lib/reflect.h>
 
 namespace reflect {
 template<typename T>
@@ -102,5 +101,57 @@ struct string_hash : public std::hash<std::string_view> {
 struct string_equal : public std::equal_to<std::string_view> {
     using is_transparent = void;
 };
+
+template<typename T, auto Deleter>
+    requires std::is_pointer_v<T> && std::is_invocable_v<decltype(Deleter), T>
+struct unique_any {
+    T data;
+
+    ~unique_any() {
+        if (data)
+            Deleter(data);
+    }
+
+    unique_any() = default;
+    unique_any(T ptr) : data(ptr) {}
+
+    // Non-copyable.
+    unique_any(const unique_any&) = delete;
+    unique_any& operator=(const unique_any&) = delete;
+    
+    // Movable.
+    unique_any(unique_any&& other) noexcept : data(other.data) {
+        other.data = nullptr;
+    }
+    unique_any& operator=(unique_any&& other) noexcept {
+        if (this != &other) {
+            if (data)
+                Deleter(data);
+            data = other.data;
+            other.data = nullptr;
+        }
+        return *this;
+    }
+
+public:
+    explicit operator bool() const noexcept {
+        return data != nullptr;
+    }
+    T get() const noexcept {
+        return data;
+    }
+    T release() noexcept {
+        T temp = data;
+        data = nullptr;
+        return temp;
+    }
+    void reset(T ptr) noexcept {
+        if (data)
+            Deleter(data);
+        data = ptr;
+    }
+};
+
+using unique_file = unique_any<std::FILE*, std::fclose>;
 
 } // namespace vortex

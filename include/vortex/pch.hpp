@@ -12,6 +12,9 @@
 #include <memory>
 #include <algorithm>
 
+#include <util/lib/reflect.h>
+#include <util/lib/stb_image.h>
+
 #include <wisdom/wisdom.hpp>
 #include <wisdom/wisdom_debug.hpp>
 #include <wisdom/wisdom_platform.hpp>

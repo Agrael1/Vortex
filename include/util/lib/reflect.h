@@ -21,6 +21,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
+#define NTEST 1
 #if 0
 // -->
 [Overview](#Overview) / [Examples](#Examples) / [API](#API) / [FAQ](#FAQ) / [Resources](#Resources)

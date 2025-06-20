@@ -3,7 +3,7 @@
 #include <memory>
 #include <vortex/graphics.h>
 #include <vortex/node_registry.h>
-#include <vortex/codec/codec_png.h>
+#include <vortex/codec/codec_ffmpeg.h>
 
 namespace vortex {
 struct AppExitControl {
@@ -34,7 +34,7 @@ public:
     {
         _outputs.reserve(2);
 
-        auto tex = codec::PNGCodec::LoadTexture(_gfx, "C:/Users/Agrae/Downloads/png/ntsciccp.png");
+        codec::CodecFFmpeg::LoadTexture("C:/Users/Agrae/Downloads/png/ntsciccp.png");
 
         vortex::OutputDesc window{
             .format = wis::DataFormat::RGBA8Unorm,

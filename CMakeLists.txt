@@ -9,6 +9,12 @@ endif()
 project ("Vortex")
 include(cmake/deps.cmake)
 
+find_package(FFMPEG REQUIRED)
+
+#if (NOT FFMPEG_FOUND)
+#  message(FATAL_ERROR "FFMPEG not found. Please install FFMPEG or set FFMPEG_ROOT to the directory containing FFMPEG.")
+#endif()
+
 add_executable(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE "include")
 target_sources(${PROJECT_NAME} 
@@ -24,14 +30,11 @@ PUBLIC
   "include/vortex/platform.h"
   "include/vortex/swapchain.h"
 
-  "include/vortex/codec/codec_png.h"
-  "include/vortex/codec/codec_png.cpp"
-
   "include/vortex/input/image_input.h"
   "include/util/log.h"
-  "include/util/lib/stb_image.h"
-  "include/util/lib/stb_image.cpp"
- "include/vortex/codec/codec_stb.h" "include/vortex/codec/codec_stb.cpp" "include/vortex/codec/codec_common.h")
+  
+   "include/vortex/codec/codec_ffmpeg.h" "include/vortex/codec/codec_ffmpeg.cpp")
+
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON
@@ -46,8 +49,11 @@ target_link_libraries(${PROJECT_NAME}
     spdlog::spdlog
     SDL3::SDL3
     NDI::NDI
-    png_static
     
+    
+    FFmpeg::FFmpeg
+
+
     wis::wisdom-headers
     wis::wisdom-debug-headers
     wis::wisdom-extended-allocation-headers
@@ -64,4 +70,5 @@ if (WIN32)
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
   COMMAND_EXPAND_LISTS
   )
+  FFMPEG_COPY_DLL(${PROJECT_NAME})
 endif()

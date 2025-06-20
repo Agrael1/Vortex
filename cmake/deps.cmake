@@ -15,8 +15,8 @@ include(${GET_CPM_FILE})
 # Wisdom
 CPMAddPackage(
   NAME Wisdom
-  URL https://github.com/Agrael1/Wisdom/releases/download/Latest/Wisdom-0.6.8-win64.zip
-  VERSION 0.6.8
+  URL https://github.com/Agrael1/Wisdom/releases/download/Latest/Wisdom-0.6.10-win64.zip
+  VERSION 0.6.10
 
   OPTIONS
   "WISDOM_BUILD_TESTS OFF"
@@ -25,14 +25,24 @@ CPMAddPackage(
   "WISDOM_EXPERIMENTAL_CPP_MODULES ON"
 )
 set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${Wisdom_SOURCE_DIR}/lib/cmake/wisdom)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 set(WISDOM_EXPERIMENTAL_CPP_MODULES ON CACHE BOOL "Enable experimental C++ modules support" FORCE)
-find_package(Wisdom 0.6.7 REQUIRED)
+find_package(Wisdom 0.6.10 REQUIRED)
 
 # spdlog
 CPMAddPackage(
   GITHUB_REPOSITORY gabime/spdlog 
   VERSION 1.15.1 
 )
+
+# FFMPEG
+CPMAddPackage(
+  NAME FFMPEG
+  URL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl-shared.zip
+  VERSION latest
+)
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${FFMPEG_SOURCE_DIR})
+set(FFmpeg_INSTALL_PATH ${FFMPEG_SOURCE_DIR})
 
 # SDL3
 CPMAddPackage(
@@ -43,36 +53,6 @@ CPMAddPackage(
   "SDL_WERROR OFF"
   "SDL_LEAN_AND_MEAN ON"
 )
-
-
-# zlib
-CPMAddPackage(
-  NAME ZLIB
-  GITHUB_REPOSITORY madler/zlib
-  GIT_TAG v1.3.1
-  OPTIONS
-  "ZLIB_COMPAT ON"
-  "ZLIB_BUILD_TESTS OFF"
-  "ZLIB_BUILD_EXAMPLES OFF"
-)
-# Crutch the ZLIB_INCLUDE_DIR to point to the source directory
-set(ZLIB_INCLUDE_DIR ${ZLIB_SOURCE_DIR})
-set(ZLIB_LIBRARY zlibstatic)
-target_include_directories(zlibstatic PUBLIC ${ZLIB_BINARY_DIR})
-add_library(ZLIB::ZLIB ALIAS zlibstatic)
-
-
-# libpng
-CPMAddPackage(
-  NAME libpng
-  GITHUB_REPOSITORY pnggroup/libpng
-  GIT_TAG v1.6.48
-  OPTIONS
-  "PNG_TESTS OFF"
-  "PNG_SHARED OFF"
-  "SKIP_INSTALL_ALL ON"
-)
-target_include_directories(png_static INTERFACE ${libpng_SOURCE_DIR} ${libpng_BINARY_DIR})
 
 # NDI SDK
 if (NOT DEFINED ENV{NDI_SDK_DIR})

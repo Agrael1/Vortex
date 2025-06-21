@@ -34,7 +34,7 @@ public:
     {
         _outputs.reserve(2);
 
-        codec::CodecFFmpeg::LoadTexture("C:/Users/Agrae/Downloads/png/ntsciccp.png");
+        codec::CodecFFmpeg::LoadTexture(_gfx, "C:/Users/Agrae/Downloads/HDR.jpg");
 
         vortex::OutputDesc window{
             .format = wis::DataFormat::RGBA8Unorm,

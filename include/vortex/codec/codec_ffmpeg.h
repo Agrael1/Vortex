@@ -1,10 +1,14 @@
 #pragma once
 #include <filesystem>
 
+namespace vortex {
+class Graphics;
+}
+
 namespace vortex::codec {
 class CodecFFmpeg
 {
 public:
-    static void LoadTexture(const std::filesystem::path& path);
+    static wis::Texture LoadTexture(const Graphics& gfx, const std::filesystem::path& path);
 };
 } // namespace vortex::codec

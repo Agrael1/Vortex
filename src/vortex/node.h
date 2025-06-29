@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 #include <source_location>
-#include <util/common.h>
+#include <vortex/util/common.h>
 
 namespace vortex {
 enum class NodeType {

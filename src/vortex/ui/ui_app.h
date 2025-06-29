@@ -34,8 +34,6 @@ public:
     {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            vortex::info("SDL Event: {}", event.type);
-
             switch (event.type) {
             case SDL_EVENT_QUIT:
                 return 1;

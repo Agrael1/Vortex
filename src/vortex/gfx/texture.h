@@ -1,6 +1,6 @@
 #pragma once
 #include <wisdom/wisdom.hpp>
-#include <util/common.h>
+#include <vortex/util/common.h>
 
 namespace vortex {
 class Graphics;

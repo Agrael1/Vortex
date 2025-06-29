@@ -16,35 +16,35 @@ find_package(FFMPEG REQUIRED)
 #endif()
 
 add_executable(${PROJECT_NAME})
-target_include_directories(${PROJECT_NAME} PRIVATE "include")
+target_include_directories(${PROJECT_NAME} PRIVATE "src")
 target_sources(${PROJECT_NAME} 
 PRIVATE
   "src/entry_main.cpp"
   
 PUBLIC
-  "include/vortex/app.h"
-  "include/vortex/graphics.h"
-  "include/util/common.h"
-  "include/vortex/node.h"
-  "include/vortex/node_registry.h"
-  "include/vortex/ui/ui_app.h"
-  "include/vortex/swapchain.h"
+  "src/vortex/app.h"
+  "src/vortex/graphics.h"
+  "src/vortex/util/common.h"
+  "src/vortex/node.h"
+  "src/vortex/node_registry.h"
+  "src/vortex/ui/ui_app.h"
+  "src/vortex/swapchain.h"
 
-  "include/vortex/input/image_input.h"
-  "include/util/log.h"
+  "src/vortex/input/image_input.h"
+  "src/vortex/util/log.h"
   
-   "include/vortex/codec/codec_ffmpeg.h" 
-   "include/vortex/codec/codec_ffmpeg.cpp" 
+  "src/vortex/codec/codec_ffmpeg.h" 
+  "src/vortex/codec/codec_ffmpeg.cpp" 
    
-   "include/vortex/probe.h" 
-   "include/vortex/pipeline_storage.h" 
-   "include/vortex/gfx/texture.h"
-   "include/vortex/gfx/texture.cpp"
+  "src/vortex/probe.h" 
+  "src/vortex/pipeline_storage.h" 
+  "src/vortex/gfx/texture.h"
+  "src/vortex/gfx/texture.cpp"
 
-  "include/vortex/ui/cef_app.h"
-  "include/vortex/ui/implements.h"
-  "include/vortex/ui/client.h" 
-  "include/vortex/ui/ui_app.h"
+  "src/vortex/ui/cef_app.h"
+  "src/vortex/ui/implements.h"
+  "src/vortex/ui/client.h" 
+  "src/vortex/ui/ui_app.h"
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -72,7 +72,7 @@ target_link_libraries(${PROJECT_NAME}
     wis::wisdom-platform-headers
     wis::wisdom-descriptor-buffer-headers
 )
-target_precompile_headers(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/include/vortex/pch.hpp>)
+target_precompile_headers(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
 
 WIS_INSTALL_DEPS(${PROJECT_NAME})
 

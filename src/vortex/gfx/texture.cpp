@@ -1,6 +1,6 @@
 #include <vortex/gfx/texture.h>
 #include <vortex/graphics.h>
-#include <util/log.h>
+#include <vortex/util/log.h>
 
 wis::RenderTarget vortex::Texture2D::CreateRenderTarget(vortex::Graphics& gfx) const noexcept
 {

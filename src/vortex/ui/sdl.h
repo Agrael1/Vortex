@@ -3,7 +3,7 @@
 #include <memory>
 #include <format>
 #include <optional>
-#include <util/log.h>
+#include <vortex/util/log.h>
 
 typedef struct HWND__* HWND;
 

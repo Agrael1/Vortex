@@ -1,7 +1,7 @@
 #include <vortex/codec/codec_ffmpeg.h>
 #include <vortex/graphics.h>
-#include <util/common.h>
-#include <util/log.h>
+#include <vortex/util/common.h>
+#include <vortex/util/log.h>
 
 // FFmpeg includes
 extern "C" {

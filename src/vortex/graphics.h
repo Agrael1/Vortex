@@ -5,8 +5,8 @@
 #include <wisdom/wisdom_debug.hpp>
 #include <wisdom/wisdom_descriptor_buffer.hpp>
 #include <wisdom/wisdom_extended_allocation.hpp>
-#include <util/log.h>
-#include <util/common.h>
+#include <vortex/util/log.h>
+#include <vortex/util/common.h>
 #include <vortex/platform.h>
 
 namespace vortex {

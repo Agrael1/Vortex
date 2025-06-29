@@ -1,6 +1,6 @@
 #include <csignal>
 #include <vortex/app.h>
-#include <util/log.h>
+#include <vortex/util/log.h>
 #include <vortex/ui/cef_app.h>
 
 struct MainArgs {

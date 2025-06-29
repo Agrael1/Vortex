@@ -5,8 +5,8 @@
 
 #include <span>
 #include <stdexcept>
-#include <util/common.h>
-#include <util/log.h>
+#include <vortex/util/common.h>
+#include <vortex/util/log.h>
 
 namespace vortex {
 class NDILibrary

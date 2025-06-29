@@ -54,6 +54,22 @@ CPMAddPackage(
   "SDL_LEAN_AND_MEAN ON"
 )
 
+# Cef
+CPMAddPackage(
+  NAME CEF
+  URL https://cef-builds.spotifycdn.com/cef_binary_138.0.15%2Bgd0f1f64%2Bchromium-138.0.7204.50_windows64_minimal.tar.bz2
+  VERSION 138.0.15+gd0f1f64+chromium-138.0.7204.50
+  OPTIONS
+  "USE_SANDBOX OFF"
+  "CEF_RUNTIME_LIBRARY_FLAG /MD"
+)
+target_include_directories(libcef_dll_wrapper PUBLIC
+  "${CEF_SOURCE_DIR}"
+)
+target_link_libraries(libcef_dll_wrapper PUBLIC 
+  "${CEF_SOURCE_DIR}/Release/libcef.lib"
+)
+
 # NDI SDK
 if (NOT DEFINED ENV{NDI_SDK_DIR})
   set(NDI_SDK_DIR)

@@ -57,4 +57,8 @@ public:
     Selector current = Selector::None;
     std::unique_ptr<wis::FactoryExtension> platform;
 };
+
+
+
+
 } // namespace vortex

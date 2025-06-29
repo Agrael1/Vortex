@@ -27,13 +27,25 @@ PUBLIC
   "include/util/common.h"
   "include/vortex/node.h"
   "include/vortex/node_registry.h"
-  "include/vortex/platform.h"
+  "include/vortex/ui/ui_app.h"
   "include/vortex/swapchain.h"
 
   "include/vortex/input/image_input.h"
   "include/util/log.h"
   
-   "include/vortex/codec/codec_ffmpeg.h" "include/vortex/codec/codec_ffmpeg.cpp")
+   "include/vortex/codec/codec_ffmpeg.h" 
+   "include/vortex/codec/codec_ffmpeg.cpp" 
+   
+   "include/vortex/probe.h" 
+   "include/vortex/pipeline_storage.h" 
+   "include/vortex/gfx/texture.h"
+   "include/vortex/gfx/texture.cpp"
+
+  "include/vortex/ui/cef_app.h"
+  "include/vortex/ui/implements.h"
+  "include/vortex/ui/client.h" 
+  "include/vortex/ui/ui_app.h"
+)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
@@ -49,7 +61,7 @@ target_link_libraries(${PROJECT_NAME}
     spdlog::spdlog
     SDL3::SDL3
     NDI::NDI
-    
+    libcef_dll_wrapper
     
     FFmpeg::FFmpeg
 
@@ -71,4 +83,22 @@ if (WIN32)
   COMMAND_EXPAND_LISTS
   )
   FFMPEG_COPY_DLL(${PROJECT_NAME})
+endif()
+
+# Copy the CEF resources to the output directory
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+  "${CEF_SOURCE_DIR}/Resources"
+  $<TARGET_FILE_DIR:${PROJECT_NAME}>
+)
+
+if (WIN32)
+  # Copy the CEF DLLs to the output directory
+  # only copy dlls, bin and json files
+  file(GLOB CEF_DLLS "${CEF_SOURCE_DIR}/Release/*.dll" "${CEF_SOURCE_DIR}/Release/*.bin" "${CEF_SOURCE_DIR}/Release/*.json")
+  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CEF_DLLS}
+    $<TARGET_FILE_DIR:${PROJECT_NAME}>
+  )
 endif()

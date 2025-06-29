@@ -12,6 +12,11 @@ enum class NodeType {
     Output,
     Filter,
 };
+enum class NodeExecution {
+    None,
+    Render,
+    Skip,
+};
 enum class NodeInput {
     INVALID = -1,
     OUTPUT_DESC = 0,
@@ -33,8 +38,14 @@ struct OutputDesc {
     const char* name;
 };
 
+template<typename T>
+struct NodeDescT : public NodeDesc {
+    T data;
+};
+
 struct INode {
     virtual ~INode() = default;
+    virtual void Visit() { };
 };
 struct IOutput : public vortex::INode {
 };
@@ -67,7 +78,7 @@ private:
     static inline std::unordered_map<std::string, CreateNodeCallback, vortex::string_hash, vortex::string_equal> node_creators;
 };
 
-template<typename CRTP, typename Base>
+template<typename CRTP, typename Base = INode>
 struct NodeImpl : public Base {
     using Base::Base;
 

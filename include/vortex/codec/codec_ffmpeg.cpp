@@ -10,7 +10,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
-wis::Texture vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesystem::path& path)
+vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesystem::path& path)
 {
     using unique_context = vortex::unique_any<AVFormatContext*, avformat_close_input, true>;
     using unique_codec_context = vortex::unique_any<AVCodecContext*, avcodec_free_context, true>;
@@ -22,18 +22,18 @@ wis::Texture vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const 
     auto path_str = path.string();
     if (!std::filesystem::exists(path)) {
         vortex::error("CodecFFmpeg::LoadTexture: File does not exist: {}", path_str);
-        return texture; // File does not exist, nothing to load
+        return vortex::Texture2D(texture); // File does not exist, nothing to load
     }
 
     unique_context format_context = nullptr;
     if (auto err = avformat_open_input(&format_context, path_str.c_str(), nullptr, nullptr); err < 0) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not open input file: {}. Error {}", path_str, err);
-        return texture; // Could not open the input file
+        return vortex::Texture2D(texture); // Could not open the input file
     }
 
     if (auto err = avformat_find_stream_info(format_context.get(), nullptr); err < 0) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not find stream info for file: {}. Error {}", path_str, err);
-        return texture; // Could not find stream info
+        return vortex::Texture2D(texture); // Could not find stream info
     }
 
     // Find the first video stream
@@ -52,23 +52,23 @@ wis::Texture vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const 
 
     if (!codec) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not find a suitable codec for file: {}", path_str);
-        return texture; // No suitable codec found
+        return vortex::Texture2D(texture); // No suitable codec found
     }
 
     // Open the codec
     unique_codec_context codec_context = avcodec_alloc_context3(codec);
     if (!codec_context) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not allocate codec context for file: {}", path_str);
-        return texture; // Could not allocate codec context
+        return vortex::Texture2D(texture); // Could not allocate codec context
     }
 
     if (auto err = avcodec_parameters_to_context(codec_context.get(), codec_params); err < 0) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not copy codec parameters to context for file: {}. Error {}", path_str, err);
-        return texture; // Could not copy codec parameters to context
+        return vortex::Texture2D(texture); // Could not copy codec parameters to context
     }
     if (auto err = avcodec_open2(codec_context.get(), codec, nullptr); err < 0) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not open codec for file: {}. Error {}", path_str, err);
-        return texture; // Could not open codec
+        return vortex::Texture2D(texture); // Could not open codec
     }
 
     // Read data from the stream
@@ -176,7 +176,7 @@ wis::Texture vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const 
             continue; // Failed to write memory to subresource
         }
         // Successfully loaded the texture
-        return texture;
+        return vortex::Texture2D(texture, wis::Size2D{ desc.size.width, desc.size.height }, desc.format);
     }
-    return texture; // Return the texture if no frames were processed
+    return vortex::Texture2D(texture); // Return the texture if no frames were processed
 }

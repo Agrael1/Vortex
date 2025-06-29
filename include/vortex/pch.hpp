@@ -18,3 +18,5 @@
 #include <wisdom/wisdom_debug.hpp>
 #include <wisdom/wisdom_platform.hpp>
 #include <wisdom/wisdom_extended_allocation.hpp>
+
+#include <include/cef_app.h>

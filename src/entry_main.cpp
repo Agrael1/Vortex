@@ -1,6 +1,7 @@
 #include <csignal>
 #include <vortex/app.h>
 #include <util/log.h>
+#include <vortex/ui/cef_app.h>
 
 struct MainArgs {
 };
@@ -34,8 +35,36 @@ try {
     // Initialize Node Library
     vortex::RegisterHardwareNodes();
 
-    vortex::App a{};
-    return a.Run();
+    // Initialize Cef
+    CefMainArgs cef_args{ GetModuleHandleW(nullptr) };
+    CefRefPtr<vortex::ui::VortexCefApp> cef_app{ new vortex::ui::VortexCefApp() };
+    int code = CefExecuteProcess(cef_args, cef_app, nullptr);
+    if (code >= 0) {
+        vortex::info("CefExecuteProcess returned: {}", code);
+        return code; // If this is a secondary process, exit immediately
+    }
+
+    // Initialize CEF settings
+    CefSettings cef_settings;
+    cef_settings.multi_threaded_message_loop = true; // Use single-threaded for better integration
+    cef_settings.no_sandbox = true; // Disable sandbox for simplicity
+    CefString(&cef_settings.cache_path).FromString((std::filesystem::current_path() / u"cef_cache").string()); // Set cache path
+
+    if (!CefInitialize(cef_args, cef_settings, cef_app, nullptr)) {
+        vortex::critical("CefInitialize failed");
+        return 3; // Initialization failed
+    }
+
+    int result = 0;
+    {
+        vortex::App a{};
+        result = a.Run();
+    }
+    
+    // Shutdown CEF
+    CefShutdown();
+    
+    return result;
 } catch (const std::exception& e) {
     vortex::critical(e.what());
     return 1;

@@ -6,7 +6,7 @@ if (POLICY CMP0141 AND MSVC)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
-project ("Vortex")
+project ("vortex")
 include(cmake/deps.cmake)
 
 find_package(FFMPEG REQUIRED)
@@ -42,10 +42,11 @@ PUBLIC
   "src/vortex/gfx/texture.cpp"
 
   "src/vortex/ui/cef_app.h"
+  "src/vortex/ui/sdl.h"
   "src/vortex/ui/implements.h"
   "src/vortex/ui/client.h" 
   "src/vortex/ui/ui_app.h"
-)
+ "src/vortex/ui/ui_app.cpp" "src/vortex/ui/sdl.cpp" "src/vortex/platform.cpp" "src/vortex/graphics.cpp")
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
@@ -76,6 +77,13 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${CM
 
 WIS_INSTALL_DEPS(${PROJECT_NAME})
 
+# Copy the UI html files to the output directory
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+  "${CMAKE_CURRENT_SOURCE_DIR}/rc/index.html"
+  $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui/index.html
+)
+
 # copy all dlls to the output directory
 if (WIN32)
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
@@ -100,5 +108,14 @@ if (WIN32)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${CEF_DLLS}
     $<TARGET_FILE_DIR:${PROJECT_NAME}>
+  )
+  set(MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/rc")
+  add_custom_command(
+    TARGET ${PROJECT_NAME}
+    POST_BUILD
+    COMMAND "mt.exe" -nologo
+            -manifest \"${MANIFEST_PATH}/${PROJECT_NAME}.exe.manifest\" \"${MANIFEST_PATH}/compatibility.manifest\"
+            -outputresource:"$<TARGET_FILE:${PROJECT_NAME}>"\;\#1
+    COMMENT "Adding manifest..."
   )
 endif()

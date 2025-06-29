@@ -13,6 +13,7 @@
 #include <algorithm>
 
 #include <vortex/util/lib/reflect.h>
+#include <vortex/util/log.h>
 
 #include <wisdom/wisdom.hpp>
 #include <wisdom/wisdom_debug.hpp>

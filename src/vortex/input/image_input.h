@@ -28,6 +28,47 @@ public:
         if (!_texture) {
             vortex::warn("ImageInput: Failed to load texture from path: {}", params.data.image_path);
         }
+        // Create a root signature for the image input node
+        wis::Result result = wis::success;
+
+        wis::DescriptorTableEntry entries[] = {
+            { .type = wis::DescriptorType::Texture, .bind_register = 0, .binding = 0, .count = 1 },
+            { .type = wis::DescriptorType::Sampler, .bind_register = 0, .binding = 1, .count = 1 },
+        };
+        wis::DescriptorTable tables[] = {
+            { .type = wis::DescriptorHeapType::Descriptor, .entries = entries, .entry_count = 1, .stage = wis::ShaderStages::Pixel },
+            { .type = wis::DescriptorHeapType::Sampler, .entries = entries + 1, .entry_count = 1, .stage = wis::ShaderStages::Pixel },
+        };
+        _root_signature = gfx.GetDescriptorBufferExtension().CreateRootSignature(result, nullptr, 0, nullptr, 0, tables, std::size(tables));
+        if (!vortex::success(result)) {
+            vortex::error("ImageInput: Failed to create root signature: {}", result.error);
+            return;
+        }
+
+        // Load shaders for the image input node
+        _vertex_shader = gfx.LoadShader("shaders/basic.vs");
+        _pixel_shader = gfx.LoadShader("shaders/image.ps");
+
+        // Create a pipeline state for the image input node
+        wis::GraphicsPipelineDesc pipeline_desc{
+            .root_signature = _root_signature,
+            .shaders = {
+                    .vertex = _vertex_shader,
+                    .pixel = _pixel_shader,
+            },
+            .attachments = {
+                .attachment_formats = { wis::DataFormat::RGBA8Unorm },
+                .attachments_count = 1,
+                .depth_attachment = wis::DataFormat::Unknown, // No depth attachment
+            },
+            .flags = wis::PipelineFlags::DescriptorBuffer,
+        };
+
+        _pipeline_state = gfx.GetDevice().CreateGraphicsPipeline(result, pipeline_desc);
+        if (!vortex::success(result)) {
+            vortex::error("ImageInput: Failed to create graphics pipeline: {}", result.error);
+            return;
+        }
     }
     ImageInput(const vortex::Graphics& gfx, vortex::NodeDesc* initializers)
         : ImageInput(gfx, *static_cast<ImageParams*>(initializers))
@@ -58,6 +99,10 @@ public:
 
 private:
     vortex::Texture2D _texture; // Texture loaded from the image file
+    wis::RootSignature _root_signature; // Root signature for the image input node
+    wis::PipelineState _pipeline_state; // Pipeline state for rendering the image
+    wis::Shader _vertex_shader; // Vertex shader for the image input node
+    wis::Shader _pixel_shader; // Pixel shader for the image input node
     Parameters _params; // Parameters for the image input node
 };
 

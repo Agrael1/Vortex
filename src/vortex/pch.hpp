@@ -17,6 +17,7 @@
 
 #include <wisdom/wisdom.hpp>
 #include <wisdom/wisdom_debug.hpp>
+#include <wisdom/wisdom_descriptor_buffer.hpp>
 #include <wisdom/wisdom_platform.hpp>
 #include <wisdom/wisdom_extended_allocation.hpp>
 

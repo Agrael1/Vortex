@@ -21,5 +21,6 @@ public:
     const wis::Texture& _current_rt_texture;
 
     wis::Size2D _output_size; // Useful for different render targets
+    uint32_t frame = 0;
 };
 } // namespace vortex

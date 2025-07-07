@@ -85,16 +85,64 @@ public:
         return new vortex::ui::VortexResourceHandler();
     }
 };
-class VortexCefApp : public CefImplements<VortexCefApp, CefApp, CefBrowserProcessHandler>
+class VortexV8Handler : public CefImplements<VortexV8Handler, CefV8Handler>
+{
+public:
+    bool Execute(const CefString& name,
+                 CefRefPtr<CefV8Value> object,
+                 const CefV8ValueList& arguments,
+                 CefRefPtr<CefV8Value>& retval,
+                 CefString& exception) override
+    {
+        // Handle the JavaScript function call
+        if (name == "vortexCall") {
+            if (arguments.size() < 1) {
+                exception = "Invalid number of arguments";
+                return false;
+            }
+            // Process the function call here
+            // For example, you can log the arguments or perform some action
+            vortex::info("vortexCall executed with arguments: {}", arguments[0]->GetStringValue().ToString());
+
+            retval = CefV8Value::CreateString("Hello From C++!");
+            return true;
+        }
+        exception = "Unknown function: " + name.ToString();
+        return false; // Function not found
+    }
+
+private:
+    std::unordered_map<std::string, CefRefPtr<CefV8Value>> _registered_functions; ///< Map to store registered functions
+};
+
+class VortexCefApp : public CefImplements<VortexCefApp, CefApp, CefBrowserProcessHandler, CefRenderProcessHandler>
 {
 public:
     CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override
     {
         return this;
     }
+
+    CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override
+    {
+        return this;
+    }
+
+public:
     void OnContextInitialized() override
     {
         CefRegisterSchemeHandlerFactory(u"http", u"vortex", new vortex::ui::VortexSchemeHandlerFactory());
+    }
+
+    void OnContextCreated(CefRefPtr<CefBrowser> browser,
+                          CefRefPtr<CefFrame> frame,
+                          CefRefPtr<CefV8Context> context) override
+    {
+        // Register the JavaScript function
+        CefRefPtr<CefV8Value> global = context->GetGlobal();
+        CefRefPtr<VortexV8Handler> handler = new VortexV8Handler();
+        CefRefPtr<CefV8Value> func = CefV8Value::CreateFunction("vortexCall", handler);
+        global->SetValue("vortexCall", func, V8_PROPERTY_ATTRIBUTE_NONE);
     }
 };
 } // namespace vortex::ui

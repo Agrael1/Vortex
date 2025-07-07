@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/node.h>
 #include <vortex/probe.h>
+#include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/codec/codec_ffmpeg.h>
 #include <DirectXMath.h>
 
@@ -57,9 +58,8 @@ public:
                     .pixel = _pixel_shader,
             },
             .attachments = {
-                .attachment_formats = { wis::DataFormat::RGBA8Unorm },
-                .attachments_count = 1,
-                .depth_attachment = wis::DataFormat::Unknown, // No depth attachment
+                    .attachment_formats = { wis::DataFormat::RGBA8Unorm }, .attachments_count = 1,
+                    .depth_attachment = wis::DataFormat::Unknown, // No depth attachment
             },
             .flags = wis::PipelineFlags::DescriptorBuffer,
         };
@@ -91,8 +91,34 @@ public:
 
         auto [vwidth, vheight] = probe._output_size;
 
+
+        wis::RenderPassRenderTargetDesc rprtd{
+            .target = probe._current_rt_view,
+            .load_op = wis::LoadOperation::Clear,
+            .store_op = wis::StoreOperation::Store,
+            .clear_value = { 0.f, 0.f, 0.f, 0.f }, // Clear to transparent black
+        };
+        wis::RenderPassDesc rpdesc{
+            .target_count = 1,
+            .targets = &rprtd,
+        };
+        cmd_list.BeginRenderPass(rpdesc);
+        cmd_list.SetPipelineState(_pipeline_state);
+        cmd_list.SetRootSignature(_root_signature);
+        cmd_list.RSSetScissor({ 0, 0, int(vwidth), int(vheight) });
+        cmd_list.RSSetViewport({ 0.f, 0.f, float(vwidth), float(vheight), 0.f, 1.f });
+        cmd_list.IASetPrimitiveTopology(wis::PrimitiveTopology::TriangleList);
+
+        std::array<DescriptorTableOffset, 2> offsets = {
+            DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
+            DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
+        };
+
+        probe._descriptor_buffer.BindOffsets(gfx, cmd_list, _root_signature, probe.frame, offsets);
+
         // Draw a quad that covers the viewport
-        cmd_list.DrawInstanced(4, 1, 0, 0);
+        cmd_list.DrawInstanced(3, 1, 0, 0);
+        cmd_list.EndRenderPass();
 
         return wis::success;
     }

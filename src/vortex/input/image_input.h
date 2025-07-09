@@ -3,28 +3,161 @@
 #include <vortex/probe.h>
 #include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/codec/codec_ffmpeg.h>
+#include <vortex/util/reflection.h>
 #include <DirectXMath.h>
 
 namespace vortex {
 
+struct ImageInputProperties {
+    std::string image_path;
+    DirectX::XMFLOAT4A crop_rect = { 0.f, 0.f, 0.f, 0.f }; // Normalized crop rectangle
+    DirectX::XMINT2 size = { 100, 100 }; // Size of the image in pixels
+    DirectX::XMINT2 origin = { 0, 0 }; // Offset in pixels
+    DirectX::XMFLOAT2 rotation = { 0.f, 0.f }; // Rotation in radians
+
+    //-- Getters for the properties --//
+
+    // Get image_path as a string_view
+    template<typename Self>
+    std::string_view GetImagePath(const Self&& self)
+    {
+        return self.image_path;
+    }
+    // Get crop_rect as a DirectX::XMFLOAT4A
+    template<typename Self>
+    DirectX::XMFLOAT4A GetCropRect(const Self&& self)
+    {
+        return self.crop_rect;
+    }
+    // Get size as a DirectX::XMUINT2
+    template<typename Self>
+    DirectX::XMINT2 GetSize(const Self&& self)
+    {
+        return self.size;
+    }
+    // Get origin as a DirectX::XMINT2
+    template<typename Self>
+    DirectX::XMINT2 GetOrigin(const Self&& self)
+    {
+        return self.origin;
+    }
+    // Get rotation as a DirectX::XMFLOAT2
+    template<typename Self>
+    DirectX::XMFLOAT2 GetRotation(const Self&& self)
+    {
+        return self.rotation;
+    }
+
+    //-- Setters for the properties --//
+
+    // Set image_path from a string
+    template<typename Self>
+    void SetImagePath(Self& self, std::string_view path, bool notify = true)
+    {
+        self.image_path = path;
+    }
+
+    // Set crop_rect from a DirectX::XMFLOAT4A
+    template<typename Self>
+    void SetCropRect(Self& self, DirectX::XMFLOAT4A rect, bool notify = true)
+    {
+        self.crop_rect = rect;
+    }
+
+    // Set size from a DirectX::XMUINT2
+    template<typename Self>
+    void SetSize(Self& self, DirectX::XMINT2 size, bool notify = true)
+    {
+        self.size = size;
+    }
+    // Set origin from a DirectX::XMINT2
+    template<typename Self>
+    void SetOrigin(Self& self, DirectX::XMINT2 origin, bool notify = true)
+    {
+        self.origin = origin;
+    }
+    // Set rotation from a DirectX::XMFLOAT2
+    template<typename Self>
+    void SetRotation(Self& self, DirectX::XMFLOAT2 rotation, bool notify = true)
+    {
+        self.rotation = rotation;
+    }
+
+    // Comes from javascript
+    template<typename Self>
+    void SetProperty(Self& self, uint32_t index, std::string_view value, bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (std::string_view path; vortex::reflection_traits<std::string_view>::deserialize(&path, value)) {
+                self.SetImagePath<Self>(path, notify);
+            }
+            break; // image_path
+        case 1: 
+            if (DirectX::XMFLOAT4A rect; vortex::reflection_traits<DirectX::XMFLOAT4A>::deserialize(&rect, value)) {
+                self.SetCropRect<Self>(rect, notify);
+            }
+            break; // crop_rect
+        case 2:
+            if (DirectX::XMINT2 size; vortex::reflection_traits<DirectX::XMINT2>::deserialize(&size, value)) {
+                self.SetSize<Self>(size, notify);
+            }
+            break; // size
+        case 3:
+            if (DirectX::XMINT2 origin; vortex::reflection_traits<DirectX::XMINT2>::deserialize(&origin, value)) {
+                self.SetOrigin<Self>(origin, notify);
+            }
+            break; // origin
+        case 4:
+            if (DirectX::XMFLOAT2 rotation; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&rotation, value)) {
+                self.SetRotation<Self>(rotation, notify);
+            }
+            break; // rotation
+        default:
+            vortex::error("ImageInputProperties: Invalid property index: {}", index);
+            break;
+        }
+    }
+
+    template<typename Self>
+    void NotifyPropertyChange(Self& self, uint32_t index)
+    {
+        switch (index) {
+        case 0: // image_path
+            notifier(0, vortex::reflection_traits<std::string_view>::serialize(self.image_path));
+            break;
+        case 1: // crop_rect
+            notifier(1, vortex::reflection_traits<DirectX::XMFLOAT4A>::serialize(self.crop_rect));
+            break;
+        case 2: // size
+            notifier(2, vortex::reflection_traits<DirectX::XMINT2>::serialize(self.size));
+            break;
+        case 3: // origin
+            notifier(3, vortex::reflection_traits<DirectX::XMINT2>::serialize(self.origin));
+            break;
+        case 4: // rotation
+            notifier(4, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.rotation));
+            break;
+        default:
+            vortex::error("ImageInputProperties: Invalid property index for notification: {}", index);
+            break;
+        }
+    }
+
+    notifier_callback notifier; // Callback for property change notifications
+};
+
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
-class ImageInput : public NodeImpl<ImageInput>
+class ImageInput : public NodeImplWithP<ImageInput, ImageInputProperties>
 {
 public:
-    struct Parameters {
-        std::string image_path;
-        DirectX::XMFLOAT4A crop_rect = { 0.f, 0.f, 0.f, 0.f }; // Normalized crop rectangle
-        DirectX::XMUINT2 size = { 100, 100 }; // Size of the image in pixels
-        DirectX::XMINT2 origin = { 0, 0 }; // Offset in pixels
-        DirectX::XMFLOAT2 rotation = { 0.f, 0.f }; // Rotation in radians
-    };
-    using ImageParams = NodeDescT<ImageInput::Parameters>;
+    using Parameters = ImageInputProperties;
+    using ImageParams = NodeDescT<Parameters>;
 
 public:
     ImageInput() = default;
     ImageInput(const vortex::Graphics& gfx, const ImageParams& params)
         : _texture(codec::CodecFFmpeg::LoadTexture(gfx, params.data.image_path))
-        , _params(params.data)
     {
         if (!_texture) {
             vortex::warn("ImageInput: Failed to load texture from path: {}", params.data.image_path);
@@ -78,7 +211,7 @@ public:
     NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {
         // Validate that the texture was loaded successfully
-        if (!_texture || _params.size.x == 0 || _params.size.y == 0) {
+        if (!_texture || size.x == 0 || size.y == 0) {
             return NodeExecution::Skip; // Skip rendering if texture is not valid
         }
 
@@ -90,7 +223,6 @@ public:
         auto& cmd_list = probe._command_list;
 
         auto [vwidth, vheight] = probe._output_size;
-
 
         wis::RenderPassRenderTargetDesc rprtd{
             .target = probe._current_rt_view,
@@ -129,7 +261,6 @@ private:
     wis::PipelineState _pipeline_state; // Pipeline state for rendering the image
     wis::Shader _vertex_shader; // Vertex shader for the image input node
     wis::Shader _pixel_shader; // Pixel shader for the image input node
-    Parameters _params; // Parameters for the image input node
 };
 
 using ImageParams = ImageInput::ImageParams;

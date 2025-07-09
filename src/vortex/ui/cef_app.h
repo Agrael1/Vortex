@@ -4,7 +4,6 @@
 #include <include/cef_parser.h>
 #include <fstream>
 #include <vortex/util/log.h>
-#include <include/base/cef_bind.h>
 
 namespace vortex::ui {
 class Property
@@ -278,7 +277,8 @@ public:
         // Register the JavaScript function
         CefRefPtr<CefV8Value> global = context->GetGlobal();
         CefRefPtr<VortexV8Handler> handler = new VortexV8Handler();
-        // CefRefPtr<CefV8Value> func = CefV8Value::CreateFunction("vortexCall", handler);
+
+
         global->SetValue("getButtonText",
                          CefV8Value::CreateFunction("getButtonText", handler),
                          V8_PROPERTY_ATTRIBUTE_NONE);
@@ -290,14 +290,6 @@ public:
         global->SetValue("registerButtonTextCallback",
                          CefV8Value::CreateFunction("registerButtonTextCallback", handler),
                          V8_PROPERTY_ATTRIBUTE_NONE);
-
-        // Set up a timer to simulate C++ changes (optional)
-        std::thread([&]() {
-            while (true) {
-                std::this_thread::sleep_for(std::chrono::seconds(5));
-                SimulateButtonTextChange();
-            }
-        }).detach();
     }
 };
 } // namespace vortex::ui

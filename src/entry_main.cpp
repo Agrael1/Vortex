@@ -2,6 +2,7 @@
 #include <vortex/app.h>
 #include <vortex/util/log.h>
 #include <vortex/ui/cef_app.h>
+#include <vortex/util/reflection.h>
 
 struct MainArgs {
 };
@@ -21,7 +22,7 @@ try {
         .pattern_prefix = "vortex.graphics",
         .output_file_path = debug ? "" : "logs/vortex.log"
     };
-    
+
     vortex::Log log_global{ options };
     vortex::Log log_graphics{ options_gfx };
     log_global.SetAsDefault();
@@ -60,10 +61,10 @@ try {
         vortex::App a{};
         result = a.Run();
     }
-    
+
     // Shutdown CEF
     CefShutdown();
-    
+
     return result;
 } catch (const std::exception& e) {
     vortex::critical(e.what());

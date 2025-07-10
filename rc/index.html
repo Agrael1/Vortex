@@ -72,38 +72,14 @@
 
         // Initialize with current value from C++
         function initializeUI() {
-            const initialText = getButtonText();
-            button.textContent = initialText;
-            textInput.value = initialText;
-
-            // Register for property changes from C++
-            registerButtonTextCallback(function (newText) {
-                console.log("Property changed in C++:", newText);
-                button.textContent = newText;
-                textInput.value = newText;
-            });
+            vortexCall("greet");
         }
 
-        // Button click handler
-        button.addEventListener('click', function () {
+        // Add on button click
+        button.addEventListener('click', async function () {
             // Toggle between two states
-            if (button.textContent === "Hello From C++!") {
-                setButtonText("Click Me Again!");
-            } else {
-                setButtonText("Hello From C++!");
-            }
-        });
-
-        // Update button handler
-        updateButton.addEventListener('click', function () {
-            const newText = textInput.value;
-            setButtonText(newText);
-        });
-
-        // Input change handler for real-time updates
-        textInput.addEventListener('input', function () {
-            const newText = textInput.value;
-            setButtonText(newText);
+            var a = await vortexCallAsync("greetAsync");
+            button.textContent = a
         });
 
         // Initialize the UI when the page loads

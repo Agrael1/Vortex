@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/ui/implements.h>
 #include <include/cef_client.h>
+#include <unordered_map>
 
 namespace vortex::ui {
 class Client : public CefImplements<Client, CefClient, CefLifeSpanHandler, CefDisplayHandler>
@@ -24,7 +25,16 @@ public:
         return _browser.get();
     }
 
-        // Override OnConsoleMessage to redirect CEF console output to cout
+    void BindFunction(std::string func_name, std::function<void(CefListValue&)> callback)
+    {
+        _callbacks[func_name] = std::move(callback);
+    }
+    void CallFunction(const std::string& func_name, CefListValue& args)
+    {
+        // Call function on javascript side
+    }
+
+    // Override OnConsoleMessage to redirect CEF console output to cout
     bool OnConsoleMessage(CefRefPtr<CefBrowser> browser,
                           cef_log_severity_t level,
                           const CefString& message,
@@ -60,25 +70,17 @@ public:
                                   CefRefPtr<CefProcessMessage> message) override
     {
 
-
         vortex::info("Client::OnProcessMessageReceived: Received message from process {}: {}", reflect::enum_name(source_process), message->GetName().ToString());
-
-        if (message->GetName() == "greetAsync") {
-            // Handle the message here, e.g., call a function in the browser context
-            auto a = CefProcessMessage::Create("co_return");
-            auto args = a->GetArgumentList();
-            args->SetSize(1); // Set size to 1 for the counter
-            args->SetInt(0, counter++); // Increment the counter and send it back
-            _browser->GetMainFrame()->SendProcessMessage(PID_BROWSER, a);
-            return true; // Indicate that the message was handled
+        if (auto it = _callbacks.find(message->GetName().ToString()); it != _callbacks.end()) {
+            it->second(*message->GetArgumentList());
+            return true; // Message handled
         }
-
         return false;
     }
 
 private:
     CefRefPtr<CefBrowser> _browser;
-    uint32_t counter = 57; ///< Example counter for demonstration purposes
+    std::unordered_map<std::string, std::function<void(CefListValue&)>> _callbacks; ///< Map of callbacks for handling messages
 };
 
 } // namespace vortex::ui

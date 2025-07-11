@@ -44,6 +44,14 @@ public:
 
         return 0;
     }
+    void BindFunction(const std::string& name, std::function<void(CefListValue&)> callback)
+    {
+        _cef_client->BindFunction(name, callback);
+    }
+    CefRefPtr<Client> GetClient() const
+    {
+        return _cef_client;
+    }
 
 private:
     void InitializeCEF();

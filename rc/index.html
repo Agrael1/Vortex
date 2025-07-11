@@ -72,14 +72,14 @@
 
         // Initialize with current value from C++
         function initializeUI() {
-            vortexCall("greet");
+            vortexCall("createNode", "image_input");
         }
 
         // Add on button click
         button.addEventListener('click', async function () {
             // Toggle between two states
             var a = await vortexCallAsync("greetAsync");
-            button.textContent = a
+            button.textContent = a;
         });
 
         // Initialize the UI when the page loads

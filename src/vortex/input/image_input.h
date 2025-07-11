@@ -55,6 +55,9 @@ struct ImageInputProperties {
     void SetImagePath(Self& self, std::string_view path, bool notify = true)
     {
         self.image_path = path;
+        if (notify) {
+            self.NotifyPropertyChange(0); // Notify that image_path has changed
+        }
     }
 
     // Set crop_rect from a DirectX::XMFLOAT4A
@@ -62,6 +65,9 @@ struct ImageInputProperties {
     void SetCropRect(Self& self, DirectX::XMFLOAT4A rect, bool notify = true)
     {
         self.crop_rect = rect;
+        if (notify) {
+            self.NotifyPropertyChange(1); // Notify that crop_rect has changed
+        }
     }
 
     // Set size from a DirectX::XMUINT2
@@ -69,18 +75,27 @@ struct ImageInputProperties {
     void SetSize(Self& self, DirectX::XMINT2 size, bool notify = true)
     {
         self.size = size;
+        if (notify) {
+            self.NotifyPropertyChange(2); // Notify that size has changed
+        }
     }
     // Set origin from a DirectX::XMINT2
     template<typename Self>
     void SetOrigin(Self& self, DirectX::XMINT2 origin, bool notify = true)
     {
         self.origin = origin;
+        if (notify) {
+            self.NotifyPropertyChange(3); // Notify that origin has changed
+        }
     }
     // Set rotation from a DirectX::XMFLOAT2
     template<typename Self>
     void SetRotation(Self& self, DirectX::XMFLOAT2 rotation, bool notify = true)
     {
         self.rotation = rotation;
+        if (notify) {
+            self.NotifyPropertyChange(4); // Notify that rotation has changed
+        }
     }
 
     // Comes from javascript
@@ -93,7 +108,7 @@ struct ImageInputProperties {
                 self.SetImagePath<Self>(path, notify);
             }
             break; // image_path
-        case 1: 
+        case 1:
             if (DirectX::XMFLOAT4A rect; vortex::reflection_traits<DirectX::XMFLOAT4A>::deserialize(&rect, value)) {
                 self.SetCropRect<Self>(rect, notify);
             }
@@ -208,6 +223,7 @@ public:
     {
     }
 
+public:
     NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {
         // Validate that the texture was loaded successfully
@@ -253,6 +269,13 @@ public:
         cmd_list.EndRenderPass();
 
         return wis::success;
+    }
+
+public:
+    template<typename Self>
+    void SetImagePath(Self& self, std::string_view path, bool notify = true)
+    {
+        ImageInputProperties::SetImagePath(self, path, notify);
     }
 
 private:

@@ -47,9 +47,11 @@ struct NodeDescT : public NodeDesc {
 
 struct INode {
     virtual ~INode() = default;
-    virtual void Visit() { };
+    virtual void Visit(class RenderProbe& probe){};
 };
 struct IOutput : public vortex::INode {
+    virtual void Enter(class RenderProbe& probe) { };
+    virtual void Exit(class RenderProbe& probe) { };
 };
 
 class NodeFactory
@@ -109,5 +111,20 @@ public:
         };
         NodeFactory::RegisterNode(name, callback);
     }
+};
+
+class Connection
+{
+public:
+    Connection() = default;
+    Connection(INode* from, INode* to)
+        : from_node(from)
+        , to_node(to)
+    {
+    }
+
+public:
+    INode* from_node = nullptr;
+    INode* to_node = nullptr;
 };
 } // namespace vortex

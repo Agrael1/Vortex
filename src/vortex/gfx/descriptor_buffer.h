@@ -29,7 +29,7 @@ public:
     template<typename Self>
     decltype(auto) GetSamplerBuffer(this Self&& self) noexcept
     {
-        return _sampler_buffer;
+        return self._sampler_buffer;
     }
 
     void BindBuffers(const vortex::Graphics& gfx, wis::CommandList& cmd_list) const noexcept;

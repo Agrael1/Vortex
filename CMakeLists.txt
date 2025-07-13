@@ -29,7 +29,7 @@ PUBLIC
   "src/vortex/node.h"
   "src/vortex/node_registry.h"
   "src/vortex/ui/ui_app.h"
-  "src/vortex/swapchain.h"
+  "src/vortex/gfx/swapchain.h"
 
   "src/vortex/input/image_input.h"
   "src/vortex/util/log.h"
@@ -82,9 +82,9 @@ WIS_INSTALL_DEPS(${PROJECT_NAME})
 
 # Copy the UI html files to the output directory
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-  "${CMAKE_CURRENT_SOURCE_DIR}/rc/index.html"
-  $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui/index.html
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+  "${CMAKE_CURRENT_SOURCE_DIR}/rc"
+  $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui
 )
 
 # copy all dlls to the output directory

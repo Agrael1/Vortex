@@ -3,9 +3,7 @@
 #include <wisdom/wisdom.hpp>
 #include <wisdom/wisdom_platform.hpp>
 #include <vortex/node.h>
-#include <vortex/swapchain.h>
-
-typedef struct HWND__* HWND;
+#include <vortex/gfx/swapchain.h>
 
 namespace vortex {
 // Debug output is a window with a swapchain for rendering contents directly to the screen
@@ -15,6 +13,7 @@ public:
     WindowOutput(const vortex::Graphics& gfx, const OutputDesc& out_desc)
         : _window(out_desc.name, int(out_desc.size.width), int(out_desc.size.height), false)
     {
+        wis::Result result = wis::success;
         if (out_desc.input != NodeInput::OUTPUT_DESC) {
             throw std::runtime_error("Invalid input type for WindowOutput");
         }
@@ -29,7 +28,20 @@ public:
             .tearing = false,
             .scaling = wis::SwapchainScaling::Stretch
         };
-        _swapchain.emplace(gfx, _window.CreateSwapchain(gfx, desc), desc);
+        _swapchain = _window.CreateSwapchain(gfx, desc);
+
+        _textures = _swapchain.GetBufferSpan();
+
+        wis::RenderTargetDesc rt_desc{
+            .format = out_desc.format,
+        };
+        for (size_t i = 0; i < _textures.size(); ++i) {
+            _render_targets[i] = gfx.GetDevice().CreateRenderTarget(result, _textures[i], rt_desc);
+            if (!vortex::success(result)) {
+                vortex::error("Failed to create render target for WindowOutput: {}", result.error);
+                return;
+            }
+        }
     }
     WindowOutput(const vortex::Graphics& gfx, vortex::NodeDesc* initializers)
         : WindowOutput(gfx, *reinterpret_cast<OutputDesc*>(initializers))
@@ -37,6 +49,10 @@ public:
     }
 
 public:
+    void Visit(RenderProbe& probe) override
+    {
+        // Start a render pass
+    }
     int ProcessEvents()
     {
         SDL_Event event;
@@ -51,6 +67,11 @@ public:
 
 private:
     vortex::ui::SDLWindow _window;
-    std::optional<vortex::Swapchain> _swapchain;
+
+public:
+    wis::SwapChain _swapchain;
+    wis::RenderTarget _render_targets[2]; ///< Render target for the swapchain
+    std::span<const wis::Texture> _textures; ///< Textures for the swapchain
+    uint32_t _current_texture_index = 0; ///< Current texture index for rendering
 };
 } // namespace vortex

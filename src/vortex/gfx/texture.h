@@ -9,7 +9,7 @@ class Texture2D
 public:
     Texture2D() = default;
     explicit Texture2D(wis::Texture texture, wis::Size2D size = {}, wis::DataFormat format = wis::DataFormat::Unknown)
-        : _texture(std::move(texture))
+        : _texture(std::move(texture)), _size(size), _format(format)
     {
     }
     operator bool() const noexcept
@@ -32,7 +32,8 @@ public:
         return _format;
     }
 
-    wis::RenderTarget CreateRenderTarget(vortex::Graphics& gfx) const noexcept;
+    wis::RenderTarget CreateRenderTarget(const vortex::Graphics& gfx) const noexcept;
+    wis::ShaderResource CreateShaderResource(const vortex::Graphics& gfx) const noexcept;
 
 private:
     wis::Texture _texture;

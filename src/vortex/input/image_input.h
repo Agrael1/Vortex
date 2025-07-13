@@ -217,6 +217,31 @@ public:
             vortex::error("ImageInput: Failed to create graphics pipeline: {}", result.error);
             return;
         }
+
+        // Create a shader resource for the texture
+        wis::ShaderResourceDesc srd{
+            .format = wis::DataFormat::RGBA8Unorm, // Assuming the texture is in RGBA8 format
+            .view_type = wis::TextureViewType::Texture2D
+        };
+        _texture_resource = _texture.CreateShaderResource(gfx);
+
+        // clang-format off
+        _sampler = gfx.GetDevice().CreateSampler(result, wis::SamplerDesc{
+                                                                 .min_filter = wis::Filter::Linear, 
+                                                                 .mag_filter = wis::Filter::Linear, 
+                                                                 .mip_filter = wis::Filter::Linear, 
+                                                                 .anisotropic = false, 
+                                                                 .max_anisotropy = 1, 
+                                                                 .address_u = wis::AddressMode::ClampToBorder, 
+                                                                 .address_v = wis::AddressMode::ClampToBorder, 
+                                                                 .address_w = wis::AddressMode::ClampToBorder, 
+                                                                 .min_lod = 0.f, 
+                                                                 .max_lod = 1.f, 
+                                                                 .mip_lod_bias = 0.f, 
+                                                                 .comparison_op = wis::Compare::None, 
+                                                                 .border_color = { 0.f, 0.f, 0.f, 0.f }, // Transparent border color
+                                                         });
+        // clang-format on
     }
     ImageInput(const vortex::Graphics& gfx, vortex::NodeDesc* initializers)
         : ImageInput(gfx, *static_cast<ImageParams*>(initializers))
@@ -234,23 +259,28 @@ public:
         return NodeExecution::Render; // Proceed with rendering
     }
 
-    wis::Result Render(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
+    void Visit(vortex::RenderProbe& probe) override
+    {
+        // Validate the node before rendering
+        if (Validate(probe._gfx, probe) == NodeExecution::Skip) {
+            return; // Skip rendering if validation fails
+        }
+        // Render the image input node
+        Render(probe);
+    }
+
+    wis::Result Render(const vortex::RenderProbe& probe)
     {
         auto& cmd_list = probe._command_list;
 
         auto [vwidth, vheight] = probe._output_size;
 
-        wis::RenderPassRenderTargetDesc rprtd{
-            .target = probe._current_rt_view,
-            .load_op = wis::LoadOperation::Clear,
-            .store_op = wis::StoreOperation::Store,
-            .clear_value = { 0.f, 0.f, 0.f, 0.f }, // Clear to transparent black
-        };
-        wis::RenderPassDesc rpdesc{
-            .target_count = 1,
-            .targets = &rprtd,
-        };
-        cmd_list.BeginRenderPass(rpdesc);
+        if (!initialized) {
+            probe._descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
+            probe._descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _sampler);
+            initialized = true; // Mark the node as initialized
+        }
+
         cmd_list.SetPipelineState(_pipeline_state);
         cmd_list.SetRootSignature(_root_signature);
         cmd_list.RSSetScissor({ 0, 0, int(vwidth), int(vheight) });
@@ -262,12 +292,10 @@ public:
             DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
         };
 
-        probe._descriptor_buffer.BindOffsets(gfx, cmd_list, _root_signature, probe.frame, offsets);
+        probe._descriptor_buffer.BindOffsets(probe._gfx, cmd_list, _root_signature, probe.frame, offsets);
 
         // Draw a quad that covers the viewport
         cmd_list.DrawInstanced(3, 1, 0, 0);
-        cmd_list.EndRenderPass();
-
         return wis::success;
     }
 
@@ -280,10 +308,13 @@ public:
 
 private:
     vortex::Texture2D _texture; // Texture loaded from the image file
+    wis::ShaderResource _texture_resource; // Shader resource for the texture
+    wis::Sampler _sampler; // Sampler for the texture
     wis::RootSignature _root_signature; // Root signature for the image input node
     wis::PipelineState _pipeline_state; // Pipeline state for rendering the image
     wis::Shader _vertex_shader; // Vertex shader for the image input node
     wis::Shader _pixel_shader; // Pixel shader for the image input node
+    bool initialized = false; // Flag to check if the node is initialized
 };
 
 using ImageParams = ImageInput::ImageParams;

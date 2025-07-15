@@ -66,6 +66,7 @@ target_link_libraries(${PROJECT_NAME}
     libcef_dll_wrapper
     
     FFmpeg::FFmpeg
+    Graaf::Graaf
 
 
     wis::wisdom-headers

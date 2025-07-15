@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/node.h>
 #include <vortex/probe.h>
+#include <graaflib/graph.h>
 
 namespace vortex {
 class GraphModel
@@ -94,12 +95,19 @@ public:
         _connections.push_back(vortex::Connection{
                 _nodes[0].get(),
                 _outputs[0].get() });
+
+        _graph.add_edge(
+            'a',
+            'b',
+                std::move(_connections.back()));
     }
 
 private:
     std::vector<std::unique_ptr<vortex::INode>> _nodes;
     std::vector<std::unique_ptr<vortex::INode>> _outputs;
     std::vector<vortex::Connection> _connections;
+
+    graaf::directed_graph<vortex::INode*, vortex::Connection> _graph; ///< Graph structure to hold nodes and connections
     uint32_t frame = 0; ///< Frame counter for rendering
 };
 } // namespace vortex

@@ -8,6 +8,7 @@ endif()
 
 project ("vortex")
 include(cmake/deps.cmake)
+include(cmake/shaders.cmake)
 
 find_package(FFMPEG REQUIRED)
 
@@ -28,7 +29,7 @@ PUBLIC
   "src/vortex/node.h"
   "src/vortex/node_registry.h"
   "src/vortex/ui/ui_app.h"
-  "src/vortex/swapchain.h"
+  "src/vortex/gfx/swapchain.h"
 
   "src/vortex/input/image_input.h"
   "src/vortex/util/log.h"
@@ -46,7 +47,7 @@ PUBLIC
   "src/vortex/ui/implements.h"
   "src/vortex/ui/client.h" 
   "src/vortex/ui/ui_app.h"
- "src/vortex/ui/ui_app.cpp" "src/vortex/ui/sdl.cpp" "src/vortex/platform.cpp" "src/vortex/graphics.cpp")
+ "src/vortex/ui/ui_app.cpp" "src/vortex/ui/sdl.cpp" "src/vortex/platform.cpp" "src/vortex/graphics.cpp" "src/vortex/gfx/descriptor_buffer.h" "src/vortex/gfx/consts.h" "src/vortex/gfx/descriptor_buffer.cpp" "src/vortex/util/reflection.h" "src/vortex/model.h" "src/vortex/ui/call_handler.h" "src/vortex/ui/cef_app.cpp" )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
@@ -74,14 +75,16 @@ target_link_libraries(${PROJECT_NAME}
     wis::wisdom-descriptor-buffer-headers
 )
 target_precompile_headers(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
+add_dependencies(${PROJECT_NAME} shaders)
 
 WIS_INSTALL_DEPS(${PROJECT_NAME})
 
+
 # Copy the UI html files to the output directory
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-  "${CMAKE_CURRENT_SOURCE_DIR}/rc/index.html"
-  $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui/index.html
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+  "${CMAKE_CURRENT_SOURCE_DIR}/rc"
+  $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui
 )
 
 # copy all dlls to the output directory

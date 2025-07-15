@@ -2,14 +2,13 @@
 #include <vortex/app.h>
 #include <vortex/util/log.h>
 #include <vortex/ui/cef_app.h>
+#include <vortex/util/reflection.h>
 
 struct MainArgs {
 };
 
 int entry_main(std::span<std::string_view> args)
 try {
-    MainArgs main_args;
-
     bool debug = true;
     vortex::LogOptions options{
         .name = vortex::app_log_name,
@@ -21,7 +20,7 @@ try {
         .pattern_prefix = "vortex.graphics",
         .output_file_path = debug ? "" : "logs/vortex.log"
     };
-    
+
     vortex::Log log_global{ options };
     vortex::Log log_graphics{ options_gfx };
     log_global.SetAsDefault();
@@ -32,10 +31,7 @@ try {
         vortex::AppExitControl::Exit();
     });
 
-    // Initialize Node Library
-    vortex::RegisterHardwareNodes();
-
-    // Initialize Cef
+        // Initialize Cef
     CefMainArgs cef_args{ GetModuleHandleW(nullptr) };
     CefRefPtr<vortex::ui::VortexCefApp> cef_app{ new vortex::ui::VortexCefApp() };
     int code = CefExecuteProcess(cef_args, cef_app, nullptr);
@@ -55,15 +51,18 @@ try {
         return 3; // Initialization failed
     }
 
+    // Initialize Node Library
+    vortex::RegisterHardwareNodes();    
+
     int result = 0;
     {
-        vortex::App a{};
-        result = a.Run();
+        vortex::App app;
+        result = app.Run();
     }
-    
+
     // Shutdown CEF
     CefShutdown();
-    
+
     return result;
 } catch (const std::exception& e) {
     vortex::critical(e.what());

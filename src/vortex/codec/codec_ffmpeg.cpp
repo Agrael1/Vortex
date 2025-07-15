@@ -10,6 +10,31 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+int save_frame_as_ppm(AVFrame* frame, const char* filename)
+{
+    FILE* f = fopen(filename, "wb");
+    if (!f) {
+        fprintf(stderr, "Could not open file %s\n", filename);
+        return -1;
+    }
+
+    // Write PPM header
+    fprintf(f, "P6\n%d %d\n255\n", frame->width, frame->height);
+
+    // Write pixel data
+    // Assuming frame is in RGB or RGBA format
+    for (int y = 0; y < frame->height; y++) {
+        for (int x = 0; x < frame->width; x++) {
+            uint8_t* pixel = &frame->data[0][y * frame->linesize[0] + x * (frame->format == AV_PIX_FMT_RGBA ? 4 : 3)];
+            // Write RGB values (skip alpha if present)
+            fwrite(pixel, 1, 3, f);
+        }
+    }
+
+    fclose(f);
+    return 0;
+}
+
 vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesystem::path& path)
 {
     using unique_context = vortex::unique_any<AVFormatContext*, avformat_close_input, true>;
@@ -22,18 +47,18 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
     auto path_str = path.string();
     if (!std::filesystem::exists(path)) {
         vortex::error("CodecFFmpeg::LoadTexture: File does not exist: {}", path_str);
-        return vortex::Texture2D(texture); // File does not exist, nothing to load
+        return vortex::Texture2D(std::move(texture)); // File does not exist, nothing to load
     }
 
     unique_context format_context = nullptr;
     if (auto err = avformat_open_input(&format_context, path_str.c_str(), nullptr, nullptr); err < 0) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not open input file: {}. Error {}", path_str, err);
-        return vortex::Texture2D(texture); // Could not open the input file
+        return vortex::Texture2D(std::move(texture)); // Could not open the input file
     }
 
     if (auto err = avformat_find_stream_info(format_context.get(), nullptr); err < 0) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not find stream info for file: {}. Error {}", path_str, err);
-        return vortex::Texture2D(texture); // Could not find stream info
+        return vortex::Texture2D(std::move(texture)); // Could not find stream info
     }
 
     // Find the first video stream
@@ -52,23 +77,23 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
 
     if (!codec) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not find a suitable codec for file: {}", path_str);
-        return vortex::Texture2D(texture); // No suitable codec found
+        return vortex::Texture2D(std::move(texture)); // No suitable codec found
     }
 
     // Open the codec
     unique_codec_context codec_context = avcodec_alloc_context3(codec);
     if (!codec_context) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not allocate codec context for file: {}", path_str);
-        return vortex::Texture2D(texture); // Could not allocate codec context
+        return vortex::Texture2D(std::move(texture)); // Could not allocate codec context
     }
 
     if (auto err = avcodec_parameters_to_context(codec_context.get(), codec_params); err < 0) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not copy codec parameters to context for file: {}. Error {}", path_str, err);
-        return vortex::Texture2D(texture); // Could not copy codec parameters to context
+        return vortex::Texture2D(std::move(texture)); // Could not copy codec parameters to context
     }
     if (auto err = avcodec_open2(codec_context.get(), codec, nullptr); err < 0) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not open codec for file: {}. Error {}", path_str, err);
-        return vortex::Texture2D(texture); // Could not open codec
+        return vortex::Texture2D(std::move(texture)); // Could not open codec
     }
 
     // Read data from the stream
@@ -123,6 +148,7 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
             resampled_frame->format = AV_PIX_FMT_RGBA;
             resampled_frame->width = frame->width;
             resampled_frame->height = frame->height;
+            resampled_frame->linesize[0] = frame->width * 4; // RGBA has 4 bytes per pixel
 
             if (av_frame_get_buffer(resampled_frame.get(), 0) < 0) {
                 vortex::error("CodecFFmpeg::LoadTexture: Could not allocate buffer for resampled frame");
@@ -135,6 +161,9 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
                     sws_ctx, frame->data, frame->linesize,
                     0, frame->height,
                     resampled_frame->data, resampled_frame->linesize);
+
+
+
             sws_freeContext(sws_ctx);
             if (resample_response < 0) {
                 vortex::error("CodecFFmpeg::LoadTexture: Error resampling frame: {}", resample_response);
@@ -176,7 +205,7 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
             continue; // Failed to write memory to subresource
         }
         // Successfully loaded the texture
-        return vortex::Texture2D(texture, wis::Size2D{ desc.size.width, desc.size.height }, desc.format);
+        return vortex::Texture2D(std::move(texture), wis::Size2D{ desc.size.width, desc.size.height }, desc.format);
     }
-    return vortex::Texture2D(texture); // Return the texture if no frames were processed
+    return vortex::Texture2D(std::move(texture)); // Return the texture if no frames were processed
 }

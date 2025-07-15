@@ -1,9 +1,10 @@
 #pragma once
 #include <vortex/ui/implements.h>
 #include <include/cef_client.h>
+#include <unordered_map>
 
 namespace vortex::ui {
-class Client : public CefImplements<Client, CefClient, CefLifeSpanHandler>
+class Client : public CefImplements<Client, CefClient, CefLifeSpanHandler, CefDisplayHandler>
 {
     void OnAfterCreated(CefRefPtr<CefBrowser> browser) override
     {
@@ -15,13 +16,71 @@ public:
     {
         return this; // No lifespan handling needed for this client
     }
+    CefRefPtr<CefDisplayHandler> GetDisplayHandler() override
+    {
+        return this; // Return this client as the display handler
+    }
     CefBrowser* GetBrowser() noexcept
     {
         return _browser.get();
     }
 
+    void BindFunction(std::string func_name, std::function<void(CefListValue&)> callback)
+    {
+        _callbacks[func_name] = std::move(callback);
+    }
+    void CallFunction(const std::string& func_name, CefListValue& args)
+    {
+        // Call function on javascript side
+    }
+
+    // Override OnConsoleMessage to redirect CEF console output to cout
+    bool OnConsoleMessage(CefRefPtr<CefBrowser> browser,
+                          cef_log_severity_t level,
+                          const CefString& message,
+                          const CefString& source,
+                          int line) override
+    {
+        // Map CEF log levels to descriptive prefixes
+        std::string message_str = message.ToString();
+
+        switch (level) {
+        case LOGSEVERITY_DEBUG:
+            vortex::debug("CEF Console: {}", message_str);
+            break;
+        case LOGSEVERITY_INFO:
+            vortex::info("CEF Console: {}", message_str);
+            break;
+        case LOGSEVERITY_WARNING:
+            vortex::warn("CEF Console: {}", message_str);
+            break;
+        case LOGSEVERITY_ERROR:
+            vortex::error("CEF Console: {}", message_str);
+            break;
+        case LOGSEVERITY_FATAL:
+            vortex::critical("CEF Console: {}", message_str);
+            break;
+        }
+        return true; // Return true to suppress the default console output
+    }
+
+    bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefProcessId source_process,
+                                  CefRefPtr<CefProcessMessage> message) override
+    {
+
+        vortex::info("Client::OnProcessMessageReceived: Received message from process {}: {}", reflect::enum_name(source_process), message->GetName().ToString());
+        if (auto it = _callbacks.find(message->GetName().ToString()); it != _callbacks.end()) {
+            it->second(*message->GetArgumentList());
+            return true; // Message handled
+        }
+        return false;
+    }
+
 private:
     CefRefPtr<CefBrowser> _browser;
+    std::unordered_map<std::string, std::function<void(CefListValue&)>> _callbacks; ///< Map of callbacks for handling messages
 };
 
 } // namespace vortex::ui

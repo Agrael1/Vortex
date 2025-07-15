@@ -35,6 +35,7 @@ public:
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
             case SDL_EVENT_QUIT:
                 return 1;
             default:
@@ -43,6 +44,14 @@ public:
         }
 
         return 0;
+    }
+    void BindFunction(const std::string& name, std::function<void(CefListValue&)> callback)
+    {
+        _cef_client->BindFunction(name, callback);
+    }
+    CefRefPtr<Client> GetClient() const
+    {
+        return _cef_client;
     }
 
 private:

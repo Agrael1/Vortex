@@ -1221,7 +1221,7 @@ template<class E, fixed_string unknown = "", auto Min = enum_min(E{}), auto Max 
                 }
             }
         };
-        return switch_case(switch_case, to_underlying(e));
+        return switch_case(switch_case, reflect::to_underlying(e));
     }
 }
 

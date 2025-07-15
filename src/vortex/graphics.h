@@ -59,6 +59,13 @@ public:
     {
         return _extended_allocation_ext;
     }
+    const wis::DescriptorBufferExtension& GetDescriptorBufferExtension() const noexcept
+    {
+        return _descriptor_buffer_ext;
+    }
+
+public:
+    wis::Shader LoadShader(std::filesystem::path path) const;
 
 private:
     void CreateDevice(bool debug_extension);

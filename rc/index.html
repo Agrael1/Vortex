@@ -1,47 +1,89 @@
 <!DOCTYPE html>
-<!-- saved from url=(0020)https://example.com/ -->
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>Example Domain</title>
-    <link rel="icon" href="data:;base64,="/>
-    
-    
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style type="text/css">
-    body {
-        background-color: #f0f0f2;
-        margin: 0;
-        padding: 0;
-        font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
-        
-    }
-    div {
-        width: 600px;
-        margin: 5em auto;
-        padding: 2em;
-        background-color: #fdfdff;
-        border-radius: 0.5em;
-        box-shadow: 2px 3px 7px 2px rgba(0,0,0,0.02);
-    }
-    a:link, a:visited {
-        color: #38488f;
-        text-decoration: none;
-    }
-    @media (max-width: 700px) {
-        div {
-            margin: 0 auto;
-            width: auto;
+<html>
+<head>
+    <link rel="icon" href="data:;base64,=" />
+    <title>CEF Two-Way Binding Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
         }
-    }
-    </style>    
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-bottom: 20px;
+        }
+
+            button:hover {
+                background-color: #45a049;
+            }
+
+            button:active {
+                background-color: #3e8e41;
+            }
+
+        input {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 300px;
+            margin-bottom: 10px;
+        }
+
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+    </style>
 </head>
-
 <body>
-<div>
-    <h1>Example Domain</h1>
-    <p>This domain is for use in illustrative examples in documents. You may use this
-    domain in literature without prior coordination or asking for permission.</p>
-    <p><a href="https://www.iana.org/domains/example">More information...</a></p>
-</div>
+    <div class="container">
+        <h2>Two-Way Binding Example</h2>
 
+        <button id="myButton">Loading...</button>
 
-</body></html>
+        <p>Edit button text:</p>
+        <input type="text" id="textInput" placeholder="Enter new button text">
+        <button id="updateButton">Update Button Text</button>
+    </div>
+
+    <script>
+        // Elements
+        const button = document.getElementById('myButton');
+        const textInput = document.getElementById('textInput');
+        const updateButton = document.getElementById('updateButton');
+
+        // Initialize with current value from C++
+        function initializeUI() {
+        }
+
+        // Add on button click
+        button.addEventListener('click', async function () {
+            // Toggle between two states
+            var a = await vortexCallAsync("greetAsync");
+            button.textContent = a;
+            vortexCall("createNode", "image_input");
+        });
+
+        // Initialize the UI when the page loads
+        document.addEventListener('DOMContentLoaded', initializeUI);
+    </script>
+</body>
+</html>

@@ -4,6 +4,8 @@
 #include <string>
 #include <source_location>
 #include <vortex/util/common.h>
+#include <vortex/util/lib/reflect.h>
+#include <print>
 
 namespace vortex {
 enum class NodeType {
@@ -45,9 +47,11 @@ struct NodeDescT : public NodeDesc {
 
 struct INode {
     virtual ~INode() = default;
-    virtual void Visit() { };
+    virtual void Visit(class RenderProbe& probe){};
 };
 struct IOutput : public vortex::INode {
+    virtual void Enter(class RenderProbe& probe) { };
+    virtual void Exit(class RenderProbe& probe) { };
 };
 
 class NodeFactory
@@ -93,5 +97,34 @@ public:
         NodeFactory::RegisterNode(name, callback);
     }
 };
+template<typename CRTP, typename Properties, typename Base = INode>
+struct NodeImplWithP : public Base, public Properties {
+    using Base::Base;
 
+public:
+    static constexpr std::string_view name = reflect::type_name<CRTP>();
+    static void RegisterNode()
+    {
+        auto callback = [](const vortex::Graphics& gfx, NodeDesc* initializers) -> std::unique_ptr<INode> {
+            auto node = std::make_unique<CRTP>(gfx, initializers);
+            return node;
+        };
+        NodeFactory::RegisterNode(name, callback);
+    }
+};
+
+class Connection
+{
+public:
+    Connection() = default;
+    Connection(INode* from, INode* to)
+        : from_node(from)
+        , to_node(to)
+    {
+    }
+
+public:
+    INode* from_node = nullptr;
+    INode* to_node = nullptr;
+};
 } // namespace vortex

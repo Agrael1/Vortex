@@ -19,45 +19,49 @@ enum class NodeExecution {
     Render,
     Skip,
 };
-enum class NodeInput {
-    INVALID = -1,
-    OUTPUT_DESC = 0,
-
-    USER_INPUT = 4096,
+enum class EvaluationStrategy {
+    Static, // Evaluate only if properties change
+    Default = Static, // Evaluate only if properties change
+    Dynamic, // Evaluate every frame
+    Inherited, // Evaluate based on children's evaluation strategy
+};
+enum class SinkType {
+    RenderTexture, // Render texture sink
+    RenderTarget, // Render target sink
 };
 
-struct NodeDesc {
-    NodeInput input = NodeInput::INVALID;
-    void* pNext = nullptr;
-};
-
-struct OutputDesc {
-    NodeInput input = NodeInput::OUTPUT_DESC;
-    void* pNext = nullptr;
-
-    wis::DataFormat format;
-    wis::Size2D size;
-    const char* name;
-};
-
-template<typename T>
-struct NodeDescT : public NodeDesc {
-    T data;
-};
-
-struct INode {
+// Microoptimization for update queue!
+struct alignas(16) INode {
     virtual ~INode() = default;
-    virtual void Visit(class RenderProbe& probe){};
+    virtual void Visit(class RenderProbe& probe) { };
+    constexpr virtual NodeType GetType() const noexcept
+    {
+        return NodeType::None; // Default node type
+    }
+    constexpr virtual EvaluationStrategy GetEvaluationStrategy() const noexcept
+    {
+        return EvaluationStrategy::Static; // Default evaluation strategy
+    }
+    virtual void SetProperty(uint32_t index, std::string_view value, bool notify = false) { }
 };
 struct IOutput : public vortex::INode {
     virtual void Enter(class RenderProbe& probe) { };
     virtual void Exit(class RenderProbe& probe) { };
 };
 
+
+struct Sink {
+    SinkType type = SinkType::RenderTexture; // Default sink type
+};
+struct Source {
+    virtual void Connect(Sink& sink) = 0;
+    virtual void Disconnect(Sink& sink) = 0;
+};
+
 class NodeFactory
 {
     // Use callback to create a node
-    using CreateNodeCallback = std::unique_ptr<INode> (*)(const vortex::Graphics& gfx, NodeDesc* initializers);
+    using CreateNodeCallback = std::unique_ptr<INode> (*)(const vortex::Graphics& gfx);
 
 public:
     NodeFactory() = default;
@@ -69,11 +73,11 @@ public:
     {
         node_creators[std::string(name)] = callback;
     }
-    static std::unique_ptr<INode> CreateNode(std::string_view name, const vortex::Graphics& gfx, NodeDesc* initializers)
+    static std::unique_ptr<INode> CreateNode(std::string_view name, const vortex::Graphics& gfx)
     {
         auto it = node_creators.find(name);
         if (it != node_creators.end()) {
-            return it->second(gfx, initializers);
+            return it->second(gfx);
         }
         return nullptr;
     }
@@ -82,36 +86,47 @@ private:
     static inline std::unordered_map<std::string, CreateNodeCallback, vortex::string_hash, vortex::string_equal> node_creators;
 };
 
-template<typename CRTP, typename Base = INode>
-struct NodeImpl : public Base {
+// Add to your PropertiesWrapper or NodeImpl
+template<typename T>
+struct PropertiesWrapper : public T {
+    using T::T; // Inherit constructors from T
+};
+
+template<typename CRTP, typename Properties, EvaluationStrategy strategy = EvaluationStrategy::Static, typename Base = INode>
+struct NodeImpl : public Base, public PropertiesWrapper<Properties> {
     using Base::Base;
+    static constexpr EvaluationStrategy evaluation_strategy = strategy;
 
 public:
     static constexpr std::string_view name = reflect::type_name<CRTP>();
     static void RegisterNode()
     {
-        auto callback = [](const vortex::Graphics& gfx, NodeDesc* initializers) -> std::unique_ptr<INode> {
-            auto node = std::make_unique<CRTP>(gfx, initializers);
+        auto callback = [](const vortex::Graphics& gfx) -> std::unique_ptr<INode> {
+            auto node = std::make_unique<CRTP>(gfx);
             return node;
         };
         NodeFactory::RegisterNode(name, callback);
     }
-};
-template<typename CRTP, typename Properties, typename Base = INode>
-struct NodeImplWithP : public Base, public Properties {
-    using Base::Base;
-
-public:
-    static constexpr std::string_view name = reflect::type_name<CRTP>();
-    static void RegisterNode()
+    constexpr virtual NodeType GetType() const noexcept override
     {
-        auto callback = [](const vortex::Graphics& gfx, NodeDesc* initializers) -> std::unique_ptr<INode> {
-            auto node = std::make_unique<CRTP>(gfx, initializers);
-            return node;
-        };
-        NodeFactory::RegisterNode(name, callback);
+        if constexpr (std::is_base_of_v<IOutput, CRTP>) {
+            return NodeType::Output;
+        } else {
+            return NodeType::Filter; // Default to Filter for other nodes
+        }
+    }
+    constexpr virtual EvaluationStrategy GetEvaluationStrategy() const noexcept override
+    {
+        return evaluation_strategy;
+    }
+    virtual void SetProperty(uint32_t index, std::string_view value, bool notify = false) override
+    {
+        static_cast<CRTP*>(this)->SetProperty(index, value, notify);
     }
 };
+
+template<typename CRTP, typename Properties>
+using OutputImpl = NodeImpl<CRTP, Properties, EvaluationStrategy::Inherited, IOutput>;
 
 class Connection
 {

@@ -1,1 +1,2 @@
 reflect - qlib/reflect - version: master @ 15.06.2025  #define NTEST
+SPSC_queue - drogalis/SPSC-Queue - version: master @ 18.07.2025

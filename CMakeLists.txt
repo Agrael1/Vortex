@@ -47,7 +47,17 @@ PUBLIC
   "src/vortex/ui/implements.h"
   "src/vortex/ui/client.h" 
   "src/vortex/ui/ui_app.h"
- "src/vortex/ui/ui_app.cpp" "src/vortex/ui/sdl.cpp" "src/vortex/platform.cpp" "src/vortex/graphics.cpp" "src/vortex/gfx/descriptor_buffer.h" "src/vortex/gfx/consts.h" "src/vortex/gfx/descriptor_buffer.cpp" "src/vortex/util/reflection.h" "src/vortex/model.h" "src/vortex/ui/call_handler.h" "src/vortex/ui/cef_app.cpp" )
+ "src/vortex/ui/ui_app.cpp" "src/vortex/ui/sdl.cpp" "src/vortex/platform.cpp" "src/vortex/graphics.cpp" "src/vortex/gfx/descriptor_buffer.h" "src/vortex/gfx/consts.h" "src/vortex/gfx/descriptor_buffer.cpp" "src/vortex/util/reflection.h" "src/vortex/model.h" "src/vortex/ui/call_handler.h" "src/vortex/ui/cef_app.cpp"  "src/vortex/update_queue.h" "src/vortex/util/lib/SPSC-Queue.h")
+
+add_custom_target(ui)
+# Copy the UI html files to the output directory
+add_custom_command(TARGET ui POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+  "${CMAKE_CURRENT_SOURCE_DIR}/rc"
+  $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui
+)
+
+
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
@@ -76,17 +86,11 @@ target_link_libraries(${PROJECT_NAME}
     wis::wisdom-descriptor-buffer-headers
 )
 target_precompile_headers(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
-add_dependencies(${PROJECT_NAME} shaders)
+add_dependencies(${PROJECT_NAME} shaders ui)
 
 WIS_INSTALL_DEPS(${PROJECT_NAME})
 
 
-# Copy the UI html files to the output directory
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-  "${CMAKE_CURRENT_SOURCE_DIR}/rc"
-  $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui
-)
 
 # copy all dlls to the output directory
 if (WIN32)

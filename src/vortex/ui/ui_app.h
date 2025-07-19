@@ -45,9 +45,9 @@ public:
 
         return 0;
     }
-    void BindFunction(const std::string& name, std::function<void(CefListValue&)> callback)
+    void BindMessageHandler(Client::MessageHandler callback)
     {
-        _cef_client->BindFunction(name, callback);
+        _cef_client->BindMessageHandler(std::move(callback));
     }
     CefRefPtr<Client> GetClient() const
     {

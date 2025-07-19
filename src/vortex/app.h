@@ -8,6 +8,7 @@
 
 #include <vortex/ui/ui_app.h>
 #include <vortex/model.h>
+#include <vortex/util/lib/SPSC-Queue.h>
 
 namespace vortex {
 struct AppExitControl {
@@ -31,6 +32,8 @@ struct AppExitControl {
 
 class App
 {
+    using MessageHandler = void (App::*)(CefListValue&);
+
 public:
     App()
         : _gfx(true)
@@ -44,11 +47,9 @@ public:
         }
         fence = _gfx.GetDevice().CreateFence(res);
 
-        _ui_app.BindFunction("createNode", [this](CefListValue& args) { CreateNode(args); });
-        _ui_app.BindFunction("greetAsync", [this](CefListValue& args) { GreetAsync(args); });
-
-        _model.CreateNode(_gfx); // Create a default node for testing
-        _model.CreateOutput(_gfx); // Create a default output for testing
+        _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
+        _model.CreateNode(_gfx, "ImageInput"); // Create a default node for testing
+        _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
         _model.ConnectNodes(); // Connect the nodes in the model
     }
 
@@ -59,40 +60,78 @@ public:
             if (int code = _ui_app.ProcessEvents()) {
                 return code; // Exit requested
             }
+            ProcessMessages(); // Process messages from the UI
 
-            // Process the model and render the nodes
-            vortex::RenderProbe probe{
-                _gfx,
-                _descriptor_buffer,
-                _pipeline_storage,
-                _command_list[frame_index],
-                {},
-                nullptr,
+            //// Process the model and render the nodes
+            // vortex::RenderProbe probe{
+            //     _gfx,
+            //     _descriptor_buffer,
+            //     _pipeline_storage,
+            //     _command_list[frame_index],
+            //     {},
+            //     nullptr,
 
-                1,
-                frame_index
-            };
-            _model.TraverseNodes(probe); // Traverse the nodes in the model
+            //    1,
+            //    frame_index
+            //};
+            //_model.TraverseNodes(probe); // Traverse the nodes in the model
 
-            _gfx.GetMainQueue().SignalQueue(fence, fence_value);
+            //_gfx.GetMainQueue().SignalQueue(fence, fence_value);
 
-            frame_index = (frame_index + 1) % max_frames_in_flight;
-            fence.Wait(fence_values[frame_index]);
+            // frame_index = (frame_index + 1) % max_frames_in_flight;
+            // fence.Wait(fence_values[frame_index]);
 
-            fence_values[frame_index] = ++fence_value;
+            // fence_values[frame_index] = ++fence_value;
         }
 
         return 0;
     }
 
+private:
+    void ProcessMessages()
+    {
+        size_t size = _message_queue.size();
+        CefRefPtr<CefProcessMessage> message;
+
+        // Limit the number of messages processed in one frame to avoid blocking
+        for (size_t i = 0; i < size; ++i) {
+            if (!_message_queue.try_pop(message)) {
+                break; // No more messages to process
+            }
+            std::invoke(_message_handlers[message->GetName().c_str()], this, *message->GetArgumentList()); // Call the appropriate handler
+        }
+    }
+    bool UIMessageHandler(CefRefPtr<CefProcessMessage> message) noexcept
+    {
+        if (!message || !message->IsValid()) {
+            return false; // Invalid message
+        }
+        auto message_name = message->GetName();
+        if (auto it = _message_handlers.find(message_name.c_str()); it != _message_handlers.end()) {
+            _message_queue.emplace(std::move(message)); // Add message to the queue
+            return true; // Message handled
+        }
+
+        return false; // Message not handled
+    }
+
+    // Message handlers for specific messages
     void CreateNode(CefListValue& args)
     {
         if (args.GetSize() > 0 && args.GetType(0) == VTYPE_STRING) {
             std::string func_name = args.GetString(0);
             // Call the corresponding function in the model or handle it
-            _model.CreateNode(_gfx);
+            _model.CreateNode(_gfx, func_name);
         }
     }
+    void RemoveNode(CefListValue& args)
+    {
+        if (args.GetSize() > 0 && args.GetType(0) == VTYPE_INT) {
+            int node_id = args.GetInt(0);
+            _model.RemoveNode(node_id); // Delete the node with the specified ID
+        }
+    }
+
     void GreetAsync(CefListValue& args2)
     {
         auto frame = _ui_app.GetClient()->GetBrowser()->GetMainFrame();
@@ -112,6 +151,8 @@ private:
     vortex::PipelineStorage _pipeline_storage;
     vortex::DescriptorBuffer _descriptor_buffer;
 
+    dro::SPSCQueue<CefRefPtr<CefProcessMessage>, 64> _message_queue; ///< Queue for messages from the UI
+
     wis::CommandList _command_list[max_frames_in_flight]; ///< Command list for recording commands
     uint32_t _current_frame = 0; ///< Current frame index for command list
 
@@ -125,6 +166,13 @@ private:
     vortex::GraphModel _model; ///< Model containing nodes and outputs
 
     uint32_t counter = 32; ///< Counter for async calls
+
+    // used in hot code, so it should be fast
+    std::unordered_map<std::u16string_view, MessageHandler> _message_handlers{
+        { u"CreateNode", &App::CreateNode },
+        { u"RemoveNode", &App::RemoveNode },
+        { u"GreetAsync", &App::GreetAsync }
+    };
 
 private:
     const AppExitControl& _exit;

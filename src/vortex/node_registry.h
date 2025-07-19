@@ -8,5 +8,6 @@ inline void RegisterHardwareNodes()
 {
     vortex::WindowOutput::RegisterNode();
     vortex::NDIOutput::RegisterNode();
+    vortex::ImageInput::RegisterNode();
 }
 } // namespace vortex

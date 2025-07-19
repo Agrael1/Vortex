@@ -163,20 +163,16 @@ struct ImageInputProperties {
 };
 
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
-class ImageInput : public NodeImplWithP<ImageInput, ImageInputProperties>
+class ImageInput : public NodeImpl<ImageInput, ImageInputProperties>
 {
 public:
     using Parameters = ImageInputProperties;
-    using ImageParams = NodeDescT<Parameters>;
 
 public:
     ImageInput() = default;
-    ImageInput(const vortex::Graphics& gfx, const ImageParams& params)
-        : _texture(codec::CodecFFmpeg::LoadTexture(gfx, params.data.image_path))
+    ImageInput(const vortex::Graphics& gfx)
+        //: _texture(codec::CodecFFmpeg::LoadTexture(gfx, params.data.image_path))
     {
-        if (!_texture) {
-            vortex::warn("ImageInput: Failed to load texture from path: {}", params.data.image_path);
-        }
         // Create a root signature for the image input node
         wis::Result result = wis::success;
 
@@ -242,10 +238,6 @@ public:
                                                                  .border_color = { 0.f, 0.f, 0.f, 0.f }, // Transparent border color
                                                          });
         // clang-format on
-    }
-    ImageInput(const vortex::Graphics& gfx, vortex::NodeDesc* initializers)
-        : ImageInput(gfx, *static_cast<ImageParams*>(initializers))
-    {
     }
 
 public:
@@ -314,9 +306,7 @@ private:
     wis::PipelineState _pipeline_state; // Pipeline state for rendering the image
     wis::Shader _vertex_shader; // Vertex shader for the image input node
     wis::Shader _pixel_shader; // Pixel shader for the image input node
-    bool initialized = false; // Flag to check if the node is initialized
+
+    bool initialized = false; // Flag to check if the node has been initialized
 };
-
-using ImageParams = ImageInput::ImageParams;
-
 } // namespace vortex

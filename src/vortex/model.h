@@ -1,10 +1,11 @@
 #pragma once
-#include <vortex/node.h>
+#include <vortex/graph/interfaces.h>
+#include <vortex/graph/connection.h>
 #include <vortex/probe.h>
 #include <atomic>
 #include <unordered_set>
 
-namespace vortex {
+namespace vortex::graph {
 class GraphModel
 {
 public:
@@ -18,7 +19,7 @@ public:
             vortex::error("Failed to create node: {}", node_name);
             return 0; // Return 0 if node creation failed
         }
-        if (node->GetType() == vortex::NodeType::Output) {
+        if (node->GetType() == NodeType::Output) {
             _outputs.push_back(node.get()); // Add to outputs if it's an output node
         }
 
@@ -27,18 +28,40 @@ public:
         return node_ptr; // Return the pointer to the created node
     }
 
-    void RemoveNode(uintptr_t node_ptr, bool immediate = false)
+    void RemoveNode(uintptr_t node_ptr)
     {
         auto it = _nodes.find(node_ptr);
         if (it == _nodes.end()) {
             vortex::error("Node not found in the graph: {}", node_ptr);
             return; // Node not found, nothing to remove
         }
-        vortex::INode* node = std::bit_cast<vortex::INode*>(node_ptr);
+        INode* node = std::bit_cast<INode*>(node_ptr);
+
+        // Remove connections associated with the node
+        Connection connection_to_remove{ nullptr, nullptr, 0, 0 };
+        auto sinks = node->GetSinks();
+        for (std::size_t i = 0; i < sinks.size(); i++) {
+            auto& sink = sinks[i];
+            if (!sink) {
+                continue; // Skip invalid sinks
+            }
+
+            connection_to_remove.from_node = sink.source_node;
+            connection_to_remove.from_index = sink.source_index;
+            connection_to_remove.to_node = node;
+            connection_to_remove.to_index = i;
+            _connections.erase(connection_to_remove); // Remove all connections to this node
+        }
+
+        auto sources = node->GetSources();
+        for (std::size_t i = 0; i < sources.size(); i++) {
+            auto& source = sources[i];
+            // TODO: handle sources properly
+        }
 
         // Remove from dirty set when deleting
         _dirty_nodes.erase(node_ptr);
-        if (node->GetType() == vortex::NodeType::Output) {
+        if (node->GetType() == NodeType::Output) {
             if (auto output_it = std::ranges::find(_outputs, node); output_it != _outputs.end()) {
                 _outputs.erase(output_it); // Remove from outputs if it's an output node
             } else {
@@ -65,13 +88,39 @@ public:
             vortex::error("Failed to connect nodes: one or both nodes not found.");
             return; // One or both nodes not found, cannot connect
         }
-
+        auto right_sinks = right_node->GetSinks();
+        auto left_sources = left_node->GetSources();
+        if (output_index < 0 || output_index >= static_cast<int32_t>(left_sources.size())) {
+            vortex::error("Invalid output index {} for node {}", output_index, left_node->GetInfo());
+            return; // Invalid output index
+        }
+        if (input_index < 0 || input_index >= static_cast<int32_t>(right_sinks.size())) {
+            vortex::error("Invalid input index {} for node {}", input_index, right_node->GetInfo());
+            return; // Invalid input index
+        }
         vortex::info("Connecting nodes: {} (output {}) -> {} (input {})",
                      left_node->GetInfo(), output_index,
                      right_node->GetInfo(), input_index);
 
         // Create a connection and add it to the graph
-        _connections.emplace(left_node, right_node, uint32_t(output_index), uint32_t(input_index));
+        auto &&[it, succ] = _connections.emplace(left_node, right_node, uint32_t(output_index), uint32_t(input_index));
+        if (!succ) {
+            vortex::warn("Connection already exists: {} -> {} ({} -> {})",
+                          left_node->GetInfo(), right_node->GetInfo(),
+                          output_index, input_index);
+            return; // Connection already exists
+        }
+
+
+        // remove any existing connection at the same input index
+        auto& target_sink = right_sinks[input_index];
+        if (target_sink) {
+            vortex::warn("Overwriting existing connection at input index {} on node {}", input_index, right_node->GetInfo());
+            _connections.erase(Connection{ target_sink.source_node, right_node, uint32_t(target_sink.source_index), uint32_t(output_index) }); // Remove existing connection
+        }
+
+        target_sink.source_node = left_node; // Set the source node for the sink
+        target_sink.source_index = uint32_t(output_index); // Set the source index for the sink
     }
 
     void SetNodeInfo(uintptr_t node_ptr, std::string info)
@@ -146,6 +195,20 @@ public:
         // output._swapchain.Present();
     }
 
+    void PrintGraph() const
+    {
+        std::string out = "Graph Model:\n";
+        for (const auto& [node_ptr, node] : _nodes) {
+            std::format_to(std::back_inserter(out), "Node: {} (Info: {})\n", node_ptr, node->GetInfo());
+        }
+        for (const auto& connection : _connections) {
+            std::format_to(std::back_inserter(out), "Connection: {} -> {} ({} -> {})\n",
+                         connection.from_node->GetInfo(), connection.to_node->GetInfo(),
+                         connection.from_index, connection.to_index);
+        }
+        vortex::info(out);
+    }
+
 private:
     void ProcessUpdates()
     {
@@ -180,7 +243,7 @@ private:
         // }
     }
 
-    vortex::INode* GetNode(uintptr_t node_ptr) const
+    INode* GetNode(uintptr_t node_ptr) const
     {
         auto it = _nodes.find(node_ptr);
         if (it != _nodes.end()) {
@@ -191,11 +254,11 @@ private:
     }
 
 private:
-    std::unordered_map<uintptr_t, std::unique_ptr<vortex::INode>> _nodes;
-    std::unordered_set<vortex::Connection> _connections; ///< Map of connections by node pointers
+    std::unordered_map<uintptr_t, std::unique_ptr<INode>> _nodes;
+    std::unordered_set<Connection> _connections; ///< Map of connections by node pointers
     std::unordered_set<uintptr_t> _dirty_nodes; ///< Set of nodes that have pending property updates
 
-    std::vector<vortex::INode*> _outputs;
+    std::vector<INode*> _outputs;
     uint32_t frame = 0; ///< Frame counter for rendering
 };
-} // namespace vortex
+} // namespace vortex::graph

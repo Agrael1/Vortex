@@ -2,7 +2,7 @@
 #include <vortex/ui/sdl.h>
 #include <wisdom/wisdom.hpp>
 #include <wisdom/wisdom_platform.hpp>
-#include <vortex/node.h>
+#include <vortex/graph/interfaces.h>
 #include <vortex/gfx/swapchain.h>
 
 namespace vortex {
@@ -12,7 +12,7 @@ struct WindowOutputProperties {
     wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for the swapchain
 };
 // Debug output is a window with a swapchain for rendering contents directly to the screen
-class WindowOutput : public vortex::OutputImpl<WindowOutput, WindowOutputProperties>
+class WindowOutput : public vortex::graph::OutputImpl<WindowOutput, WindowOutputProperties>
 {
 public:
     WindowOutput(const vortex::Graphics& gfx, wis::Size2D size = { 1280, 720 }, wis::DataFormat format = wis::DataFormat::RGBA8Unorm, std::string_view name = "Vortex 1")
@@ -46,10 +46,6 @@ public:
     }
 
 public:
-    void Visit(RenderProbe& probe) override
-    {
-        // Start a render pass
-    }
     int ProcessEvents()
     {
         SDL_Event event;

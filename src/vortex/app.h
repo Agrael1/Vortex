@@ -51,6 +51,13 @@ public:
         auto o1 = _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
+        _model.PrintGraph(); // Print the graph for debugging
+        _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
+        _model.PrintGraph(); // Print the graph for debugging
+
+        _model.RemoveNode(o1); // Remove the output node immediately for testing
+
+        _model.PrintGraph(); // Print the graph for debugging
     }
 
 public:
@@ -187,7 +194,7 @@ private:
 
     // CEF client for UI
     vortex::ui::UIApp _ui_app;
-    vortex::GraphModel _model; ///< Model containing nodes and outputs
+    vortex::graph::GraphModel _model; ///< Model containing nodes and outputs
 
     int32_t counter = 32; ///< Counter for async calls
 
@@ -196,6 +203,7 @@ private:
         { u"CreateNode", &App::CreateNode },
         { u"RemoveNode", &App::RemoveNode },
         { u"ConnectNodes", &App::ConnectNodes },
+        { u"SetNodeInfo", &App::SetNodeInfo },
         { u"GreetAsync", &App::GreetAsync }
     };
 

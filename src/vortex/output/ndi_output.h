@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <vortex/util/common.h>
 #include <vortex/util/log.h>
+#include <vortex/graph/interfaces.h>
 
 namespace vortex {
 class NDILibrary
@@ -141,7 +142,7 @@ struct NDIOutputProperties
     std::string_view name = "Vortex NDI Output";
 };
 
-class NDIOutput : public vortex::OutputImpl<NDIOutput, NDIOutputProperties>
+class NDIOutput : public vortex::graph::OutputImpl<NDIOutput, NDIOutputProperties>
 {
 public:
     NDIOutput(const vortex::Graphics& gfx)

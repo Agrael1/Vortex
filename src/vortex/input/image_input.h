@@ -1,5 +1,5 @@
 #pragma once
-#include <vortex/node.h>
+#include <vortex/graph/interfaces.h>
 #include <vortex/probe.h>
 #include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/codec/codec_ffmpeg.h>
@@ -163,11 +163,8 @@ struct ImageInputProperties {
 };
 
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
-class ImageInput : public NodeImpl<ImageInput, ImageInputProperties>
+class ImageInput : public vortex::graph::NodeImpl<ImageInput, ImageInputProperties, 0, 1>
 {
-public:
-    using Parameters = ImageInputProperties;
-
 public:
     ImageInput() = default;
     ImageInput(const vortex::Graphics& gfx)
@@ -241,24 +238,14 @@ public:
     }
 
 public:
-    NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
+    vortex::graph::NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {
         // Validate that the texture was loaded successfully
         if (!_texture || size.x == 0 || size.y == 0) {
-            return NodeExecution::Skip; // Skip rendering if texture is not valid
+            return vortex::graph::NodeExecution::Skip; // Skip rendering if texture is not valid
         }
 
-        return NodeExecution::Render; // Proceed with rendering
-    }
-
-    void Visit(vortex::RenderProbe& probe) override
-    {
-        // Validate the node before rendering
-        if (Validate(probe._gfx, probe) == NodeExecution::Skip) {
-            return; // Skip rendering if validation fails
-        }
-        // Render the image input node
-        Render(probe);
+        return vortex::graph::NodeExecution::Render; // Proceed with rendering
     }
 
     wis::Result Render(const vortex::RenderProbe& probe)

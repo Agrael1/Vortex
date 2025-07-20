@@ -48,7 +48,7 @@ public:
         _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
         auto i1 = _model.CreateNode(_gfx, "ImageInput"); // Create a default node for testing
         auto o1 = _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
-        _model.ConnectNodes(i1, o1); // Connect the nodes in the model
+        _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
     }
 
 public:
@@ -132,6 +132,24 @@ private:
             _model.RemoveNode(node_id); // Delete the node with the specified ID
         }
     }
+    void ConnectNodes(CefListValue& args)
+    {
+        if (args.GetSize() < 4 || args.GetType(0) != VTYPE_DOUBLE || args.GetType(1) != VTYPE_INT || args.GetType(2) != VTYPE_DOUBLE || args.GetType(3) != VTYPE_INT) {
+            vortex::error("ConnectNodes: Invalid arguments provided.");
+            _ui_app.SendUIReturn(false); // Send an error message back to the UI
+            return; // Invalid arguments, cannot connect nodes
+        }
+
+        // Extract the node pointers and indices from the arguments
+        uintptr_t node_ptr_left = std::bit_cast<uintptr_t>(args.GetDouble(0));
+        int32_t output_index = args.GetInt(1);
+        uintptr_t node_ptr_right = std::bit_cast<uintptr_t>(args.GetDouble(2));
+        int32_t input_index = args.GetInt(3);
+        _model.ConnectNodes(node_ptr_left, output_index, node_ptr_right, input_index); // Connect the nodes in the model
+
+        // Create a message to send back to the UI
+        _ui_app.SendUIReturn(true); // Indicate that the connection was successful
+    }
 
     void GreetAsync(CefListValue& args2)
     {
@@ -166,6 +184,7 @@ private:
     std::unordered_map<std::u16string_view, MessageHandler> _message_handlers{
         { u"CreateNode", &App::CreateNode },
         { u"RemoveNode", &App::RemoveNode },
+        { u"ConnectNodes", &App::ConnectNodes },
         { u"GreetAsync", &App::GreetAsync }
     };
 

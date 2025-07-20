@@ -43,12 +43,13 @@ struct alignas(16) INode {
         return EvaluationStrategy::Static; // Default evaluation strategy
     }
     virtual void SetProperty(uint32_t index, std::string_view value, bool notify = false) { }
+
+    virtual std::string_view GetInfo() const noexcept { return ""; }
 };
 struct IOutput : public vortex::INode {
     virtual void Enter(class RenderProbe& probe) { };
     virtual void Exit(class RenderProbe& probe) { };
 };
-
 
 struct Sink {
     SinkType type = SinkType::RenderTexture; // Default sink type
@@ -123,6 +124,22 @@ public:
     {
         static_cast<CRTP*>(this)->SetProperty(index, value, notify);
     }
+    virtual std::string_view GetInfo() const noexcept override
+    {
+        return _info;
+    }
+
+public:
+    template<typename Self>
+    void SetInfo(this Self&& self, std::string info) noexcept
+    {
+        self._info = std::format("{}: {}",
+                                 reflect::type_name<Self>(),
+                                 info);
+    }
+
+private:
+    std::string _info = std::format("{}: {}", reflect::type_name<CRTP>(), "Unnamed");
 };
 
 template<typename CRTP, typename Properties>
@@ -131,15 +148,40 @@ using OutputImpl = NodeImpl<CRTP, Properties, EvaluationStrategy::Inherited, IOu
 class Connection
 {
 public:
-    Connection() = default;
-    Connection(INode* from, INode* to)
+    constexpr Connection(INode* from, INode* to, uint32_t from_index, uint32_t to_index)
         : from_node(from)
         , to_node(to)
+        , from_index(from_index)
+        , to_index(to_index)
     {
+    }
+
+    constexpr bool operator==(const Connection& other) const noexcept
+    {
+        return from_node == other.from_node &&
+                to_node == other.to_node &&
+                from_index == other.from_index &&
+                to_index == other.to_index;
     }
 
 public:
     INode* from_node = nullptr;
     INode* to_node = nullptr;
+    uint32_t from_index = 0; // Index of the output on the from_node
+    uint32_t to_index = 0; // Index of the input on the to_node
 };
 } // namespace vortex
+
+namespace std {
+template<>
+struct hash<vortex::Connection> {
+    std::size_t operator()(const vortex::Connection& conn) const noexcept
+    {
+        std::size_t h1 = std::bit_cast<std::size_t>(conn.from_node); // pointer is unique enough
+        vortex::hash_combine(h1, std::bit_cast<std::size_t>(conn.to_node));
+        vortex::hash_combine(h1, std::hash<uint32_t>()(conn.from_index));
+        vortex::hash_combine(h1, std::hash<uint32_t>()(conn.to_index));
+        return h1;
+    }
+};
+} // namespace std

@@ -1,6 +1,4 @@
 #pragma once
-#include <vector>
-#include <memory>
 #include <vortex/graphics.h>
 #include <vortex/node_registry.h>
 #include <vortex/pipeline_storage.h>
@@ -48,9 +46,9 @@ public:
         fence = _gfx.GetDevice().CreateFence(res);
 
         _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
-        _model.CreateNode(_gfx, "ImageInput"); // Create a default node for testing
-        _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
-        _model.ConnectNodes(); // Connect the nodes in the model
+        auto i1 = _model.CreateNode(_gfx, "ImageInput"); // Create a default node for testing
+        auto o1 = _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
+        _model.ConnectNodes(i1, o1); // Connect the nodes in the model
     }
 
 public:

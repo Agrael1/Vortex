@@ -5,6 +5,8 @@
 #include <atomic>
 #include <unordered_set>
 
+#include <graaflib/algorithm/graph_traversal/depth_first_search.h>
+
 namespace vortex {
 class GraphModel
 {
@@ -15,26 +17,26 @@ public:
     uintptr_t CreateNode(const vortex::Graphics& gfx, std::string_view node_name)
     {
         auto node = NodeFactory::CreateNode(node_name, gfx);
-        auto node_ptr = std::bit_cast<uintptr_t>(node.get());
-        auto&& [k, v] = _nodes.emplace(node_ptr, std::move(node)); // Node creation may be done in another thread
-        if (!k->second) {
+        if (node) {
             vortex::error("Failed to create node: {}", node_name);
             return 0; // Return 0 if node creation failed
         }
-        if (k->second->GetType() == vortex::NodeType::Output) {
-            _outputs.push_back(k->second.get()); // Add to outputs if it's an output node
+        if (node->GetType() == vortex::NodeType::Output) {
+            _outputs.push_back(node.get()); // Add to outputs if it's an output node
         }
+
+        auto node_ptr = std::bit_cast<uintptr_t>(node.get());
+        _graph.add_vertex(std::move(node), node_ptr);
         return node_ptr; // Return the pointer to the created node
     }
 
     void RemoveNode(uintptr_t node_ptr, bool immediate = false)
     {
-        vortex::INode* node = std::bit_cast<vortex::INode*>(node_ptr);
-        auto it = _nodes.find(node_ptr);
-        if (it == _nodes.end()) {
+        if (!_graph.has_vertex(node_ptr)) {
             vortex::error("Node not found in the graph: {}", node_ptr);
             return; // Node not found, nothing to remove
         }
+        vortex::INode* node = std::bit_cast<vortex::INode*>(node_ptr);
 
         // Remove from dirty set when deleting
         _dirty_nodes.erase(node_ptr);
@@ -45,25 +47,20 @@ public:
                 vortex::error("Output node not found in outputs: {}", node_ptr);
             }
         }
-        _nodes.erase(it); // Remove the node if found
+        _graph.remove_vertex(node_ptr); // Remove the node from the graph
     }
 
     void SetNodeProperty(uintptr_t node_ptr, uint32_t index, std::string_view value, bool notify_ui = false)
     {
-        // Find the node in the graph
-        auto it = _nodes.find(node_ptr);
-        if (it == _nodes.end()) {
+        if (!_graph.has_vertex(node_ptr)) {
             vortex::error("Node not found in the graph: {}", node_ptr);
-            return; // Node not found, nothing to set
+            return; // Node not found, nothing to remove
         }
-
-        auto& node = *it->second;
+        vortex::INode* node = std::bit_cast<vortex::INode*>(node_ptr);
 
         // Mark node as dirty and queue update message only if not already dirty
         _dirty_nodes.insert(node_ptr).second;
-
-        // Set the property in the staging buffer (double-buffered approach)
-        node.SetProperty(index, value, notify_ui);
+        node->SetProperty(index, value, notify_ui);
     }
 
     void TraverseNodes(vortex::RenderProbe& probe)
@@ -106,7 +103,7 @@ public:
         cmd_list.BeginRenderPass(rpd);
         probe._descriptor_buffer.BindBuffers(probe._gfx, cmd_list); // Bind descriptor buffers
 
-        _nodes[0]->Visit(probe); // Visit the first node (ImageInput)
+        //_nodes[0]->Visit(probe); // Visit the first node (ImageInput)
 
         cmd_list.EndRenderPass();
         cmd_list.TextureBarrier(
@@ -128,8 +125,17 @@ public:
         output._swapchain.Present();
     }
 
-    void ConnectNodes()
+    void ConnectNodes(uintptr_t node_ptr_left, uintptr_t node_ptr_right)
     {
+        if (!_graph.has_vertex(node_ptr_left) || !_graph.has_vertex(node_ptr_right)) {
+            vortex::error("One or both nodes not found in the graph: {} -> {}", node_ptr_left, node_ptr_right);
+            return; // One or both nodes not found, nothing to connect
+        }
+        vortex::INode* left_node = std::bit_cast<vortex::INode*>(node_ptr_left);
+        vortex::INode* right_node = std::bit_cast<vortex::INode*>(node_ptr_right);
+        // Create a connection and add it to the graph
+        vortex::Connection connection{ left_node, right_node };
+        _graph.add_edge(node_ptr_left, node_ptr_right, connection);
     }
 
 private:
@@ -167,10 +173,7 @@ private:
     }
 
 private:
-    std::unordered_map<uintptr_t, std::unique_ptr<vortex::INode>> _nodes; ///< Map to hold all nodes in the graph
-    graaf::directed_graph<vortex::INode*, vortex::Connection> _graph; ///< Directed graph to represent connections between nodes
-
-    // Deduplication mechanism for property updates
+    graaf::directed_graph<std::unique_ptr<vortex::INode>, vortex::Connection> _graph;
     std::unordered_set<uintptr_t> _dirty_nodes; ///< Set of nodes that have pending property updates
 
     std::vector<vortex::INode*> _outputs;

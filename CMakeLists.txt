@@ -46,6 +46,7 @@ PUBLIC
   "src/vortex/ui/sdl.h"
   "src/vortex/ui/implements.h"
   "src/vortex/ui/client.h" 
+  "src/vortex/ui/value.h" 
   "src/vortex/ui/ui_app.h"
  "src/vortex/ui/ui_app.cpp" "src/vortex/ui/sdl.cpp" "src/vortex/platform.cpp" "src/vortex/graphics.cpp" "src/vortex/gfx/descriptor_buffer.h" "src/vortex/gfx/consts.h" "src/vortex/gfx/descriptor_buffer.cpp" "src/vortex/util/reflection.h" "src/vortex/model.h" "src/vortex/ui/call_handler.h" "src/vortex/ui/cef_app.cpp"  "src/vortex/update_queue.h" "src/vortex/util/lib/SPSC-Queue.h")
 

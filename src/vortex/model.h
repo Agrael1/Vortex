@@ -17,12 +17,12 @@ public:
         auto node = NodeFactory::CreateNode(node_name, gfx);
         auto node_ptr = std::bit_cast<uintptr_t>(node.get());
         auto&& [k, v] = _nodes.emplace(node_ptr, std::move(node)); // Node creation may be done in another thread
-        if (!node) {
+        if (!k->second) {
             vortex::error("Failed to create node: {}", node_name);
             return 0; // Return 0 if node creation failed
         }
-        if (node->GetType() == vortex::NodeType::Output) {
-            _outputs.push_back(node.get()); // Add to outputs if it's an output node
+        if (k->second->GetType() == vortex::NodeType::Output) {
+            _outputs.push_back(k->second.get()); // Add to outputs if it's an output node
         }
         return node_ptr; // Return the pointer to the created node
     }

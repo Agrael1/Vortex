@@ -119,28 +119,25 @@ private:
     void CreateNode(CefListValue& args)
     {
         if (args.GetSize() > 0 && args.GetType(0) == VTYPE_STRING) {
-            std::string func_name = args.GetString(0);
+            std::string func_name = args.GetString(0).ToString();
             // Call the corresponding function in the model or handle it
-            _model.CreateNode(_gfx, func_name);
+            uintptr_t node_ptr = _model.CreateNode(_gfx, func_name);
+
+            // Send a message back to the UI to update the node list
+            _ui_app.SendUIReturn(std::bit_cast<double>(node_ptr));
         }
     }
     void RemoveNode(CefListValue& args)
     {
-        if (args.GetSize() > 0 && args.GetType(0) == VTYPE_INT) {
-            int node_id = args.GetInt(0);
+        if (args.GetSize() > 0 && args.GetType(0) == VTYPE_DOUBLE) {
+            uintptr_t node_id = std::bit_cast<uintptr_t>(args.GetDouble(0));
             _model.RemoveNode(node_id); // Delete the node with the specified ID
         }
     }
 
     void GreetAsync(CefListValue& args2)
     {
-        auto frame = _ui_app.GetClient()->GetBrowser()->GetMainFrame();
-
-        auto a = CefProcessMessage::Create("co_return");
-        auto args = a->GetArgumentList();
-        args->SetSize(1); // Set size to 1 for the counter
-        args->SetInt(0, counter++); // Increment the counter and send it back
-        frame->SendProcessMessage(PID_BROWSER, a);
+        _ui_app.SendUIReturn(counter++);
     }
 
 private:
@@ -165,7 +162,7 @@ private:
     vortex::ui::UIApp _ui_app;
     vortex::GraphModel _model; ///< Model containing nodes and outputs
 
-    uint32_t counter = 32; ///< Counter for async calls
+    int32_t counter = 32; ///< Counter for async calls
 
     // used in hot code, so it should be fast
     std::unordered_map<std::u16string_view, MessageHandler> _message_handlers{

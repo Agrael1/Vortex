@@ -47,7 +47,9 @@ public:
 
         _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
         auto i1 = _model.CreateNode(_gfx, "ImageInput"); // Create a default node for testing
+        _model.SetNodeInfo(i1, "Image 0"); // Set some info for the node
         auto o1 = _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
+        _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
     }
 
@@ -149,6 +151,15 @@ private:
 
         // Create a message to send back to the UI
         _ui_app.SendUIReturn(true); // Indicate that the connection was successful
+    }
+    void SetNodeInfo(CefListValue& args)
+    {
+        if (args.GetSize() < 2 || args.GetType(0) != VTYPE_DOUBLE || args.GetType(1) != VTYPE_STRING) {
+            vortex::error("SetNodeInfo: Invalid arguments provided.");
+            return; // Invalid arguments, cannot set node info
+        }
+        uintptr_t node_ptr = std::bit_cast<uintptr_t>(args.GetDouble(0));
+        _model.SetNodeInfo(node_ptr, args.GetString(1).ToString()); // Set the node info in the model
     }
 
     void GreetAsync(CefListValue& args2)

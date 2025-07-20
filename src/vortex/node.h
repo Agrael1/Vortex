@@ -45,6 +45,8 @@ struct alignas(16) INode {
     virtual void SetProperty(uint32_t index, std::string_view value, bool notify = false) { }
 
     virtual std::string_view GetInfo() const noexcept { return ""; }
+    virtual void SetInfo(std::string info) { }
+
 };
 struct IOutput : public vortex::INode {
     virtual void Enter(class RenderProbe& probe) { };
@@ -127,6 +129,10 @@ public:
     virtual std::string_view GetInfo() const noexcept override
     {
         return _info;
+    }
+    virtual void SetInfo(std::string info) override
+    {
+        static_cast<CRTP*>(this)->SetInfo(std::move(info));
     }
 
 public:

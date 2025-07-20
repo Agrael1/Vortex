@@ -50,33 +50,35 @@ public:
 
     void SetNodeProperty(uintptr_t node_ptr, uint32_t index, std::string_view value, bool notify_ui = false)
     {
-        auto it = _nodes.find(node_ptr);
-        if (it == _nodes.end()) {
-            vortex::error("Node not found in the graph: {}", node_ptr);
-            return; // Node not found, nothing to remove
+        if (auto* node = GetNode(node_ptr)) {
+            _dirty_nodes.insert(node_ptr).second;
+            node->SetProperty(index, value, notify_ui);
         }
-        vortex::INode* node = std::bit_cast<vortex::INode*>(node_ptr);
-
-        // Mark node as dirty and queue update message only if not already dirty
-        _dirty_nodes.insert(node_ptr).second;
-        node->SetProperty(index, value, notify_ui);
     }
 
     void ConnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
     {
-        if (!_nodes.contains(node_ptr_left) || !_nodes.contains(node_ptr_right)) {
-            vortex::error("One or both nodes not found in the graph: {} -> {}", node_ptr_left, node_ptr_right);
-            return; // One or both nodes not found, nothing to connect
+        auto* left_node = GetNode(node_ptr_left);
+        auto* right_node = GetNode(node_ptr_right);
+
+        if (!left_node || !right_node) {
+            vortex::error("Failed to connect nodes: one or both nodes not found.");
+            return; // One or both nodes not found, cannot connect
         }
-        vortex::INode* left_node = std::bit_cast<vortex::INode*>(node_ptr_left);
-        vortex::INode* right_node = std::bit_cast<vortex::INode*>(node_ptr_right);
 
         vortex::info("Connecting nodes: {} (output {}) -> {} (input {})",
-                      left_node->GetInfo(), output_index,
+                     left_node->GetInfo(), output_index,
                      right_node->GetInfo(), input_index);
 
         // Create a connection and add it to the graph
         _connections.emplace(left_node, right_node, uint32_t(output_index), uint32_t(input_index));
+    }
+
+    void SetNodeInfo(uintptr_t node_ptr, std::string info)
+    {
+        if (auto* node = GetNode(node_ptr)) {
+            node->SetInfo(std::move(info));
+        }
     }
 
     void TraverseNodes(vortex::RenderProbe& probe)
@@ -176,6 +178,16 @@ private:
         //         break;
         //     }
         // }
+    }
+
+    vortex::INode* GetNode(uintptr_t node_ptr) const
+    {
+        auto it = _nodes.find(node_ptr);
+        if (it != _nodes.end()) {
+            return it->second.get(); // Return the node pointer if found
+        }
+        vortex::error("Node not found in the graph: {}", node_ptr);
+        return nullptr; // Node not found
     }
 
 private:

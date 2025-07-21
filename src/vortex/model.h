@@ -56,7 +56,20 @@ public:
         auto sources = node->GetSources();
         for (std::size_t i = 0; i < sources.size(); i++) {
             auto& source = sources[i];
-            // TODO: handle sources properly
+            connection_to_remove.from_index = i;
+            connection_to_remove.from_node = node;
+            for (const auto& target : source.targets) {
+                if (!target) {
+                    continue; // Skip invalid targets
+                }
+                // Reset the connection sink
+                target.sink_node->GetSinks()[target.sink_index].Reset();
+
+                // Reset the sink to remove the connection
+                connection_to_remove.to_node = target.sink_node;
+                connection_to_remove.to_index = target.sink_index;
+                _connections.erase(connection_to_remove); // Remove all connections from this node
+            }
         }
 
         // Remove from dirty set when deleting
@@ -114,6 +127,7 @@ public:
 
         // remove any existing connection at the same input index
         auto& target_sink = right_sinks[input_index];
+        auto& target_source = left_sources[output_index];
         if (target_sink) {
             vortex::warn("Overwriting existing connection at input index {} on node {}", input_index, right_node->GetInfo());
             _connections.erase(Connection{ target_sink.source_node, right_node, uint32_t(target_sink.source_index), uint32_t(output_index) }); // Remove existing connection
@@ -121,6 +135,48 @@ public:
 
         target_sink.source_node = left_node; // Set the source node for the sink
         target_sink.source_index = uint32_t(output_index); // Set the source index for the sink
+
+        target_source.targets.emplace(SourceTarget{ uint32_t(input_index), right_node }); // Add the target to the source
+    }
+
+    void DisconnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
+    {
+        auto* left_node = GetNode(node_ptr_left);
+        auto* right_node = GetNode(node_ptr_right);
+        if (!left_node || !right_node) {
+            vortex::error("Failed to disconnect nodes: one or both nodes not found.");
+            return; // One or both nodes not found, cannot disconnect
+        }
+        auto right_sinks = right_node->GetSinks();
+        auto left_sources = left_node->GetSources();
+        if (output_index < 0 || output_index >= static_cast<int32_t>(left_sources.size())) {
+            vortex::error("Invalid output index {} for node {}", output_index, left_node->GetInfo());
+            return; // Invalid output index
+        }
+        if (input_index < 0 || input_index >= static_cast<int32_t>(right_sinks.size())) {
+            vortex::error("Invalid input index {} for node {}", input_index, right_node->GetInfo());
+            return; // Invalid input index
+        }
+        vortex::info("Disconnecting nodes: {} (output {}) -> {} (input {})",
+                     left_node->GetInfo(), output_index,
+                     right_node->GetInfo(), input_index);
+        // Remove the connection from the graph
+        Connection connection_to_remove{ left_node, right_node, uint32_t(output_index), uint32_t(input_index) };
+        auto it = _connections.find(connection_to_remove);
+        if (it != _connections.end()) {
+            _connections.erase(it); // Remove the connection if it exists
+        } else {
+            vortex::warn("Connection does not exist: {} -> {} ({} -> {})",
+                         left_node->GetInfo(), right_node->GetInfo(),
+                         output_index, input_index);
+            return; // Connection does not exist
+        }
+        // Reset the sink and source to remove the connection
+        auto& target_sink = right_sinks[input_index];
+        target_sink.Reset(); // Reset the sink
+
+        auto& target_source = left_sources[output_index];
+        target_source.targets.erase(SourceTarget{ uint32_t(input_index), right_node }); // Remove the target from the source
     }
 
     void SetNodeInfo(uintptr_t node_ptr, std::string info)

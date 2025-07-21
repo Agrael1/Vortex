@@ -51,13 +51,6 @@ public:
         auto o1 = _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
-        _model.PrintGraph(); // Print the graph for debugging
-        _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
-        _model.PrintGraph(); // Print the graph for debugging
-
-        _model.RemoveNode(o1); // Remove the output node immediately for testing
-
-        _model.PrintGraph(); // Print the graph for debugging
     }
 
 public:
@@ -159,6 +152,22 @@ private:
         // Create a message to send back to the UI
         _ui_app.SendUIReturn(true); // Indicate that the connection was successful
     }
+    void DisconnectNodes(CefListValue& args)
+    {
+        if (args.GetSize() < 4 || args.GetType(0) != VTYPE_DOUBLE || args.GetType(1) != VTYPE_INT || args.GetType(2) != VTYPE_DOUBLE || args.GetType(3) != VTYPE_INT) {
+            vortex::error("DisconnectNodes: Invalid arguments provided.");
+            _ui_app.SendUIReturn(false); // Send an error message back to the UI
+            return; // Invalid arguments, cannot disconnect nodes
+        }
+        // Extract the node pointers and indices from the arguments
+        uintptr_t node_ptr_left = std::bit_cast<uintptr_t>(args.GetDouble(0));
+        int32_t output_index = args.GetInt(1);
+        uintptr_t node_ptr_right = std::bit_cast<uintptr_t>(args.GetDouble(2));
+        int32_t input_index = args.GetInt(3);
+        _model.DisconnectNodes(node_ptr_left, output_index, node_ptr_right, input_index); // Disconnect the nodes in the model
+        // Create a message to send back to the UI
+        _ui_app.SendUIReturn(true); // Indicate that the disconnection was successful
+    }
     void SetNodeInfo(CefListValue& args)
     {
         if (args.GetSize() < 2 || args.GetType(0) != VTYPE_DOUBLE || args.GetType(1) != VTYPE_STRING) {
@@ -203,6 +212,7 @@ private:
         { u"CreateNode", &App::CreateNode },
         { u"RemoveNode", &App::RemoveNode },
         { u"ConnectNodes", &App::ConnectNodes },
+        { u"DisconnectNodes", &App::DisconnectNodes },
         { u"SetNodeInfo", &App::SetNodeInfo },
         { u"GreetAsync", &App::GreetAsync }
     };

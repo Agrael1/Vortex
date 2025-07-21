@@ -56,24 +56,34 @@ struct SinkArray<0> {
 using EmptySinks = SinkArray<0>; // Empty sink array specialization
 using SinkVector = SinkArray<Sink::dynamic_index>;
 
-
-
-struct SourceDescription {
+struct SourceTarget {
     std::size_t sink_index = 0; // Index of the source in the node
     INode* sink_node = nullptr; // Pointer to the node that is the source
+
     operator bool() const noexcept
     {
         return sink_node != nullptr; // Check if the source is valid
     }
+
     void Reset() noexcept
     {
         sink_index = 0; // Reset index
         sink_node = nullptr; // Reset node pointer
     }
+
+    // Define hash as a nested struct
+    struct Hash {
+        size_t operator()(const SourceTarget& target) const noexcept
+        {
+            std::size_t hash = std::bit_cast<std::size_t>(target.sink_node);
+            return hash_combine(hash, target.sink_index);
+        }
+    };
 };
 
 struct Source {
     static constexpr std::size_t dynamic_index = std::numeric_limits<std::size_t>::max(); // Invalid index for sink
+    std::unordered_set<SourceTarget, SourceTarget::Hash> targets; // Set of sink descriptions for this source
 };
 
 template<std::size_t N>
@@ -101,4 +111,4 @@ struct SourceArray<0> {
 };
 using EmptySources = SourceArray<0>; // Empty source array specialization
 using SourceVector = SourceArray<Source::dynamic_index>; // Dynamic source array specialization
-} // namespace vortex
+} // namespace vortex::graph

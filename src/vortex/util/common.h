@@ -228,9 +228,9 @@ using unique_file = unique_any<std::FILE*, std::fclose>;
  *
  */
 template<class T>
-inline void hash_combine(std::size_t& seed, const T& v) noexcept(std::is_nothrow_invocable_v<std::hash<T>, T>)
+inline std::size_t hash_combine(std::size_t& seed, const T& v) noexcept(std::is_nothrow_invocable_v<std::hash<T>, T>)
 {
-    seed ^= std::hash<T>{}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    return seed ^= std::hash<T>{}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 } // namespace vortex
 

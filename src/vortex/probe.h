@@ -9,7 +9,6 @@ class PipelineStorage;
 class RenderProbe
 {
 public:
-    const vortex::Graphics& _gfx;
     vortex::DescriptorBuffer& _descriptor_buffer;
 
     PipelineStorage& _pipeline_storage;

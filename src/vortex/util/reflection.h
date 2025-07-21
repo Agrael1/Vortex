@@ -21,7 +21,7 @@ struct reflection_traits_base {
     }
     static std::string serialize(const T& obj) noexcept
     {
-        return std::format("{}", obj); // Default serialization using format
+        return ""; // Default serialization using format
     }
 };
 
@@ -48,7 +48,7 @@ template<string_type S>
 struct reflection_traits<S> : reflection_traits_base<S> {
     static constexpr bool deserialize(S* obj, std::string_view data) noexcept
     {
-        *obj = std::string(data); // Convert string_view to string
+        *obj = S{ data }; // Convert string_view to string
         return true; // Success
     }
     static std::string serialize(const S& obj) noexcept
@@ -109,33 +109,6 @@ struct static_reflection {
         });
         return arr;
     }();
-};
-
-template<typename T>
-struct property_binding_base {
-    using value_type = T;
-
-    template<class Self>
-    void set(this Self&& self, T value) noexcept
-    {
-        if (value != self._value) {
-            self._value = value;
-            self.on_change();
-        }
-    }
-    template<class Self>
-    T get(this Self&& self) noexcept
-    {
-        return self._value;
-    }
-
-    void on_change() noexcept
-    {
-        // Default implementation does nothing, can be overridden
-    }
-
-public:
-    value_type _value{};
 };
 
 using notifier_callback = std::function<void(uint32_t index, std::string_view data)>;

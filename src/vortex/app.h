@@ -51,6 +51,8 @@ public:
         auto o1 = _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
+
+        _model.SetNodeProperty(i1, 0, "ui/HDR.jpg", true); // Set a property for the input node
     }
 
 public:
@@ -62,19 +64,18 @@ public:
             }
             ProcessMessages(); // Process messages from the UI
 
-            //// Process the model and render the nodes
-            // vortex::RenderProbe probe{
-            //     _gfx,
-            //     _descriptor_buffer,
-            //     _pipeline_storage,
-            //     _command_list[frame_index],
-            //     {},
-            //     nullptr,
+            // Process the model and render the nodes
+             vortex::RenderProbe probe{
+                 _descriptor_buffer,
+                 _pipeline_storage,
+                 _command_list[frame_index],
+                 {},
+                 nullptr,
 
-            //    1,
-            //    frame_index
-            //};
-            //_model.TraverseNodes(probe); // Traverse the nodes in the model
+                1,
+                frame_index
+            };
+            _model.TraverseNodes(_gfx, probe); // Traverse the nodes in the model
 
             //_gfx.GetMainQueue().SignalQueue(fence, fence_value);
 

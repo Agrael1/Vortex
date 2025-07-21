@@ -23,6 +23,9 @@ public:
             _outputs.push_back(node.get()); // Add to outputs if it's an output node
         }
 
+        // Static nodes are to be updated on changes
+        UpdateIfStatic(node.get());
+
         auto node_ptr = std::bit_cast<uintptr_t>(node.get());
         _nodes.emplace(node_ptr, std::move(node));
         return node_ptr; // Return the pointer to the created node
@@ -73,7 +76,7 @@ public:
         }
 
         // Remove from dirty set when deleting
-        _dirty_nodes.erase(node_ptr);
+        _dirty_nodes.erase(node);
         if (node->GetType() == NodeType::Output) {
             if (auto output_it = std::ranges::find(_outputs, node); output_it != _outputs.end()) {
                 _outputs.erase(output_it); // Remove from outputs if it's an output node
@@ -87,7 +90,7 @@ public:
     void SetNodeProperty(uintptr_t node_ptr, uint32_t index, std::string_view value, bool notify_ui = false)
     {
         if (auto* node = GetNode(node_ptr)) {
-            _dirty_nodes.insert(node_ptr).second;
+            UpdateIfStatic(node); // Update the node if it is static, dynamic nodes update every frame
             node->SetProperty(index, value, notify_ui);
         }
     }
@@ -137,6 +140,8 @@ public:
         target_sink.source_index = uint32_t(output_index); // Set the source index for the sink
 
         target_source.targets.emplace(SourceTarget{ uint32_t(input_index), right_node }); // Add the target to the source
+
+        UpdateIfStatic(right_node);
     }
 
     void DisconnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
@@ -177,6 +182,8 @@ public:
 
         auto& target_source = left_sources[output_index];
         target_source.targets.erase(SourceTarget{ uint32_t(input_index), right_node }); // Remove the target from the source
+
+        UpdateIfStatic(right_node); // Update the right node if it was static
     }
 
     void SetNodeInfo(uintptr_t node_ptr, std::string info)
@@ -186,10 +193,10 @@ public:
         }
     }
 
-    void TraverseNodes(vortex::RenderProbe& probe)
+    void TraverseNodes(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
     {
         // Process all pending updates before rendering
-        ProcessUpdates();
+        ProcessUpdates(gfx, probe);
 
         for (auto* output : _outputs) {
         }
@@ -266,37 +273,11 @@ public:
     }
 
 private:
-    void ProcessUpdates()
+    void ProcessUpdates(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
     {
-        // QueueMessage message;
-        // while (_update_queue.pop(message)) {
-        //     switch (message.type) {
-        //     case UpdateType::Property: {
-        //         uintptr_t node_ptr = std::bit_cast<uintptr_t>(message.GetNode());
-        //         // Remove from dirty set when processing
-        //         _dirty_nodes.erase(node_ptr);
-        //
-        //         // Commit staged properties to render properties
-        //         auto it = _nodes.find(node_ptr);
-        //         if (it != _nodes.end()) {
-        //             auto& node = *it->second;
-        //             node.CommitProperties(); // This would be implemented in the node
-        //         }
-        //         break;
-        //     }
-        //     case UpdateType::Create:
-        //         // Handle node creation
-        //         break;
-        //     case UpdateType::Delete:
-        //         // Handle node deletion
-        //         break;
-        //     case UpdateType::Connection:
-        //         // Handle connection updates
-        //         break;
-        //     default:
-        //         break;
-        //     }
-        // }
+        for (auto* node : _dirty_nodes) {
+            node->Update(gfx, probe); // Update the node with the graphics context and probe
+        }
     }
 
     INode* GetNode(uintptr_t node_ptr) const
@@ -309,10 +290,17 @@ private:
         return nullptr; // Node not found
     }
 
+    void UpdateIfStatic(INode* node)
+    {
+        if (node->GetEvaluationStrategy() == EvaluationStrategy::Static) {
+            _dirty_nodes.insert(node); // Insert into dirty nodes set for static nodes
+        }
+    }
+
 private:
     std::unordered_map<uintptr_t, std::unique_ptr<INode>> _nodes;
     std::unordered_set<Connection> _connections; ///< Map of connections by node pointers
-    std::unordered_set<uintptr_t> _dirty_nodes; ///< Set of nodes that have pending property updates
+    std::unordered_set<INode*> _dirty_nodes; ///< Set of nodes that have pending property updates
 
     std::vector<INode*> _outputs;
     uint32_t frame = 0; ///< Frame counter for rendering

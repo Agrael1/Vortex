@@ -29,6 +29,7 @@ enum class EvaluationStrategy {
 // Microoptimization for update queue!
 struct alignas(16) INode {
     virtual ~INode() = default;
+    virtual void Update(const vortex::Graphics& gfx, RenderProbe& probe) { };
     virtual void Visit(RenderProbe& probe) { };
     constexpr virtual NodeType GetType() const noexcept
     {
@@ -53,8 +54,6 @@ struct alignas(16) INode {
     }
 };
 struct IOutput : public INode {
-    virtual void Enter(class RenderProbe& probe) { };
-    virtual void Exit(class RenderProbe& probe) { };
 };
 
 // Factory for creating nodes
@@ -95,7 +94,7 @@ public:
     }
     virtual void SetProperty(uint32_t index, std::string_view value, bool notify = false) override
     {
-        static_cast<CRTP*>(this)->SetProperty(index, value, notify);
+        static_cast<CRTP*>(this)->SetPropertyStub(index, value, notify);
     }
     virtual std::string_view GetInfo() const noexcept override
     {
@@ -103,7 +102,7 @@ public:
     }
     virtual void SetInfo(std::string info) override
     {
-        static_cast<CRTP*>(this)->SetInfo(std::move(info));
+        static_cast<CRTP*>(this)->SetInfoStub(std::move(info));
     }
     virtual std::span<Sink> GetSinks() noexcept override
     {
@@ -116,7 +115,7 @@ public:
 
 public:
     template<typename Self>
-    void SetInfo(this Self&& self, std::string info) noexcept
+    void SetInfoStub(this Self&& self, std::string info) noexcept
     {
         self._info = std::format("{}: {}",
                                  reflect::type_name<Self>(),

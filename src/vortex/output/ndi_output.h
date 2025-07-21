@@ -135,11 +135,15 @@ private:
 };
 #endif // NDI_AVAILABLE
 
-struct NDIOutputProperties
-{
+struct NDIOutputProperties {
     wis::Size2D size = { 1280, 720 };
     wis::DataFormat format = wis::DataFormat::RGBA8Unorm;
     std::string_view name = "Vortex NDI Output";
+
+    template<typename Self>
+    void SetPropertyStub(this Self& self, uint32_t index, std::string_view value, bool notify = false)
+    {
+    }
 };
 
 class NDIOutput : public vortex::graph::OutputImpl<NDIOutput, NDIOutputProperties>

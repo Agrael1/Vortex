@@ -10,6 +10,11 @@ struct WindowOutputProperties {
     std::string window_name = "Vortex 1";
     wis::Size2D size = { 1280, 720 };
     wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for the swapchain
+
+    template<typename Self>
+    void SetPropertyStub(this Self& self, uint32_t index, std::string_view value, bool notify = false)
+    {
+    }
 };
 // Debug output is a window with a swapchain for rendering contents directly to the screen
 class WindowOutput : public vortex::graph::OutputImpl<WindowOutput, WindowOutputProperties>

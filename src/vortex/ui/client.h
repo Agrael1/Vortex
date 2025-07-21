@@ -6,6 +6,8 @@
 namespace vortex::ui {
 class Client : public CefImplements<Client, CefClient, CefLifeSpanHandler, CefDisplayHandler>
 {
+public:
+    using MessageHandler = std::function<bool(CefRefPtr<CefProcessMessage>)>;
     void OnAfterCreated(CefRefPtr<CefBrowser> browser) override
     {
         _browser = browser;
@@ -25,13 +27,9 @@ public:
         return _browser.get();
     }
 
-    void BindFunction(std::string func_name, std::function<void(CefListValue&)> callback)
+    void BindMessageHandler(MessageHandler message_handler)
     {
-        _callbacks[func_name] = std::move(callback);
-    }
-    void CallFunction(const std::string& func_name, CefListValue& args)
-    {
-        // Call function on javascript side
+        _message_handler = std::move(message_handler);
     }
 
     // Override OnConsoleMessage to redirect CEF console output to cout
@@ -71,16 +69,12 @@ public:
     {
 
         vortex::info("Client::OnProcessMessageReceived: Received message from process {}: {}", reflect::enum_name(source_process), message->GetName().ToString());
-        if (auto it = _callbacks.find(message->GetName().ToString()); it != _callbacks.end()) {
-            it->second(*message->GetArgumentList());
-            return true; // Message handled
-        }
-        return false;
+        return _message_handler(std::move(message));
     }
 
 private:
     CefRefPtr<CefBrowser> _browser;
-    std::unordered_map<std::string, std::function<void(CefListValue&)>> _callbacks; ///< Map of callbacks for handling messages
+    MessageHandler _message_handler; ///< Function to handle messages from the browser
 };
 
 } // namespace vortex::ui

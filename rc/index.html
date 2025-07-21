@@ -77,9 +77,8 @@
         // Add on button click
         button.addEventListener('click', async function () {
             // Toggle between two states
-            var a = await vortexCallAsync("greetAsync");
+            var a = await vortexCallAsync("GreetAsync");
             button.textContent = a;
-            vortexCall("createNode", "image_input");
         });
 
         // Initialize the UI when the page loads

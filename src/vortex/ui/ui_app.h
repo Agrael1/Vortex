@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/ui/client.h>
 #include <vortex/ui/sdl.h>
+#include <vortex/ui/value.h>
 
 namespace vortex::ui {
 class UIApp
@@ -45,13 +46,44 @@ public:
 
         return 0;
     }
-    void BindFunction(const std::string& name, std::function<void(CefListValue&)> callback)
+    void BindMessageHandler(Client::MessageHandler callback)
     {
-        _cef_client->BindFunction(name, callback);
+        _cef_client->BindMessageHandler(std::move(callback));
     }
     CefRefPtr<Client> GetClient() const
     {
         return _cef_client;
+    }
+
+    template<typename... Args>
+    void SendUIMessage(std::u16string_view message_name, Args&&... args)
+    {
+        if (!_cef_client) {
+            vortex::error("UIApp::SendMessage: CEF client is not initialized.");
+            return;
+        }
+        auto browser = _cef_client->GetBrowser();
+        if (browser) {
+            CefRefPtr<CefProcessMessage> message = CefProcessMessage::Create(string_traits::to_cef(message_name));
+            auto msg_args = message->GetArgumentList();
+
+            constexpr auto size = sizeof...(Args);
+            msg_args->SetSize(size);
+
+            // Add arguments to the message
+            if constexpr (size > 0) {
+                size_t i = 0;
+                (value_traits<Args>::add_value(*msg_args, i++, std::forward<Args>(args)), ...);
+            }
+
+            // Send the message
+            browser->GetMainFrame()->SendProcessMessage(PID_RENDERER, std::move(message));
+        }
+    }
+    template<typename... Args>
+    void SendUIReturn(Args&&... args)
+    {
+        SendUIMessage(u"co_return", std::forward<Args>(args)...);
     }
 
 private:

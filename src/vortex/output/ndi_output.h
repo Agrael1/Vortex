@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <vortex/util/common.h>
 #include <vortex/util/log.h>
+#include <vortex/graph/interfaces.h>
 
 namespace vortex {
 class NDILibrary
@@ -52,23 +53,19 @@ class NDISwapchain
 
 public:
     NDISwapchain() = default;
-    NDISwapchain(const vortex::Graphics& gfx, const vortex::OutputDesc& swap_desc)
+    NDISwapchain(const vortex::Graphics& gfx, wis::Size2D size = { 1280, 720 }, wis::DataFormat format = wis::DataFormat::RGBA8Unorm, std::string_view name = "Vortex 1")
         : _video_frame(
-                  int32_t(swap_desc.size.width),
-                  int32_t(swap_desc.size.height),
-                  GetNDIFormat(swap_desc.format))
-        , _format(swap_desc.format)
+                  int32_t(size.width),
+                  int32_t(size.height),
+                  GetNDIFormat(format))
+        , _format(format)
 
     {
-        if (swap_desc.input != NodeInput::OUTPUT_DESC) {
-            throw std::runtime_error("Invalid input type for WindowOutput");
-        }
-
         auto& allocator = gfx.GetAllocator();
         wis::Result result = wis::success;
         wis::TextureDesc desc{
-            .format = swap_desc.format,
-            .size = { swap_desc.size.width, swap_desc.size.height },
+            .format = format,
+            .size = { size.width, size.height },
             .layout = wis::TextureLayout::Texture2D,
             .usage = wis::TextureUsage::RenderTarget | wis::TextureUsage::ShaderResource | wis::TextureUsage::CopySrc,
         };
@@ -93,7 +90,7 @@ public:
 
         // Create the NDI send instance
         NDIlib_send_create_t create_desc = {};
-        create_desc.p_ndi_name = swap_desc.name;
+        create_desc.p_ndi_name = name.data();
         _send_instance = NDIlib_send_create(&create_desc);
     }
 
@@ -138,12 +135,23 @@ private:
 };
 #endif // NDI_AVAILABLE
 
-class NDIOutput : public vortex::NodeImpl<NDIOutput, vortex::IOutput>
+struct NDIOutputProperties {
+    wis::Size2D size = { 1280, 720 };
+    wis::DataFormat format = wis::DataFormat::RGBA8Unorm;
+    std::string_view name = "Vortex NDI Output";
+
+    template<typename Self>
+    void SetPropertyStub(this Self& self, uint32_t index, std::string_view value, bool notify = false)
+    {
+    }
+};
+
+class NDIOutput : public vortex::graph::OutputImpl<NDIOutput, NDIOutputProperties>
 {
 public:
-    NDIOutput(const vortex::Graphics& gfx, NodeDesc* initializers)
+    NDIOutput(const vortex::Graphics& gfx)
 #ifdef NDI_AVAILABLE
-        : _swapchain(gfx, *reinterpret_cast<OutputDesc*>(initializers))
+        : _swapchain(gfx)
 #endif
 
     {

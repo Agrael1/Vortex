@@ -1,5 +1,5 @@
 #pragma once
-#include <vortex/node.h>
+#include <vortex/graph/interfaces.h>
 #include <vortex/probe.h>
 #include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/codec/codec_ffmpeg.h>
@@ -19,31 +19,31 @@ struct ImageInputProperties {
 
     // Get image_path as a string_view
     template<typename Self>
-    std::string_view GetImagePath(const Self&& self)
+    std::string_view GetImagePath(this Self&& self)
     {
         return self.image_path;
     }
     // Get crop_rect as a DirectX::XMFLOAT4A
     template<typename Self>
-    DirectX::XMFLOAT4A GetCropRect(const Self&& self)
+    DirectX::XMFLOAT4A GetCropRect(this Self&& self)
     {
         return self.crop_rect;
     }
     // Get size as a DirectX::XMUINT2
     template<typename Self>
-    DirectX::XMINT2 GetSize(const Self&& self)
+    DirectX::XMINT2 GetSize(this Self&& self)
     {
         return self.size;
     }
     // Get origin as a DirectX::XMINT2
     template<typename Self>
-    DirectX::XMINT2 GetOrigin(const Self&& self)
+    DirectX::XMINT2 GetOrigin(this Self&& self)
     {
         return self.origin;
     }
     // Get rotation as a DirectX::XMFLOAT2
     template<typename Self>
-    DirectX::XMFLOAT2 GetRotation(const Self&& self)
+    DirectX::XMFLOAT2 GetRotation(this Self&& self)
     {
         return self.rotation;
     }
@@ -52,7 +52,7 @@ struct ImageInputProperties {
 
     // Set image_path from a string
     template<typename Self>
-    void SetImagePath(Self& self, std::string_view path, bool notify = true)
+    void SetImagePath(this Self& self, std::string_view path, bool notify = true)
     {
         self.image_path = path;
         if (notify) {
@@ -62,7 +62,7 @@ struct ImageInputProperties {
 
     // Set crop_rect from a DirectX::XMFLOAT4A
     template<typename Self>
-    void SetCropRect(Self& self, DirectX::XMFLOAT4A rect, bool notify = true)
+    void SetCropRect(this Self& self, DirectX::XMFLOAT4A rect, bool notify = true)
     {
         self.crop_rect = rect;
         if (notify) {
@@ -72,7 +72,7 @@ struct ImageInputProperties {
 
     // Set size from a DirectX::XMUINT2
     template<typename Self>
-    void SetSize(Self& self, DirectX::XMINT2 size, bool notify = true)
+    void SetSize(this Self& self, DirectX::XMINT2 size, bool notify = true)
     {
         self.size = size;
         if (notify) {
@@ -81,7 +81,7 @@ struct ImageInputProperties {
     }
     // Set origin from a DirectX::XMINT2
     template<typename Self>
-    void SetOrigin(Self& self, DirectX::XMINT2 origin, bool notify = true)
+    void SetOrigin(this Self& self, DirectX::XMINT2 origin, bool notify = true)
     {
         self.origin = origin;
         if (notify) {
@@ -90,7 +90,7 @@ struct ImageInputProperties {
     }
     // Set rotation from a DirectX::XMFLOAT2
     template<typename Self>
-    void SetRotation(Self& self, DirectX::XMFLOAT2 rotation, bool notify = true)
+    void SetRotation(this Self& self, DirectX::XMFLOAT2 rotation, bool notify = true)
     {
         self.rotation = rotation;
         if (notify) {
@@ -100,7 +100,7 @@ struct ImageInputProperties {
 
     // Comes from javascript
     template<typename Self>
-    void SetProperty(Self& self, uint32_t index, std::string_view value, bool notify = false)
+    void SetPropertyStub(this Self& self, uint32_t index, std::string_view value, bool notify = false)
     {
         switch (index) {
         case 0:
@@ -135,23 +135,28 @@ struct ImageInputProperties {
     }
 
     template<typename Self>
-    void NotifyPropertyChange(Self& self, uint32_t index)
+    void NotifyPropertyChange(this Self& self, uint32_t index)
     {
+        if (!self.notifier) {
+            vortex::error("ImageInputProperties: Notifier callback is not set.");
+            return; // No notifier set, cannot notify
+        }
+
         switch (index) {
         case 0: // image_path
-            notifier(0, vortex::reflection_traits<std::string_view>::serialize(self.image_path));
+            self.notifier(0, vortex::reflection_traits<std::string_view>::serialize(self.image_path));
             break;
         case 1: // crop_rect
-            notifier(1, vortex::reflection_traits<DirectX::XMFLOAT4A>::serialize(self.crop_rect));
+            self.notifier(1, vortex::reflection_traits<DirectX::XMFLOAT4A>::serialize(self.crop_rect));
             break;
         case 2: // size
-            notifier(2, vortex::reflection_traits<DirectX::XMINT2>::serialize(self.size));
+            self.notifier(2, vortex::reflection_traits<DirectX::XMINT2>::serialize(self.size));
             break;
         case 3: // origin
-            notifier(3, vortex::reflection_traits<DirectX::XMINT2>::serialize(self.origin));
+            self.notifier(3, vortex::reflection_traits<DirectX::XMINT2>::serialize(self.origin));
             break;
         case 4: // rotation
-            notifier(4, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.rotation));
+            self.notifier(4, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.rotation));
             break;
         default:
             vortex::error("ImageInputProperties: Invalid property index for notification: {}", index);
@@ -163,20 +168,12 @@ struct ImageInputProperties {
 };
 
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
-class ImageInput : public NodeImplWithP<ImageInput, ImageInputProperties>
+class ImageInput : public vortex::graph::NodeImpl<ImageInput, ImageInputProperties, 0, 1>
 {
 public:
-    using Parameters = ImageInputProperties;
-    using ImageParams = NodeDescT<Parameters>;
-
-public:
     ImageInput() = default;
-    ImageInput(const vortex::Graphics& gfx, const ImageParams& params)
-        : _texture(codec::CodecFFmpeg::LoadTexture(gfx, params.data.image_path))
+    ImageInput(const vortex::Graphics& gfx)
     {
-        if (!_texture) {
-            vortex::warn("ImageInput: Failed to load texture from path: {}", params.data.image_path);
-        }
         // Create a root signature for the image input node
         wis::Result result = wis::success;
 
@@ -218,13 +215,6 @@ public:
             return;
         }
 
-        // Create a shader resource for the texture
-        wis::ShaderResourceDesc srd{
-            .format = wis::DataFormat::RGBA8Unorm, // Assuming the texture is in RGBA8 format
-            .view_type = wis::TextureViewType::Texture2D
-        };
-        _texture_resource = _texture.CreateShaderResource(gfx);
-
         // clang-format off
         _sampler = gfx.GetDevice().CreateSampler(result, wis::SamplerDesc{
                                                                  .min_filter = wis::Filter::Linear, 
@@ -243,67 +233,71 @@ public:
                                                          });
         // clang-format on
     }
-    ImageInput(const vortex::Graphics& gfx, vortex::NodeDesc* initializers)
-        : ImageInput(gfx, *static_cast<ImageParams*>(initializers))
-    {
-    }
 
 public:
-    NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
+    void Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe) override
+    {
+        // Load the texture from the image path if it has changed
+        if (path_changed && !image_path.empty()) {
+            _texture = codec::CodecFFmpeg::LoadTexture(gfx, image_path);
+            _texture_resource = _texture.CreateShaderResource(gfx);
+            path_changed = false; // Reset the path changed flag after loading
+        }
+    }
+    vortex::graph::NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {
         // Validate that the texture was loaded successfully
         if (!_texture || size.x == 0 || size.y == 0) {
-            return NodeExecution::Skip; // Skip rendering if texture is not valid
+            return vortex::graph::NodeExecution::Skip; // Skip rendering if texture is not valid
         }
 
-        return NodeExecution::Render; // Proceed with rendering
+        return vortex::graph::NodeExecution::Render; // Proceed with rendering
     }
 
-    void Visit(vortex::RenderProbe& probe) override
-    {
-        // Validate the node before rendering
-        if (Validate(probe._gfx, probe) == NodeExecution::Skip) {
-            return; // Skip rendering if validation fails
-        }
-        // Render the image input node
-        Render(probe);
-    }
+    // wis::Result Render(const vortex::RenderProbe& probe)
+    //{
+    //     auto& cmd_list = probe._command_list;
 
-    wis::Result Render(const vortex::RenderProbe& probe)
-    {
-        auto& cmd_list = probe._command_list;
+    //    auto [vwidth, vheight] = probe._output_size;
 
-        auto [vwidth, vheight] = probe._output_size;
+    //    if (!initialized) {
+    //        probe._descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
+    //        probe._descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _sampler);
+    //        initialized = true; // Mark the node as initialized
+    //    }
 
-        if (!initialized) {
-            probe._descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
-            probe._descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _sampler);
-            initialized = true; // Mark the node as initialized
-        }
+    //    cmd_list.SetPipelineState(_pipeline_state);
+    //    cmd_list.SetRootSignature(_root_signature);
+    //    cmd_list.RSSetScissor({ 0, 0, int(vwidth), int(vheight) });
+    //    cmd_list.RSSetViewport({ 0.f, 0.f, float(vwidth), float(vheight), 0.f, 1.f });
+    //    cmd_list.IASetPrimitiveTopology(wis::PrimitiveTopology::TriangleList);
 
-        cmd_list.SetPipelineState(_pipeline_state);
-        cmd_list.SetRootSignature(_root_signature);
-        cmd_list.RSSetScissor({ 0, 0, int(vwidth), int(vheight) });
-        cmd_list.RSSetViewport({ 0.f, 0.f, float(vwidth), float(vheight), 0.f, 1.f });
-        cmd_list.IASetPrimitiveTopology(wis::PrimitiveTopology::TriangleList);
+    //    std::array<DescriptorTableOffset, 2> offsets = {
+    //        DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
+    //        DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
+    //    };
 
-        std::array<DescriptorTableOffset, 2> offsets = {
-            DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
-            DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
-        };
+    //    probe._descriptor_buffer.BindOffsets(probe._gfx, cmd_list, _root_signature, probe.frame, offsets);
 
-        probe._descriptor_buffer.BindOffsets(probe._gfx, cmd_list, _root_signature, probe.frame, offsets);
-
-        // Draw a quad that covers the viewport
-        cmd_list.DrawInstanced(3, 1, 0, 0);
-        return wis::success;
-    }
+    //    // Draw a quad that covers the viewport
+    //    cmd_list.DrawInstanced(3, 1, 0, 0);
+    //    return wis::success;
+    //}
 
 public:
     template<typename Self>
-    void SetImagePath(Self& self, std::string_view path, bool notify = true)
+    void SetImagePath(this Self& self, std::string_view path, bool notify = true)
     {
-        ImageInputProperties::SetImagePath(self, path, notify);
+        if (self.GetImagePath() == path) {
+            return; // No change in path, skip setting
+        }
+        if (std::filesystem::exists(path)) {
+            self.ImageInputProperties::SetImagePath(path, notify);
+        } else {
+            vortex::error("ImageInput: Image path does not exist: {}", path);
+            self.ImageInputProperties::SetImagePath("", notify);
+        }
+        self.path_changed = true; // Mark that the path has changed
     }
 
 private:
@@ -314,9 +308,7 @@ private:
     wis::PipelineState _pipeline_state; // Pipeline state for rendering the image
     wis::Shader _vertex_shader; // Vertex shader for the image input node
     wis::Shader _pixel_shader; // Pixel shader for the image input node
-    bool initialized = false; // Flag to check if the node is initialized
+
+    bool path_changed = false; // Flag to check if the node has been initialized
 };
-
-using ImageParams = ImageInput::ImageParams;
-
 } // namespace vortex

@@ -31,7 +31,7 @@ try {
         vortex::AppExitControl::Exit();
     });
 
-        // Initialize Cef
+    // Initialize Cef
     CefMainArgs cef_args{ GetModuleHandleW(nullptr) };
     CefRefPtr<vortex::ui::VortexCefApp> cef_app{ new vortex::ui::VortexCefApp() };
     int code = CefExecuteProcess(cef_args, cef_app, nullptr);

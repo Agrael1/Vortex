@@ -5,6 +5,7 @@
 namespace vortex {
 class Graphics; // Forward declaration of Graphics class
 class RenderProbe; // Forward declaration of RenderProbe class
+struct RenderPassForwardDesc; // Forward declaration of RenderPassForwardDesc struct
 } // namespace vortex
 
 namespace vortex::graph {
@@ -30,7 +31,7 @@ enum class EvaluationStrategy {
 struct alignas(16) INode {
     virtual ~INode() = default;
     virtual void Update(const vortex::Graphics& gfx, RenderProbe& probe) { };
-    virtual void Visit(RenderProbe& probe) { };
+    virtual void Evaluate(const vortex::Graphics& gfx, RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) { };
     constexpr virtual NodeType GetType() const noexcept
     {
         return NodeType::None; // Default node type

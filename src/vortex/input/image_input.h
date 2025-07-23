@@ -241,9 +241,54 @@ public:
         if (path_changed && !image_path.empty()) {
             _texture = codec::CodecFFmpeg::LoadTexture(gfx, image_path);
             _texture_resource = _texture.CreateShaderResource(gfx);
+
+            // Bind the texture and sampler to the command list
+            probe._descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
+            probe._descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _sampler);
+
             path_changed = false; // Reset the path changed flag after loading
         }
     }
+    void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info = nullptr) override
+    {
+        // Check if the texture is valid before rendering
+        if (!_texture || _texture.GetSize().width == 0 || _texture.GetSize().height == 0) {
+            vortex::error("ImageInput: Texture is not valid or has zero size.");
+            return; // Skip rendering if texture is not valid
+        }
+
+        wis::RenderPassRenderTargetDesc target_desc{
+            .target = output_info->_current_rt_view,
+            .load_op = wis::LoadOperation::Clear,
+            .store_op = wis::StoreOperation::Store,
+            .clear_value = { 0.f, 0.f, 0.f, 1.f } // Clear to transparent black
+        };
+        wis::RenderPassDesc pass_desc{
+            .target_count = 1,
+            .targets = &target_desc,
+        };
+
+        auto& cmd_list = *probe._command_list;
+
+        // Begin the render pass
+        cmd_list.BeginRenderPass(pass_desc);
+        cmd_list.SetPipelineState(_pipeline_state);
+        cmd_list.SetRootSignature(_root_signature);
+        cmd_list.RSSetScissor({ 0, 0, int(output_info->_output_size.width), int(output_info->_output_size.height) });
+        cmd_list.RSSetViewport({ 0.f, 0.f, float(output_info->_output_size.width), float(output_info->_output_size.height), 0.f, 1.f });
+        cmd_list.IASetPrimitiveTopology(wis::PrimitiveTopology::TriangleList);
+        std::array<DescriptorTableOffset, 2> offsets = {
+            DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
+            DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
+        };
+        probe._descriptor_buffer.BindOffsets(gfx, cmd_list, _root_signature, probe.frame, offsets);
+        // Draw a quad that covers the viewport
+        cmd_list.DrawInstanced(3, 1, 0, 0);
+
+        // End the render pass
+        cmd_list.EndRenderPass();
+    }
+
     vortex::graph::NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {
         // Validate that the texture was loaded successfully
@@ -253,36 +298,6 @@ public:
 
         return vortex::graph::NodeExecution::Render; // Proceed with rendering
     }
-
-    // wis::Result Render(const vortex::RenderProbe& probe)
-    //{
-    //     auto& cmd_list = probe._command_list;
-
-    //    auto [vwidth, vheight] = probe._output_size;
-
-    //    if (!initialized) {
-    //        probe._descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
-    //        probe._descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _sampler);
-    //        initialized = true; // Mark the node as initialized
-    //    }
-
-    //    cmd_list.SetPipelineState(_pipeline_state);
-    //    cmd_list.SetRootSignature(_root_signature);
-    //    cmd_list.RSSetScissor({ 0, 0, int(vwidth), int(vheight) });
-    //    cmd_list.RSSetViewport({ 0.f, 0.f, float(vwidth), float(vheight), 0.f, 1.f });
-    //    cmd_list.IASetPrimitiveTopology(wis::PrimitiveTopology::TriangleList);
-
-    //    std::array<DescriptorTableOffset, 2> offsets = {
-    //        DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
-    //        DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
-    //    };
-
-    //    probe._descriptor_buffer.BindOffsets(probe._gfx, cmd_list, _root_signature, probe.frame, offsets);
-
-    //    // Draw a quad that covers the viewport
-    //    cmd_list.DrawInstanced(3, 1, 0, 0);
-    //    return wis::success;
-    //}
 
 public:
     template<typename Self>

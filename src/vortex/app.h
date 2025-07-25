@@ -49,8 +49,11 @@ public:
         auto i1 = _model.CreateNode(_gfx, "ImageInput"); // Create a default node for testing
         _model.SetNodeInfo(i1, "Image 0"); // Set some info for the node
         auto o1 = _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
+        auto o2 = _model.CreateNode(_gfx, "NDIOutput"); // Create a default output for testing
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
+        _model.SetNodeInfo(o2, "NDI Output 0"); // Set some info for the NDI output node
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
+        _model.ConnectNodes(i1, 0, o2, 0); // Connect the input node to the NDI output node
 
         _model.SetNodeProperty(i1, 0, "ui/HDR.jpg", true); // Set a property for the input node
     }

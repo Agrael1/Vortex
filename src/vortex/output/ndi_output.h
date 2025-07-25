@@ -49,6 +49,7 @@ constexpr inline NDIlib_FourCC_video_type_e GetNDIFormat(wis::DataFormat format)
 
 class NDISwapchain
 {
+public:
     static inline constexpr uint32_t max_swapchain_images = 2;
 
 public:
@@ -99,6 +100,31 @@ public:
         for (size_t i = 0; i < max_swapchain_images; ++i) {
             _staging_buffer[i].Unmap();
         }
+        if (_send_instance) {
+            NDIlib_send_destroy(_send_instance);
+            _send_instance = nullptr;
+        }
+    }
+
+public:
+    const wis::Texture& GetTexture() const noexcept
+    {
+        return _texture;
+    }
+    void Present(wis::CommandList& cmd_list)
+    {
+        if (!_send_instance) {
+            vortex::error("NDI send instance is not initialized");
+            return;
+        }
+        // Copy the current texture to the staging buffer
+        CopyToStagingBuffer(cmd_list);
+        // Send the frame asynchronously
+        SendFrame();
+    }
+    uint32_t GetCurrentIndex() const noexcept
+    {
+        return _current_index;
     }
 
 private:
@@ -124,6 +150,7 @@ private:
 
 private:
     wis::Texture _texture;
+    wis::RenderTarget _render_targets[max_swapchain_images];
     wis::Buffer _staging_buffer[max_swapchain_images]; // more is ineffective
     uint8_t* _staging_data = nullptr;
     uint32_t _current_index = 0;
@@ -153,13 +180,86 @@ public:
 #ifdef NDI_AVAILABLE
         : _swapchain(gfx)
 #endif
-
     {
+        wis::Result result = wis::success;
+        // Create the render target for the NDI output
+        wis::RenderTargetDesc rt_desc{
+            .format = format,
+        };
+        _render_target = gfx.GetDevice().CreateRenderTarget(result, _swapchain.GetTexture(), rt_desc);
+        if (!vortex::success(result)) {
+            vortex::error("Failed to create render target for NDIOutput: {}", result.error);
+            return;
+        }
+        // Initialize command lists for each swapchain image
+        for (size_t i = 0; i < NDISwapchain::max_swapchain_images; ++i) {
+            _command_lists[i] = gfx.GetDevice().CreateCommandList(result, wis::QueueType::Graphics);
+            if (!vortex::success(result)) {
+                vortex::error("Failed to create command list for NDIOutput: {}", result.error);
+                return;
+            }
+        }
+    }
+    void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
+    {
+        auto current_texture_index = _swapchain.GetCurrentIndex();
+        probe._command_list = &_command_lists[current_texture_index];
+
+        // Pass to the sink nodes for post-order processing
+        RenderPassForwardDesc desc{
+            ._current_rt_view = _render_target,
+            ._current_rt_texture = &_swapchain.GetTexture(),
+            ._output_size = { size.width, size.height }
+        };
+
+        // Barrier to ensure the render target is ready for rendering
+        auto& cmd_list = *probe._command_list;
+        cmd_list.Reset();
+        probe._descriptor_buffer.BindBuffers(gfx, cmd_list);
+
+        cmd_list.TextureBarrier({
+                                        .sync_before = wis::BarrierSync::Copy,
+                                        .sync_after = wis::BarrierSync::RenderTarget,
+                                        .access_before = wis::ResourceAccess::CopySource,
+                                        .access_after = wis::ResourceAccess::RenderTarget,
+                                        .state_before = wis::TextureState::CopySource,
+                                        .state_after = wis::TextureState::RenderTarget,
+                                },
+                                _swapchain.GetTexture());
+
+        // Pass to the next nodes in the graph
+        for (auto& sink : _sinks.GetSinks() | std::views::filter([](auto& sink) { return sink; })) {
+            sink.source_node->Evaluate(gfx, probe, &desc);
+        }
+
+        // Close the render target
+        cmd_list.TextureBarrier({
+                                        .sync_before = wis::BarrierSync::RenderTarget,
+                                        .sync_after = wis::BarrierSync::Copy,
+                                        .access_before = wis::ResourceAccess::RenderTarget,
+                                        .access_after = wis::ResourceAccess::CopySource,
+                                        .state_before = wis::TextureState::RenderTarget,
+                                        .state_after = wis::TextureState::CopySource,
+                                },
+                                _swapchain.GetTexture());
+
+        _swapchain.Present(_command_lists[current_texture_index]);
+
+        // End the command list
+        if (!cmd_list.Close()) {
+            vortex::error("Failed to close command list for WindowOutput");
+            return;
+        }
+
+        wis::CommandListView views[]{ cmd_list };
+        gfx.GetMainQueue().ExecuteCommandLists(views, 1);
     }
 
 private:
 #ifdef NDI_AVAILABLE
     NDISwapchain _swapchain;
 #endif
+    wis::CommandList _command_lists[NDISwapchain::max_swapchain_images];
+    wis::RenderTarget _render_target;
 };
 } // namespace vortex

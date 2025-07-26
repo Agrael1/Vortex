@@ -11,6 +11,19 @@ concept digit = std::is_integral_v<T> || std::is_floating_point_v<T>;
 template<typename T>
 concept string_type = std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view> || std::is_same_v<T, char*>;
 
+template<typename T>
+struct vector_reflection {
+    using basic_type = reflect::member_type<0, T>;
+    static constexpr std::string_view name = reflect::type_name<T>();
+    static constexpr uint32_t member_count = []() noexcept {
+        uint32_t count = 0;
+        reflect::for_each<T>([&count](auto&& member) {
+            ++count;
+        });
+        return count;
+    }();
+};
+
 // Traits for reflection types
 template<typename T>
 struct reflection_traits_base {
@@ -58,8 +71,6 @@ struct reflection_traits<S> : reflection_traits_base<S> {
     }
 };
 
-
-
 template<>
 struct reflection_traits<bool> : reflection_traits_base<bool> {
     static constexpr bool deserialize(bool* obj, std::string_view data) noexcept
@@ -72,79 +83,118 @@ struct reflection_traits<bool> : reflection_traits_base<bool> {
         return true;
     }
 };
-template<>
-struct reflection_traits<DirectX::XMUINT2> : reflection_traits_base<DirectX::XMUINT2> {
-    static constexpr bool deserialize(DirectX::XMUINT2* obj, std::string_view data) noexcept
+
+// Specialization for DirectX:: vector types
+template<typename VT>
+struct vector_traits {
+    using base_type = decltype(VT::x);
+    static constexpr size_t member_count = sizeof(VT) / sizeof(base_type);
+    static void set_member(VT& obj, size_t index, base_type value) noexcept
     {
-        // Expecting format "[x,y]"
-        if (data.size() < 5 || data.front() != '[' || data.back() != ']') {
-            vortex::error("Failed to deserialize DirectX::XMUINT2: Invalid format {}", data);
-            return false;
+        if (index == 0) {
+            obj.x = value;
+            return;
         }
-        std::string_view content = data.substr(1, data.size() - 2); // Remove brackets
-        size_t comma_pos = content.find(',');
-        if (comma_pos == std::string_view::npos) {
-            vortex::error("Failed to deserialize DirectX::XMUINT2: Missing comma in {}", data);
-            return false;
+        if (index == 1) {
+            obj.y = value;
+            return;
         }
-        std::string_view x_str = content.substr(0, comma_pos);
-        std::string_view y_str = content.substr(comma_pos + 1);
-        if (x_str.empty() || y_str.empty()) {
-            vortex::error("Failed to deserialize DirectX::XMUINT2: Empty x or y value in {}", data);
-            return false;
+        if constexpr (member_count > 2) {
+            if (index == 2) {
+                obj.z = value;
+            }
         }
-        auto [x_ptr, x_ec] = std::from_chars(x_str.data(), x_str.data() + x_str.size(), obj->x);
-        auto [y_ptr, y_ec] = std::from_chars(y_str.data(), y_str.data() + y_str.size(), obj->y);
-        if (x_ec == std::errc() && y_ec == std::errc()) {
-            return true; // Success
-        } else {
-            vortex::error("Failed to deserialize DirectX::XMUINT2: {} {}", reflect::enum_name(x_ec), reflect::enum_name(y_ec));
-            return false; // Failure
+        if constexpr (member_count > 3) {
+            if (index == 3) {
+                obj.w = value;
+            }
         }
     }
-    static std::string serialize(const DirectX::XMUINT2& obj) noexcept
+    static base_type get_member(const VT& obj, size_t index) noexcept
     {
-        return std::format("[{},{}]", obj.x, obj.y); // Format as "[x,y]"
+        if (index == 0) {
+            return obj.x;
+        }
+        if (index == 1) {
+            return obj.y;
+        }
+        if constexpr (member_count > 2) {
+            if (index == 2) {
+                return obj.z;
+            }
+        }
+        if constexpr (member_count > 3) {
+            if (index == 3) {
+                return obj.w;
+            }
+        }
+        return base_type{}; // Default value if index is out of bounds
+    }
+    static void desetialize_one(VT* obj, std::string_view data, size_t index) noexcept
+    {
+        base_type value{};
+        if (reflection_traits<base_type>::deserialize(&value, data)) {
+            set_member(*obj, index, value);
+        } else {
+            vortex::error("Failed to deserialize member {} of vector type {}", index, reflect::type_name<VT>());
+        }
     }
 };
 
+template<size_t N>
+constexpr std::array<std::string_view, N> split_string(std::string_view str, char delimiter) noexcept
+{
+    std::array<std::string_view, N> result{};
+    size_t start = 0;
+    size_t end = 0;
+    size_t index = 0;
+    while (end != std::string_view::npos && index < N) {
+        end = str.find(delimiter, start);
+        result[index++] = str.substr(start, end - start);
+        result[index - 1].remove_prefix(std::min(result[index - 1].find_first_not_of(' '), result[index - 1].size()));
+        start = end + 1;
+    }
+    return result;
+}
 
-
+template<typename T, typename... Args>
+constexpr bool is_any_of_v = (std::is_same_v<T, Args> || ...);
 
 template<typename T>
-struct static_reflection {
-    struct member {
-        using deserizalize_func = bool (*)(void* obj, std::string_view data); // Not extra safe, but simple
+concept directx_vector = is_any_of_v<T, DirectX::XMFLOAT2, DirectX::XMFLOAT3, DirectX::XMFLOAT4, DirectX::XMUINT2, DirectX::XMUINT3, DirectX::XMUINT4> ||
+        is_any_of_v<T, DirectX::XMFLOAT2A, DirectX::XMFLOAT3A, DirectX::XMFLOAT4A>;
 
-        std::string_view name;
-        deserizalize_func deserialize = nullptr;
-        ptrdiff_t offset = 0;
-    };
+template<directx_vector V>
+struct reflection_traits<V> : reflection_traits_base<V> {
+    static constexpr bool deserialize(V* obj, std::string_view data) noexcept
+    {
+        using vref = vector_traits<V>;
 
-    static constexpr std::string_view name = reflect::type_name<T>();
-    static constexpr uint32_t member_count = []() noexcept {
-        uint32_t count = 0;
-        reflect::for_each<T>([&count](auto&& member) {
-            ++count;
-        });
-        return count;
-    }();
-
-    static constexpr std::array<member, member_count> members = []() noexcept {
-        std::array<member, member_count> arr{};
-        uint32_t index = 0;
-        reflect::for_each<T>([&arr, &index](const auto member) {
-            using member_type = reflect::member_type<member, T>;
-            arr[index++] = {
-                .name = reflect::member_name<member, T>(),
-                .deserialize = [](void* obj, std::string_view data) -> bool {
-                    return reflection_traits<member_type>::deserialize(std::bit_cast<member_type*>(obj), data);
-                },
-                .offset = reflect::offset_of<member, T>()
-            };
-        });
-        return arr;
-    }();
+        // Expecting format "[x,y]"
+        if (data.size() < 5 || data.front() != '[' || data.back() != ']') {
+            vortex::error("Failed to deserialize {}: Invalid format {}", reflect::type_name<V>(), data);
+            return false;
+        }
+        std::string_view content = data.substr(1, data.size() - 2); // Remove brackets
+        std::array<std::string_view, vref::member_count> values = split_string<vref::member_count>(content, ',');
+        for (size_t i = 0; i < vref::member_count; ++i) {
+            vref::desetialize_one(obj, values[i], i);
+        }
+        return true; // Success
+    }
+    static std::string serialize(V obj) noexcept
+    {
+        using vref = vector_traits<V>;
+        std::string result = "[";
+        for (size_t i = 0; i < vref::member_count; ++i) {
+            if (i > 0) {
+                result += ",";
+            }
+            result += std::to_string(vref::get_member(obj, i));
+        }
+        result += "]";
+        return result; // Serialize as "[x,y,z,w]"
+    }
 };
 
 using notifier_callback = std::function<void(uint32_t index, std::string_view data)>;

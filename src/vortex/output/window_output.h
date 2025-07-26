@@ -6,18 +6,9 @@
 #include <vortex/gfx/swapchain.h>
 #include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/probe.h>
+#include <vortex/properties/props.hpp>
 
 namespace vortex {
-struct WindowOutputProperties {
-    std::string window_name = "Vortex 1";
-    wis::Size2D size = { 1280, 720 };
-    wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for the swapchain
-
-    template<typename Self>
-    void SetPropertyStub(this Self& self, uint32_t index, std::string_view value, bool notify = false)
-    {
-    }
-};
 // Debug output is a window with a swapchain for rendering contents directly to the screen
 class WindowOutput : public vortex::graph::OutputImpl<WindowOutput, WindowOutputProperties>
 {
@@ -59,6 +50,7 @@ public:
                 return;
             }
         }
+        _fence = gfx.GetDevice().CreateFence(result);
     }
 
 public:
@@ -73,9 +65,45 @@ public:
         }
         return 0;
     }
+    void Throttle(const vortex::Graphics& gfx)
+    {
+        auto& q = gfx.GetMainQueue();
+        q.SignalQueue(_fence, ++_fence_value);
+        _fence.Wait(_fence_value);
+    }
+
+    void SetName(std::string_view name, bool notify = false)
+    {
+        WindowOutputProperties::SetName(name, true);
+        _window.SetTitle(name.data());
+    }
+    void SetWindowSize(DirectX::XMUINT2 size, bool notify = false)
+    {
+        WindowOutputProperties::SetWindowSize(size, true);
+        _window.SetSize(int(size.x), int(size.y));
+        _resized = true; // Mark as resized to trigger swapchain resize
+    }
 
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
+        if (_resized) {
+            // Resize the swapchain if the window has been resized
+            auto [width, height] = _window.PixelSize();
+            Throttle(gfx); // Ensure the GPU is ready for the resize operation
+            _swapchain.Resize(width, height);
+            // Recreate the render targets after resizing the swapchain
+            wis::Result result = wis::success;
+            for (size_t i = 0; i < _textures.size(); ++i) {
+                _render_targets[i] = gfx.GetDevice().CreateRenderTarget(result, _textures[i], wis::RenderTargetDesc{ .format = wis::DataFormat::RGBA8Unorm });
+                if (!vortex::success(result)) {
+                    vortex::error("Failed to recreate render target after swapchain resize: {}", result.error);
+                    return;
+                }
+            }
+            _textures = _swapchain.GetBufferSpan(); // Update textures to match the new swapchain buffers
+            _resized = false; // Reset the resized flag
+        }
+
         _current_texture_index = _swapchain.GetCurrentIndex();
         probe._command_list = &_command_lists[_current_texture_index];
 
@@ -83,7 +111,7 @@ public:
         RenderPassForwardDesc desc{
             ._current_rt_view = _render_targets[_current_texture_index],
             ._current_rt_texture = &_textures[_current_texture_index],
-            ._output_size = { size.width, size.height }
+            ._output_size = { window_size.x, window_size.y }
         };
 
         // Barrier to ensure the render target is ready for rendering
@@ -126,7 +154,6 @@ public:
         wis::CommandListView views[]{ cmd_list };
         gfx.GetMainQueue().ExecuteCommandLists(views, 1);
 
-
         // Present the swapchain
         _swapchain.Present();
     }
@@ -140,5 +167,9 @@ public:
     wis::RenderTarget _render_targets[2]; ///< Render target for the swapchain
     std::span<const wis::Texture> _textures; ///< Textures for the swapchain
     uint32_t _current_texture_index = 0; ///< Current texture index for rendering
+
+    wis::Fence _fence; ///< Fence for synchronization
+    uint64_t _fence_value = 0; ///< Current fence value for synchronization
+    bool _resized = false; ///< Flag to indicate if the window has been resized
 };
 } // namespace vortex

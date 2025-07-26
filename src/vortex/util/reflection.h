@@ -2,6 +2,7 @@
 #include <vortex/util/lib/reflect.h>
 #include <vortex/util/log.h>
 #include <charconv>
+#include <DirectXMath.h>
 
 namespace vortex {
 template<typename T>
@@ -69,6 +70,41 @@ struct reflection_traits<bool> : reflection_traits_base<bool> {
             *obj = false;
         }
         return true;
+    }
+};
+template<>
+struct reflection_traits<DirectX::XMUINT2> : reflection_traits_base<DirectX::XMUINT2> {
+    static constexpr bool deserialize(DirectX::XMUINT2* obj, std::string_view data) noexcept
+    {
+        // Expecting format "[x,y]"
+        if (data.size() < 5 || data.front() != '[' || data.back() != ']') {
+            vortex::error("Failed to deserialize DirectX::XMUINT2: Invalid format {}", data);
+            return false;
+        }
+        std::string_view content = data.substr(1, data.size() - 2); // Remove brackets
+        size_t comma_pos = content.find(',');
+        if (comma_pos == std::string_view::npos) {
+            vortex::error("Failed to deserialize DirectX::XMUINT2: Missing comma in {}", data);
+            return false;
+        }
+        std::string_view x_str = content.substr(0, comma_pos);
+        std::string_view y_str = content.substr(comma_pos + 1);
+        if (x_str.empty() || y_str.empty()) {
+            vortex::error("Failed to deserialize DirectX::XMUINT2: Empty x or y value in {}", data);
+            return false;
+        }
+        auto [x_ptr, x_ec] = std::from_chars(x_str.data(), x_str.data() + x_str.size(), obj->x);
+        auto [y_ptr, y_ec] = std::from_chars(y_str.data(), y_str.data() + y_str.size(), obj->y);
+        if (x_ec == std::errc() && y_ec == std::errc()) {
+            return true; // Success
+        } else {
+            vortex::error("Failed to deserialize DirectX::XMUINT2: {} {}", reflect::enum_name(x_ec), reflect::enum_name(y_ec));
+            return false; // Failure
+        }
+    }
+    static std::string serialize(const DirectX::XMUINT2& obj) noexcept
+    {
+        return std::format("[{},{}]", obj.x, obj.y); // Format as "[x,y]"
     }
 };
 

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<registry>
+  <node name="ImageInput">
+    <property name="image_path" type="path" ui_name="Image Path" ui_desc="Path to image file."/>
+    <property name="image_size" type="size" ui_name="Image Size" ui_desc="Size of the image in pixels."/>
+    <property name="origin" type="point" ui_name="Origin" ui_desc="Origin (Anchor) point of the image."/>
+    <property name="rotation_2d" type="f32" default="0.0" ui_name="Rotation (2D)" ui_desc="Rotation of the image in degrees."/>
+    <property name="crop_rect" type="rect" disabled="true" ui_name="Crop Rectangle" ui_desc="Rectangle to crop the image."/>
+  </node>
+  <node name="WindowOutput">
+    <property name="name" type="u8string" default="&quot;Vortex Output Window&quot;" ui_name="Window Title" ui_desc="Title of the output window."/>
+    <property name="window_size" type="sizeu" default="1920,1080" ui_name="Window Size" ui_desc="Resolution of the output window."/>
+  </node>
+  <node name="NDIOutput">
+    <property name="name" type="u8string" default="&quot;Vortex NDI Output&quot;" ui_name="NDI Name" ui_desc="Name of the NDI stream."/>
+    <property name="window_size" type="sizeu" default="1920,1080" ui_name="Window Size" ui_desc="Resolution of the output window."/>
+  </node>
+</registry>

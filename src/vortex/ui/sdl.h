@@ -58,6 +58,14 @@ public:
         SDL_GetWindowSizeInPixels(window, &w, &h);
         return { w, h };
     }
+    void SetTitle(const char* title) noexcept
+    {
+        SDL_SetWindowTitle(window, title);
+    }
+    void SetSize(int width, int height) noexcept
+    {
+        SDL_SetWindowSize(window, width, height);
+    }
 
 private:
     SDL_Window* window;

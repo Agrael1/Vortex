@@ -8,6 +8,7 @@
 #include <vortex/util/common.h>
 #include <vortex/util/log.h>
 #include <vortex/graph/interfaces.h>
+#include <vortex/properties/props.hpp>
 
 namespace vortex {
 class NDILibrary
@@ -162,29 +163,19 @@ private:
 };
 #endif // NDI_AVAILABLE
 
-struct NDIOutputProperties {
-    wis::Size2D size = { 1280, 720 };
-    wis::DataFormat format = wis::DataFormat::RGBA8Unorm;
-    std::string_view name = "Vortex NDI Output";
-
-    template<typename Self>
-    void SetPropertyStub(this Self& self, uint32_t index, std::string_view value, bool notify = false)
-    {
-    }
-};
 
 class NDIOutput : public vortex::graph::OutputImpl<NDIOutput, NDIOutputProperties>
 {
 public:
     NDIOutput(const vortex::Graphics& gfx)
 #ifdef NDI_AVAILABLE
-        : _swapchain(gfx)
+        : _swapchain(gfx, { window_size.x, window_size.y })
 #endif
     {
         wis::Result result = wis::success;
         // Create the render target for the NDI output
         wis::RenderTargetDesc rt_desc{
-            .format = format,
+            .format = wis::DataFormat::RGBA8Unorm,
         };
         _render_target = gfx.GetDevice().CreateRenderTarget(result, _swapchain.GetTexture(), rt_desc);
         if (!vortex::success(result)) {
@@ -200,6 +191,8 @@ public:
             }
         }
     }
+
+public:
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
         auto current_texture_index = _swapchain.GetCurrentIndex();
@@ -209,7 +202,7 @@ public:
         RenderPassForwardDesc desc{
             ._current_rt_view = _render_target,
             ._current_rt_texture = &_swapchain.GetTexture(),
-            ._output_size = { size.width, size.height }
+            ._output_size = { window_size.x, window_size.y }
         };
 
         // Barrier to ensure the render target is ready for rendering

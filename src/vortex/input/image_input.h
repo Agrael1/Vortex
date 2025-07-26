@@ -6,167 +6,9 @@
 #include <vortex/util/reflection.h>
 #include <DirectXMath.h>
 
+#include <vortex/properties/props.hpp>
+
 namespace vortex {
-
-struct ImageInputProperties {
-    std::string image_path;
-    DirectX::XMFLOAT4A crop_rect = { 0.f, 0.f, 0.f, 0.f }; // Normalized crop rectangle
-    DirectX::XMINT2 size = { 100, 100 }; // Size of the image in pixels
-    DirectX::XMINT2 origin = { 0, 0 }; // Offset in pixels
-    DirectX::XMFLOAT2 rotation = { 0.f, 0.f }; // Rotation in radians
-
-    //-- Getters for the properties --//
-
-    // Get image_path as a string_view
-    template<typename Self>
-    std::string_view GetImagePath(this Self&& self)
-    {
-        return self.image_path;
-    }
-    // Get crop_rect as a DirectX::XMFLOAT4A
-    template<typename Self>
-    DirectX::XMFLOAT4A GetCropRect(this Self&& self)
-    {
-        return self.crop_rect;
-    }
-    // Get size as a DirectX::XMUINT2
-    template<typename Self>
-    DirectX::XMINT2 GetSize(this Self&& self)
-    {
-        return self.size;
-    }
-    // Get origin as a DirectX::XMINT2
-    template<typename Self>
-    DirectX::XMINT2 GetOrigin(this Self&& self)
-    {
-        return self.origin;
-    }
-    // Get rotation as a DirectX::XMFLOAT2
-    template<typename Self>
-    DirectX::XMFLOAT2 GetRotation(this Self&& self)
-    {
-        return self.rotation;
-    }
-
-    //-- Setters for the properties --//
-
-    // Set image_path from a string
-    template<typename Self>
-    void SetImagePath(this Self& self, std::string_view path, bool notify = true)
-    {
-        self.image_path = path;
-        if (notify) {
-            self.NotifyPropertyChange(0); // Notify that image_path has changed
-        }
-    }
-
-    // Set crop_rect from a DirectX::XMFLOAT4A
-    template<typename Self>
-    void SetCropRect(this Self& self, DirectX::XMFLOAT4A rect, bool notify = true)
-    {
-        self.crop_rect = rect;
-        if (notify) {
-            self.NotifyPropertyChange(1); // Notify that crop_rect has changed
-        }
-    }
-
-    // Set size from a DirectX::XMUINT2
-    template<typename Self>
-    void SetSize(this Self& self, DirectX::XMINT2 size, bool notify = true)
-    {
-        self.size = size;
-        if (notify) {
-            self.NotifyPropertyChange(2); // Notify that size has changed
-        }
-    }
-    // Set origin from a DirectX::XMINT2
-    template<typename Self>
-    void SetOrigin(this Self& self, DirectX::XMINT2 origin, bool notify = true)
-    {
-        self.origin = origin;
-        if (notify) {
-            self.NotifyPropertyChange(3); // Notify that origin has changed
-        }
-    }
-    // Set rotation from a DirectX::XMFLOAT2
-    template<typename Self>
-    void SetRotation(this Self& self, DirectX::XMFLOAT2 rotation, bool notify = true)
-    {
-        self.rotation = rotation;
-        if (notify) {
-            self.NotifyPropertyChange(4); // Notify that rotation has changed
-        }
-    }
-
-    // Comes from javascript
-    template<typename Self>
-    void SetPropertyStub(this Self& self, uint32_t index, std::string_view value, bool notify = false)
-    {
-        switch (index) {
-        case 0:
-            if (std::string_view path; vortex::reflection_traits<std::string_view>::deserialize(&path, value)) {
-                self.SetImagePath<Self>(path, notify);
-            }
-            break; // image_path
-        case 1:
-            if (DirectX::XMFLOAT4A rect; vortex::reflection_traits<DirectX::XMFLOAT4A>::deserialize(&rect, value)) {
-                self.SetCropRect<Self>(rect, notify);
-            }
-            break; // crop_rect
-        case 2:
-            if (DirectX::XMINT2 size; vortex::reflection_traits<DirectX::XMINT2>::deserialize(&size, value)) {
-                self.SetSize<Self>(size, notify);
-            }
-            break; // size
-        case 3:
-            if (DirectX::XMINT2 origin; vortex::reflection_traits<DirectX::XMINT2>::deserialize(&origin, value)) {
-                self.SetOrigin<Self>(origin, notify);
-            }
-            break; // origin
-        case 4:
-            if (DirectX::XMFLOAT2 rotation; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&rotation, value)) {
-                self.SetRotation<Self>(rotation, notify);
-            }
-            break; // rotation
-        default:
-            vortex::error("ImageInputProperties: Invalid property index: {}", index);
-            break;
-        }
-    }
-
-    template<typename Self>
-    void NotifyPropertyChange(this Self& self, uint32_t index)
-    {
-        if (!self.notifier) {
-            vortex::error("ImageInputProperties: Notifier callback is not set.");
-            return; // No notifier set, cannot notify
-        }
-
-        switch (index) {
-        case 0: // image_path
-            self.notifier(0, vortex::reflection_traits<std::string_view>::serialize(self.image_path));
-            break;
-        case 1: // crop_rect
-            self.notifier(1, vortex::reflection_traits<DirectX::XMFLOAT4A>::serialize(self.crop_rect));
-            break;
-        case 2: // size
-            self.notifier(2, vortex::reflection_traits<DirectX::XMINT2>::serialize(self.size));
-            break;
-        case 3: // origin
-            self.notifier(3, vortex::reflection_traits<DirectX::XMINT2>::serialize(self.origin));
-            break;
-        case 4: // rotation
-            self.notifier(4, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.rotation));
-            break;
-        default:
-            vortex::error("ImageInputProperties: Invalid property index for notification: {}", index);
-            break;
-        }
-    }
-
-    notifier_callback notifier; // Callback for property change notifications
-};
-
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
 class ImageInput : public vortex::graph::NodeImpl<ImageInput, ImageInputProperties, 0, 1>
 {
@@ -292,7 +134,7 @@ public:
     vortex::graph::NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {
         // Validate that the texture was loaded successfully
-        if (!_texture || size.x == 0 || size.y == 0) {
+        if (!_texture || image_size.x == 0 || image_size.y == 0) {
             return vortex::graph::NodeExecution::Skip; // Skip rendering if texture is not valid
         }
 
@@ -300,19 +142,18 @@ public:
     }
 
 public:
-    template<typename Self>
-    void SetImagePath(this Self& self, std::string_view path, bool notify = true)
+    void SetImagePath(std::string_view path, bool notify = true)
     {
-        if (self.GetImagePath() == path) {
+        if (GetImagePath() == path) {
             return; // No change in path, skip setting
         }
         if (std::filesystem::exists(path)) {
-            self.ImageInputProperties::SetImagePath(path, notify);
+            ImageInputProperties::SetImagePath(path, notify);
         } else {
             vortex::error("ImageInput: Image path does not exist: {}", path);
-            self.ImageInputProperties::SetImagePath("", notify);
+            ImageInputProperties::SetImagePath("", notify);
         }
-        self.path_changed = true; // Mark that the path has changed
+        path_changed = true; // Mark that the path has changed
     }
 
 private:

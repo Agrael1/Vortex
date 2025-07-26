@@ -51,6 +51,8 @@ public:
         auto o1 = _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
         auto o2 = _model.CreateNode(_gfx, "NDIOutput"); // Create a default output for testing
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
+        _model.SetNodeProperty(o1, 0, "Vortex Mega Output"); // Set a property for the output node
+        _model.SetNodeProperty(o1, 1, "[1080,1920]");
         _model.SetNodeInfo(o2, "NDI Output 0"); // Set some info for the NDI output node
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
         _model.ConnectNodes(i1, 0, o2, 0); // Connect the input node to the NDI output node

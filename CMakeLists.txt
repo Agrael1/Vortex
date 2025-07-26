@@ -1,5 +1,7 @@
 ﻿cmake_minimum_required (VERSION 3.22)
 
+option(VORTEX_GENERATE_PROPERTIES "Build generator and generate properties" ON)
+
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141 AND MSVC)
   cmake_policy(SET CMP0141 NEW)
@@ -12,9 +14,10 @@ include(cmake/shaders.cmake)
 
 find_package(FFMPEG REQUIRED)
 
-#if (NOT FFMPEG_FOUND)
-#  message(FATAL_ERROR "FFMPEG not found. Please install FFMPEG or set FFMPEG_ROOT to the directory containing FFMPEG.")
-#endif()
+if (VORTEX_GENERATE_PROPERTiES)
+  add_subdirectory(gen)
+endif()
+
 
 add_executable(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE "src")
@@ -58,6 +61,25 @@ add_custom_command(TARGET ui POST_BUILD
   $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui
 )
 
+#if (VORTEX_GENERATE_PROPERTIES)
+#  add_custom_target(properties)
+#  set(PROP_FILES 
+#    "${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/xml/props.xml"
+#  )
+#  target_sources(properties
+#    PRIVATE ${PROP_FILES}
+#  )
+#
+#  # Generate the properties file
+#  foreach (PROP_FILE ${PROP_FILES})
+#    get_filename_component(PROP_NAME ${PROP_FILE} NAME_WE)
+#    add_custom_command(TARGET properties PRE_BUILD
+#      COMMAND $<TARGET_FILE:generator> ${PROP_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/properties/${PROP_NAME}.hpp
+#      COMMENT "Generating properties for ${PROP_NAME}"
+#    )
+#  endforeach()
+#  add_dependencies(${PROJECT_NAME} properties)
+#endif()
 
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -77,7 +99,6 @@ target_link_libraries(${PROJECT_NAME}
     libcef_dll_wrapper
     
     FFmpeg::FFmpeg
-    Graaf::Graaf
 
 
     wis::wisdom-headers

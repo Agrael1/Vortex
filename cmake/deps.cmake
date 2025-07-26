@@ -70,16 +70,6 @@ target_link_libraries(libcef_dll_wrapper PUBLIC
   "${CEF_SOURCE_DIR}/Release/libcef.lib"
 )
 
-# graaf
-CPMAddPackage(
-  NAME graaf
-  GIT_REPOSITORY https://github.com/bobluppes/graaf.git
-  GIT_TAG main
-  OPTIONS
-  SKIP_TESTS ON
-  SKIP_EXAMPLES ON
-  SKIP_BENCHMARKS ON
-)
 
 # NDI SDK
 if (NOT DEFINED ENV{NDI_SDK_DIR})
@@ -112,4 +102,13 @@ else()
       IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
     )
   endif()
+endif()
+
+if (VORTEX_GENERATE_PROPERTIES)
+  # tinyxml2
+  CPMAddPackage(
+    NAME tinyxml2
+    GITHUB_REPOSITORY leethomason/tinyxml2
+    GIT_TAG master
+  )
 endif()

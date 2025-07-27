@@ -30,6 +30,7 @@ struct AppExitControl {
 
 class App
 {
+    uintptr_t xo1 = 0; // Current frame index
     using MessageHandler = void (App::*)(CefListValue&);
 
 public:
@@ -51,23 +52,39 @@ public:
         };
 
         _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
+
+        // Test setup of the model
+        auto i0 = _model.CreateNode(_gfx, "ImageInput", external_observer); // Create a default node for testing
         auto i1 = _model.CreateNode(_gfx, "ImageInput", external_observer); // Create a default node for testing
-        _model.SetNodeInfo(i1, "Image 0"); // Set some info for the node
+        auto b0 = _model.CreateNode(_gfx, "Blend", external_observer); // Create a blend node for testing
         auto o1 = _model.CreateNode(_gfx, "WindowOutput", external_observer); // Create a default output for testing
         auto o2 = _model.CreateNode(_gfx, "NDIOutput", external_observer); // Create a default output for testing
+
+        _model.SetNodeInfo(i0, "Image 0"); // Set some info for the node
+        _model.SetNodeInfo(i1, "Image 1"); // Set some info for the node
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
+        _model.SetNodeInfo(o2, "NDI Output 0"); // Set some info for the NDI output node
+        _model.SetNodeInfo(b0, "Blend Node"); // Set some info for the blend node
+
         _model.SetNodeProperty(o1, 0, "Vortex Mega Output"); // Set a property for the output node
         _model.SetNodeProperty(o1, 1, "[1080,1920]");
-        _model.SetNodeInfo(o2, "NDI Output 0"); // Set some info for the NDI output node
+
+        _model.SetNodeProperty(o2, 0, "Aeee BOI Output"); // Set a property for the NDI output node
+        _model.SetNodeProperty(o2, 1, "[1000,1000]");
+
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
         _model.ConnectNodes(i1, 0, o2, 0); // Connect the input node to the NDI output node
 
         _model.SetNodeProperty(i1, 0, "ui/HDR.jpg", true); // Set a property for the input node
+
+        xo1 = o2; // Set the current node to the first input node
     }
 
 public:
     int Run()
     {
+        int i = 0; // Frame counter
+        int y = 0; // Frame index
         while (!_exit.exit) {
             if (int code = _ui_app.ProcessEvents()) {
                 return code; // Exit requested
@@ -207,7 +224,7 @@ private:
         //_ui_app.SendUIMessage(u"node_update", std::bit_cast<double>(node), property_index, value);
     }
 
-private: 
+private:
     vortex::NDILibrary _ndi;
     vortex::ui::SDLLibrary _sdl;
 

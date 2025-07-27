@@ -1,4 +1,4 @@
-#include <wisdom/wisdom.hpp>
+#pragma once
 #include <wisdom/wisdom_debug.hpp>
 #include <wisdom/wisdom_descriptor_buffer.hpp>
 #include <wisdom/wisdom_extended_allocation.hpp>
@@ -66,6 +66,12 @@ public:
 
 public:
     wis::Shader LoadShader(std::filesystem::path path) const;
+    void Throttle()
+    {
+        auto& q = GetMainQueue();
+        q.SignalQueue(_fence, ++_fence_value);
+        _fence.Wait(_fence_value);
+    }
 
 private:
     void CreateDevice(bool debug_extension);
@@ -79,6 +85,9 @@ private:
     vortex::PlatformExtension _platform;
     wis::DescriptorBufferExtension _descriptor_buffer_ext;
     wis::ExtendedAllocation _extended_allocation_ext;
+
+    wis::Fence _fence; // Used for throttling (stopping processing, e.g. for resize). 
+    uint64_t _fence_value = 0;
 };
 
 } // namespace vortex

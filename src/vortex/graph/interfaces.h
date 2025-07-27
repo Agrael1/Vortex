@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/graph/node_factory.h>
 #include <vortex/graph/ports.h>
+#include <vortex/util/reflection.h>
 
 namespace vortex {
 class Graphics; // Forward declaration of Graphics class
@@ -32,6 +33,7 @@ struct alignas(16) INode {
     virtual ~INode() = default;
     virtual void Update(const vortex::Graphics& gfx, RenderProbe& probe) { };
     virtual void Evaluate(const vortex::Graphics& gfx, RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) { };
+    virtual void SetPropertyUpdateNotifier(UpdateNotifier notifier) { }
     constexpr virtual NodeType GetType() const noexcept
     {
         return NodeType::None; // Default node type
@@ -75,12 +77,18 @@ public:
     static constexpr std::string_view name = reflect::type_name<CRTP>();
     static void RegisterNode()
     {
-        auto callback = [](const vortex::Graphics& gfx) -> std::unique_ptr<INode> {
+        auto callback = [](const vortex::Graphics& gfx, UpdateNotifier::External updater = {}) -> std::unique_ptr<INode> {
             auto node = std::make_unique<CRTP>(gfx);
+            node->SetPropertyUpdateNotifier({ std::bit_cast<uintptr_t>(node.get()), std::move(updater) });
             return node;
         };
         NodeFactory::RegisterNode(name, callback);
     }
+    virtual void SetPropertyUpdateNotifier(UpdateNotifier notifier) override
+    {
+        static_cast<CRTP*>(this)->notifier = std::move(notifier);
+    }
+
     constexpr virtual NodeType GetType() const noexcept override
     {
         if constexpr (std::is_base_of_v<IOutput, CRTP>) {

@@ -11,7 +11,7 @@
 
 namespace vortex {
 struct ImageInputProperties {
-    notifier_callback notifier; // Callback for property change notifications
+    UpdateNotifier notifier; // Callback for property change notifications
 public:
     std::string image_path{}; //<UI attribute - Image Path: Path to image file.
     DirectX::XMFLOAT2 image_size{}; //<UI attribute - Image Size: Size of the image in pixels.
@@ -152,7 +152,7 @@ public:
 } // namespace vortex
 namespace vortex {
 struct WindowOutputProperties {
-    notifier_callback notifier; // Callback for property change notifications
+    UpdateNotifier notifier; // Callback for property change notifications
 public:
     std::string name{ "Vortex Output Window" }; //<UI attribute - Window Title: Title of the output window.
     DirectX::XMUINT2 window_size{ 1920, 1080 }; //<UI attribute - Window Size: Resolution of the output window.
@@ -230,7 +230,7 @@ public:
 } // namespace vortex
 namespace vortex {
 struct NDIOutputProperties {
-    notifier_callback notifier; // Callback for property change notifications
+    UpdateNotifier notifier; // Callback for property change notifications
 public:
     std::string name{ "Vortex NDI Output" }; //<UI attribute - NDI Name: Name of the NDI stream.
     DirectX::XMUINT2 window_size{ 1920, 1080 }; //<UI attribute - Window Size: Resolution of the output window.

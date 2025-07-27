@@ -45,11 +45,16 @@ public:
         }
         fence = _gfx.GetDevice().CreateFence(res);
 
+        vortex::UpdateNotifier::External external_observer{
+            .observer = this,
+            .callback = &App::OnNodeUpdateThunk
+        };
+
         _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
-        auto i1 = _model.CreateNode(_gfx, "ImageInput"); // Create a default node for testing
+        auto i1 = _model.CreateNode(_gfx, "ImageInput", external_observer); // Create a default node for testing
         _model.SetNodeInfo(i1, "Image 0"); // Set some info for the node
-        auto o1 = _model.CreateNode(_gfx, "WindowOutput"); // Create a default output for testing
-        auto o2 = _model.CreateNode(_gfx, "NDIOutput"); // Create a default output for testing
+        auto o1 = _model.CreateNode(_gfx, "WindowOutput", external_observer); // Create a default output for testing
+        auto o2 = _model.CreateNode(_gfx, "NDIOutput", external_observer); // Create a default output for testing
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
         _model.SetNodeProperty(o1, 0, "Vortex Mega Output"); // Set a property for the output node
         _model.SetNodeProperty(o1, 1, "[1080,1920]");
@@ -190,6 +195,19 @@ private:
     }
 
 private:
+    // Thunk for node update observer
+    static void OnNodeUpdateThunk(void* observer, uintptr_t node, uint32_t property_index, std::string_view value)
+    {
+        std::bit_cast<App*>(observer)->OnNodeUpdate(node, property_index, value);
+    }
+    void OnNodeUpdate(uintptr_t node, uint32_t property_index, std::string_view value)
+    {
+        // Handle node update logic here
+        vortex::info("Node updated: {} (Property: {}, Value: {})", node, property_index, value);
+        //_ui_app.SendUIMessage(u"node_update", std::bit_cast<double>(node), property_index, value);
+    }
+
+private: 
     vortex::NDILibrary _ndi;
     vortex::ui::SDLLibrary _sdl;
 

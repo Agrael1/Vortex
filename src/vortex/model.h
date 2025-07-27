@@ -12,9 +12,9 @@ public:
     GraphModel() = default;
 
 public:
-    uintptr_t CreateNode(const vortex::Graphics& gfx, std::string_view node_name)
+    uintptr_t CreateNode(const vortex::Graphics& gfx, std::string_view node_name, UpdateNotifier::External updater = {})
     {
-        auto node = NodeFactory::CreateNode(node_name, gfx);
+        auto node = NodeFactory::CreateNode(node_name, gfx, updater);
         if (!node) {
             vortex::error("Failed to create node: {}", node_name);
             return 0; // Return 0 if node creation failed

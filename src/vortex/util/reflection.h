@@ -9,7 +9,7 @@ template<typename T>
 concept digit = std::is_integral_v<T> || std::is_floating_point_v<T>;
 
 template<typename T>
-concept string_type = std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view> || std::is_same_v<T, char*>;
+concept string_type = std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view> || std::is_same_v<std::remove_const_t<T>, char*>;
 
 template<typename T>
 struct vector_reflection {
@@ -198,4 +198,36 @@ struct reflection_traits<V> : reflection_traits_base<V> {
 };
 
 using notifier_callback = std::function<void(uint32_t index, std::string_view data)>;
+
+// Just a callback, not a full observer pattern
+struct UpdateNotifier {
+    uintptr_t node = 0; ///< Node ID for the observer
+
+    struct External {
+        void* observer = nullptr; ///< Pointer to the observer
+        void (*callback)(void* observer, uintptr_t node, uint32_t index, std::string_view value) = nullptr;
+    } extra;
+
+    UpdateNotifier() = default;
+    UpdateNotifier(uintptr_t node, External ex)
+        : node(node)
+        , extra(std::move(ex))
+    {
+    }
+    void Notify(uint32_t index, std::string_view value) const
+    {
+        if (extra.callback && extra.observer) {
+            extra.callback(extra.observer, node, index, value);
+        }
+    }
+    void operator()(uint32_t index, std::string_view value) const
+    {
+        Notify(index, value);
+    }
+    operator bool() const noexcept
+    {
+        return extra.observer && extra.callback;
+    }
+};
+
 } // namespace vortex

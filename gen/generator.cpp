@@ -85,7 +85,7 @@ public:
     std::string GenerateClass(tinyxml2::XMLElement* prop, std::string_view name)
     {
         // Generate class definition
-        std::string aclass = std::format("namespace vortex {{ struct {}Properties {{notifier_callback notifier; // Callback for property change notifications\npublic:\n", name);
+        std::string aclass = std::format("namespace vortex {{ struct {}Properties {{UpdateNotifier notifier; // Callback for property change notifications\npublic:\n", name);
         std::string optional_attributes;
         std::string setters;
         std::string getters;

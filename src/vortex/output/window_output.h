@@ -72,6 +72,7 @@ public:
         _fence.Wait(_fence_value);
     }
 
+    // Setters for properties
     void SetName(std::string_view name, bool notify = false)
     {
         WindowOutputProperties::SetName(name, true);

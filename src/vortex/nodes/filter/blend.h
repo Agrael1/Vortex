@@ -1,0 +1,21 @@
+#pragma once
+
+#include <vortex/graph/interfaces.h>
+#include <vortex/properties/props.hpp>
+
+namespace vortex {
+// Blend node is a filter that blends colors with a specified factor or a mask.
+class Blend : public vortex::graph::FilterImpl<Blend, BlendProperties, 2, 1>
+{
+public:
+    Blend() = default;
+    Blend(const vortex::Graphics& gfx)
+    {
+    }
+
+    // Override the Evaluate method to perform blending
+    virtual void Evaluate(const vortex::Graphics& gfx, RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
+    {
+    }
+};
+} // namespace vortex

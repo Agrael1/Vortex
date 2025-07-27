@@ -10,6 +10,168 @@
 #include <DirectXMath.h>
 
 namespace vortex {
+enum class BlendChannel {
+    All, //<UI name - All Channels:
+    Red, //<UI name - Red:
+    Green, //<UI name - Green:
+    Blue, //<UI name - Blue:
+    Alpha, //<UI name - Alpha:
+    RGB, //<UI name - RGB Only:
+};
+template<>
+struct enum_traits<BlendChannel> {
+    static constexpr std::string_view strings[] = {
+        "All Channels",
+        "Red",
+        "Green",
+        "Blue",
+        "Alpha",
+        "RGB Only",
+    };
+};
+enum class BlendMode {
+    Normal, //<UI name - Normal:
+    Multiply, //<UI name - Multiply:
+    Screen, //<UI name - Screen:
+    Overlay, //<UI name - Overlay:
+    Add, //<UI name - Add:
+    Subtract, //<UI name - Subtract:
+    Difference, //<UI name - Difference:
+    Darken, //<UI name - Darken:
+    Lighten, //<UI name - Lighten:
+};
+template<>
+struct enum_traits<BlendMode> {
+    static constexpr std::string_view strings[] = {
+        "Normal",
+        "Multiply",
+        "Screen",
+        "Overlay",
+        "Add",
+        "Subtract",
+        "Difference",
+        "Darken",
+        "Lighten",
+    };
+};
+struct BlendProperties {
+    UpdateNotifier notifier; // Callback for property change notifications
+public:
+    BlendMode blend_mode{ BlendMode::Normal }; //<UI attribute - Blend Mode: How to combine the images.
+    BlendChannel blend_channel{ BlendChannel::All }; //<UI attribute - Blend Channel: Which channels to use from source.
+    float opacity{ 1.0 }; //<UI attribute - Opacity: Overall opacity of the blend.
+    bool clamp_result{ true }; //<UI attribute - Clamp Result: Clamp output to [0,1] range.
+
+public:
+    void SetBlendMode(BlendMode value, bool notify = false)
+    {
+        blend_mode = value;
+        if (notify) {
+            NotifyPropertyChange(0);
+        }
+    }
+    void SetBlendChannel(BlendChannel value, bool notify = false)
+    {
+        blend_channel = value;
+        if (notify) {
+            NotifyPropertyChange(1);
+        }
+    }
+    void SetOpacity(float value, bool notify = false)
+    {
+        opacity = value;
+        if (notify) {
+            NotifyPropertyChange(2);
+        }
+    }
+    void SetClampResult(bool value, bool notify = false)
+    {
+        clamp_result = value;
+        if (notify) {
+            NotifyPropertyChange(3);
+        }
+    }
+
+public:
+    template<typename Self>
+    BlendMode GetBlendMode(this Self&& self)
+    {
+        return self.blend_mode;
+    }
+    template<typename Self>
+    BlendChannel GetBlendChannel(this Self&& self)
+    {
+        return self.blend_channel;
+    }
+    template<typename Self>
+    float GetOpacity(this Self&& self)
+    {
+        return self.opacity;
+    }
+    template<typename Self>
+    bool GetClampResult(this Self&& self)
+    {
+        return self.clamp_result;
+    }
+
+public:
+    template<typename Self>
+    void NotifyPropertyChange(this Self&& self, uint32_t index)
+    {
+        if (!self.notifier) {
+            vortex::error("Blend: Notifier callback is not set.");
+            return; // No notifier set, cannot notify
+        }
+        switch (index) {
+        case 0:
+            self.notifier(0, vortex::reflection_traits<decltype(self.blend_mode)>::serialize(self.blend_mode));
+            break;
+        case 1:
+            self.notifier(1, vortex::reflection_traits<decltype(self.blend_channel)>::serialize(self.blend_channel));
+            break;
+        case 2:
+            self.notifier(2, vortex::reflection_traits<decltype(self.opacity)>::serialize(self.opacity));
+            break;
+        case 3:
+            self.notifier(3, vortex::reflection_traits<decltype(self.clamp_result)>::serialize(self.clamp_result));
+            break;
+        default:
+            vortex::error("Blend: Invalid property index for notification: {}", index);
+            break;
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (BlendMode out_value; vortex::reflection_traits<BlendMode>::deserialize(&out_value, value)) {
+                self.SetBlendMode(out_value, notify);
+                break;
+            }
+        case 1:
+            if (BlendChannel out_value; vortex::reflection_traits<BlendChannel>::deserialize(&out_value, value)) {
+                self.SetBlendChannel(out_value, notify);
+                break;
+            }
+        case 2:
+            if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
+                self.SetOpacity(out_value, notify);
+                break;
+            }
+        case 3:
+            if (bool out_value; vortex::reflection_traits<bool>::deserialize(&out_value, value)) {
+                self.SetClampResult(out_value, notify);
+                break;
+            }
+        default:
+            vortex::error("Blend: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+};
 struct ImageInputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
@@ -149,8 +311,6 @@ public:
         }
     }
 };
-} // namespace vortex
-namespace vortex {
 struct WindowOutputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
@@ -227,8 +387,6 @@ public:
         }
     }
 };
-} // namespace vortex
-namespace vortex {
 struct NDIOutputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:

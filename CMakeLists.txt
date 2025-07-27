@@ -30,20 +30,18 @@ PUBLIC
   "src/vortex/graphics.h"
   "src/vortex/util/common.h"
   
-  "src/vortex/node_registry.h"
+  "src/vortex/nodes/node_registry.h"
   "src/vortex/ui/ui_app.h"
   "src/vortex/gfx/swapchain.h"
 
-  "src/vortex/input/image_input.h"
-  "src/vortex/util/log.h"
-  
+  "src/vortex/nodes/input/image_input.h"
+  "src/vortex/nodes/filter/composition.h"
+
   "src/vortex/codec/codec_ffmpeg.h" 
   "src/vortex/codec/codec_ffmpeg.cpp" 
    
   "src/vortex/probe.h" 
   "src/vortex/pipeline_storage.h" 
-  "src/vortex/gfx/texture.h"
-  "src/vortex/gfx/texture.cpp"
 
   "src/vortex/ui/cef_app.h"
   "src/vortex/ui/sdl.h"
@@ -51,7 +49,29 @@ PUBLIC
   "src/vortex/ui/client.h" 
   "src/vortex/ui/value.h" 
   "src/vortex/ui/ui_app.h"
- "src/vortex/ui/ui_app.cpp" "src/vortex/ui/sdl.cpp" "src/vortex/platform.cpp" "src/vortex/graphics.cpp" "src/vortex/gfx/descriptor_buffer.h" "src/vortex/gfx/consts.h" "src/vortex/gfx/descriptor_buffer.cpp" "src/vortex/util/reflection.h" "src/vortex/model.h" "src/vortex/ui/call_handler.h" "src/vortex/ui/cef_app.cpp"  "src/vortex/update_queue.h" "src/vortex/util/lib/SPSC-Queue.h" "src/vortex/graph/ports.h" "src/vortex/graph/connection.h" "src/vortex/graph/interfaces.h" "src/vortex/graph/node_factory.h")
+  "src/vortex/ui/ui_app.cpp" 
+  "src/vortex/ui/sdl.cpp"
+  "src/vortex/ui/call_handler.h" 
+  "src/vortex/ui/cef_app.cpp"  
+
+  "src/vortex/gfx/descriptor_buffer.h" 
+  "src/vortex/gfx/consts.h" 
+  "src/vortex/gfx/descriptor_buffer.cpp" 
+  "src/vortex/gfx/texture.cpp"
+  "src/vortex/gfx/texture.h"
+
+  "src/vortex/util/lib/SPSC-Queue.h" 
+  "src/vortex/util/reflection.h" 
+  "src/vortex/util/log.h"
+
+  "src/vortex/platform.cpp" 
+  "src/vortex/graphics.cpp" 
+  "src/vortex/model.h" 
+  "src/vortex/update_queue.h" 
+  "src/vortex/graph/ports.h" 
+  "src/vortex/graph/connection.h" 
+  "src/vortex/graph/interfaces.h" 
+  "src/vortex/graph/node_factory.h"  "src/vortex/nodes/filter/blend.h")
 
 add_custom_target(ui)
 # Copy the UI html files to the output directory

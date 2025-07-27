@@ -142,4 +142,6 @@ protected:
 template<typename CRTP, typename Properties, std::size_t sinks = 1>
 using OutputImpl = NodeImpl<CRTP, Properties, sinks, 0, EvaluationStrategy::Inherited, IOutput>;
 
+template<typename CRTP, typename Properties, std::size_t sinks = 0, std::size_t sources = 0, EvaluationStrategy strategy = EvaluationStrategy::Inherited>
+using FilterImpl = NodeImpl<CRTP, Properties, sinks, sources, strategy, INode>;
 } // namespace vortex::graph

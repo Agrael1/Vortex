@@ -73,7 +73,17 @@ public:
             << "#include <vortex/util/log.h>\n"
             << "#include <DirectXMath.h>\n\n";
 
+        ofs << "namespace vortex {\n";
+
         // Iterate through each property in the XML
+        for (tinyxml2::XMLElement* prop = root->FirstChildElement("enum"); prop; prop = prop->NextSiblingElement("enum")) {
+            const char* name = prop->Attribute("name");
+            if (!name) {
+                throw std::runtime_error("Property missing 'name' attribute.");
+            }
+            ofs << GenerateEnum(prop, name);
+        }
+
         for (tinyxml2::XMLElement* prop = root->FirstChildElement("node"); prop; prop = prop->NextSiblingElement("node")) {
             const char* name = prop->Attribute("name");
             if (!name) {
@@ -81,11 +91,13 @@ public:
             }
             ofs << GenerateClass(prop, name);
         }
+
+        ofs << "}\n"; // Close namespace vortex
     }
     std::string GenerateClass(tinyxml2::XMLElement* prop, std::string_view name)
     {
         // Generate class definition
-        std::string aclass = std::format("namespace vortex {{ struct {}Properties {{UpdateNotifier notifier; // Callback for property change notifications\npublic:\n", name);
+        std::string aclass = std::format("struct {}Properties {{UpdateNotifier notifier; // Callback for property change notifications\npublic:\n", name);
         std::string optional_attributes;
         std::string setters;
         std::string getters;
@@ -225,8 +237,40 @@ public:
                               "}}\n",
                               set_property_stub, name, "{}");
 
-        aclass += "};}\n";
+        aclass += "};\n";
         return aclass;
+    }
+    std::string GenerateEnum(tinyxml2::XMLElement* prop, std::string_view name)
+    {
+        // Generate enum definition
+        std::string aenum = std::format("enum class {} {{\n", name);
+        std::string enum_meta = std::format("template<>struct enum_traits<{}>{{static constexpr std::string_view strings[] = {{", name);
+
+        uint32_t enum_count = 0;
+        // Iterate through each enum value in the node
+        for (tinyxml2::XMLElement* child = prop->FirstChildElement("value"); child; child = child->NextSiblingElement("value")) {
+            const char* value_name = child->Attribute("name");
+            const char* value = child->Attribute("value");
+            const char* value_description = child->Attribute("ui_desc");
+            const char* value_ui_name = child->Attribute("ui_name");
+
+            std::string_view value_ui_name_sv = value_ui_name ? value_ui_name : value_name;
+            // Check if the value has a name
+            if (!value_name) {
+                throw std::runtime_error("Enum value missing 'name' or 'value' attribute.");
+            }
+
+            aenum += std::format("    {},\t//<UI name - {}: \n", 
+                value_name, 
+                value_ui_name_sv, 
+                value_description ? value_description : "");
+
+            enum_meta += std::format("\"{}\", ", value_ui_name_sv);
+        }
+        aenum += "};\n";
+        enum_meta += "};\n};\n";
+
+        return aenum + enum_meta;
     }
 
 private:

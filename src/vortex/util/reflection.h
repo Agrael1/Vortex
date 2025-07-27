@@ -230,4 +230,13 @@ struct UpdateNotifier {
     }
 };
 
+
+
+template<typename T> 
+concept enum_type = std::is_enum_v<T>;
+
+template<typename E>
+struct enum_traits {
+};
+
 } // namespace vortex

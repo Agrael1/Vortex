@@ -1,7 +1,8 @@
 #pragma once
-#include <vortex/output/window_output.h>
-#include <vortex/output/ndi_output.h>
-#include <vortex/input/image_input.h>
+#include <vortex/nodes/output/window_output.h>
+#include <vortex/nodes/output/ndi_output.h>
+#include <vortex/nodes/input/image_input.h>
+#include <vortex/nodes/filter/blend.h>
 
 namespace vortex {
 inline void RegisterHardwareNodes()
@@ -9,5 +10,6 @@ inline void RegisterHardwareNodes()
     vortex::WindowOutput::RegisterNode();
     vortex::NDIOutput::RegisterNode();
     vortex::ImageInput::RegisterNode();
+    vortex::Blend::RegisterNode();
 }
 } // namespace vortex

@@ -1,6 +1,6 @@
 #pragma once
 #include <vortex/graphics.h>
-#include <vortex/node_registry.h>
+#include <vortex/nodes/node_registry.h>
 #include <vortex/pipeline_storage.h>
 #include <vortex/gfx/descriptor_buffer.h>
 

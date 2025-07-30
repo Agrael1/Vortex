@@ -8,8 +8,8 @@ namespace vortex {
 class Blend : public vortex::graph::FilterImpl<Blend, BlendProperties, 2, 1>
 {
 public:
-    Blend() = default;
-    Blend(const vortex::Graphics& gfx)
+    Blend(const vortex::Graphics& gfx, SerializedProperties props)
+        : ImplClass(props)
     {
     }
 

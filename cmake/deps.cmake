@@ -70,6 +70,12 @@ target_link_libraries(libcef_dll_wrapper PUBLIC
   "${CEF_SOURCE_DIR}/Release/libcef.lib"
 )
 
+# frozen
+CPMAddPackage(
+  NAME frozen
+  GITHUB_REPOSITORY serge-sans-paille/frozen
+  GIT_TAG 1.2.0
+)
 
 # NDI SDK
 if (NOT DEFINED ENV{NDI_SDK_DIR})

@@ -14,7 +14,8 @@ class ImageInput : public vortex::graph::NodeImpl<ImageInput, ImageInputProperti
 {
 public:
     ImageInput() = default;
-    ImageInput(const vortex::Graphics& gfx)
+    ImageInput(const vortex::Graphics& gfx, SerializedProperties props)
+        : ImplClass(props)
     {
         // Create a root signature for the image input node
         wis::Result result = wis::success;
@@ -74,6 +75,11 @@ public:
                                                                  .border_color = { 0.f, 0.f, 0.f, 0.f }, // Transparent border color
                                                          });
         // clang-format on
+
+        if (!image_path.empty()) {
+            // Load the texture from the image path
+            path_changed = true; // Mark that the path has changed
+        }
     }
 
 public:
@@ -88,6 +94,23 @@ public:
             probe._descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
             probe._descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _sampler);
 
+            auto& cmd_list = *probe._command_list;
+            // Update state to shader resource
+            cmd_list.Reset();
+            cmd_list.TextureBarrier({
+                                            .sync_before = wis::BarrierSync::None,
+                                            .sync_after = wis::BarrierSync::None,
+                                            .access_before = wis::ResourceAccess::NoAccess,
+                                            .access_after = wis::ResourceAccess::NoAccess,
+                                            .state_before = wis::TextureState::Undefined,
+                                            .state_after = wis::TextureState::ShaderResource,
+                }, _texture.Get());
+
+            cmd_list.Close();
+            wis::CommandListView views[]{ cmd_list };
+            gfx.GetMainQueue().ExecuteCommandLists(views, 1);
+            gfx.WaitForGPU(); // Ensure the texture is ready for rendering
+
             path_changed = false; // Reset the path changed flag after loading
         }
     }
@@ -95,7 +118,7 @@ public:
     {
         // Check if the texture is valid before rendering
         if (!_texture || _texture.GetSize().width == 0 || _texture.GetSize().height == 0) {
-            vortex::error("ImageInput: Texture is not valid or has zero size.");
+            vortex::info("ImageInput: Texture is not valid or has zero size.");
             return; // Skip rendering if texture is not valid
         }
 

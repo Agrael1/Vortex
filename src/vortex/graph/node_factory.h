@@ -13,7 +13,7 @@ class INode; // Forward declaration of INode
 class NodeFactory
 {
     // Use callback to create a node
-    using CreateNodeCallback = std::unique_ptr<INode> (*)(const vortex::Graphics& gfx, UpdateNotifier::External updater);
+    using CreateNodeCallback = std::unique_ptr<INode> (*)(const vortex::Graphics& gfx, UpdateNotifier::External updater, SerializedProperties values);
 
 public:
     NodeFactory() = default;
@@ -25,11 +25,11 @@ public:
     {
         node_creators[std::string(name)] = callback;
     }
-    static std::unique_ptr<INode> CreateNode(std::string_view name, const vortex::Graphics& gfx, UpdateNotifier::External updater = {})
+    static std::unique_ptr<INode> CreateNode(std::string_view name, const vortex::Graphics& gfx, UpdateNotifier::External updater = {}, SerializedProperties values = {})
     {
         auto it = node_creators.find(name);
         if (it != node_creators.end()) {
-            return it->second(gfx, updater);
+            return it->second(gfx, updater, values);
         }
         return nullptr;
     }

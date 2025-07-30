@@ -5,6 +5,8 @@
 #include <tinyxml2.h>
 #include <iostream>
 #include <filesystem>
+#include <span>
+#include <bitset>
 
 constexpr inline std::string_view clang_format_exe = CLANG_FORMAT_EXECUTABLE;
 void FormatFile(std::filesystem::path file)
@@ -71,7 +73,9 @@ public:
             << "#include <optional>\n"
             << "#include <vortex/util/reflection.h>\n"
             << "#include <vortex/util/log.h>\n"
-            << "#include <DirectXMath.h>\n\n";
+            << "#include <DirectXMath.h>\n";
+            ofs << "#include <frozen/unordered_map.h>\n"
+            << "#include <frozen/string.h>\n\n";
 
         ofs << "namespace vortex {\n";
 
@@ -97,14 +101,19 @@ public:
     std::string GenerateClass(tinyxml2::XMLElement* prop, std::string_view name)
     {
         // Generate class definition
-        std::string aclass = std::format("struct {}Properties {{UpdateNotifier notifier; // Callback for property change notifications\npublic:\n", name);
+        std::string bclass = std::format("struct {}Properties {{UpdateNotifier notifier; // Callback for property change notifications\npublic:\n", name);
+        std::string aclass;
         std::string optional_attributes;
         std::string setters;
         std::string getters;
         std::string notify_property_change; // switch case
         std::string set_property_stub; // stub for set_property
 
+        std::string frozen_hash = std::format("static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({{\n", name);
+
         uint32_t prop_count = 0;
+
+        std::vector<std::string_view> property_names;
 
         // Iterate through each property in the node
         for (tinyxml2::XMLElement* child = prop->FirstChildElement("property"); child; child = child->NextSiblingElement("property")) {
@@ -117,6 +126,9 @@ public:
             if (!prop_name || !prop_type) {
                 throw std::runtime_error("Property missing 'name' or 'type' attribute.");
             }
+
+            property_names.push_back(prop_name);
+            frozen_hash += std::format("    {{\"{}\", {}}},\n", prop_name, prop_count);
 
             // Check if the type is a standard type
             std::string_view prop_type_trsf;
@@ -182,21 +194,21 @@ public:
                                        pascal_prop_name,
                                        prop_name);
             }
-            notify_property_change += std::format("case {}: self.notifier({}, vortex::reflection_traits<decltype(self.{})>::serialize(self.{}));break;\n",
+            notify_property_change += std::format("case {}: self.notifier({}, vortex::reflection_traits<{}>::serialize(self.Get{}()));break;\n",
                                                   prop_count,
                                                   prop_count,
-                                                  prop_name,
-                                                  prop_name);
+                                                  transform_type,
+                                                  pascal_prop_name);
             set_property_stub += std::format(
                     "case {}: if ({} out_value; vortex::reflection_traits<{}>::deserialize(&out_value, value)) {{"
                     "self.Set{}(out_value, notify);break; }}",
                     prop_count,
                     transform_type,
                     transform_type,
-                    pascal_prop_name);
+                    pascal_prop_name);            
             prop_count++;
         }
-
+        frozen_hash += "});\n";
         if (!optional_attributes.empty()) {
             aclass += "\npublic:";
             aclass += optional_attributes;
@@ -236,9 +248,11 @@ public:
                               "    }}\n"
                               "}}\n",
                               set_property_stub, name, "{}");
+        // Generate Serialize method
+        aclass += GenerateSerialization(property_names);
 
         aclass += "};\n";
-        return aclass;
+        return bclass + frozen_hash + aclass;
     }
     std::string GenerateEnum(tinyxml2::XMLElement* prop, std::string_view name)
     {
@@ -271,6 +285,32 @@ public:
         enum_meta += "};\n};\n";
 
         return aenum + enum_meta;
+    }
+    std::string GenerateSerialization(std::span<std::string_view> properties)
+    {
+        // Json serialization code generation
+        std::string serialize_code = "template<typename Self>\n";
+        serialize_code += "std::string Serialize(this Self& self) {\n";
+        serialize_code += "    return \"{\" + ";
+        for (size_t i = 0; i < properties.size(); ++i) {
+            const auto& prop = properties[i];
+            serialize_code += std::format("\"{}:\" + ", prop);
+            serialize_code += std::format("vortex::reflection_traits<Self>::serialize(self.Get{}())", to_pascal_case(prop));
+            if (i < properties.size() - 1) {
+                serialize_code += " + \",\" + ";
+            }
+        }
+        serialize_code += "+\"}\";\n";
+        serialize_code += "}\n";
+
+        // A bit brutal deserialization code generation
+        std::string deserialize_code = "template<typename Self>\n";
+        deserialize_code += "bool Deserialize(this Self& self, SerializedProperties values, bool notify) {\n";
+        deserialize_code += "    for (auto &&[k,v] : values) {\n";
+        deserialize_code += "        size_t index = self.property_map.at(k);\n";
+        deserialize_code += "        self.SetPropertyStub(index, v, notify);\n";
+        deserialize_code += "}\nreturn true;}\n";
+        return serialize_code + deserialize_code;
     }
 
 private:

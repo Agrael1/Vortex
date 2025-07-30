@@ -119,6 +119,7 @@ target_link_libraries(${PROJECT_NAME}
     libcef_dll_wrapper
     
     FFmpeg::FFmpeg
+    frozen::frozen-headers
 
 
     wis::wisdom-headers

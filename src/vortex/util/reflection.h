@@ -239,4 +239,19 @@ template<typename E>
 struct enum_traits {
 };
 
+template<enum_type E>
+struct reflection_traits<E> : reflection_traits_base<E> {
+    // Enums are serialized as integer values, and are validated against a predefined set of strings
+    static constexpr bool deserialize(E* obj, std::string_view data) noexcept
+    {
+        return reflection_traits<std::underlying_type_t<E>>::deserialize(std::bit_cast<std::underlying_type_t<E>*>(obj), data);
+    }
+    static std::string serialize(const E& obj) noexcept
+    {
+        return std::to_string(static_cast<std::underlying_type_t<E>>(obj)); // Serialize as integer
+    }
+};
+
+using SerializedProperties = std::span<const std::pair<std::string_view, std::string_view>>; ///< Serialized properties for nodes
+
 } // namespace vortex

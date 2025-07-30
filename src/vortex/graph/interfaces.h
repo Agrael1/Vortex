@@ -60,7 +60,6 @@ struct IOutput : public INode {
 };
 
 // Factory for creating nodes
-
 template<typename CRTP,
          typename Properties,
          std::size_t sinks = 0,
@@ -68,21 +67,27 @@ template<typename CRTP,
          EvaluationStrategy strategy = EvaluationStrategy::Static,
          typename Base = INode>
 struct NodeImpl : public Base, public Properties {
-    using Base::Base;
     static constexpr EvaluationStrategy evaluation_strategy = strategy;
     using Sinks = SinkArray<sinks>;
     using Sources = SourceArray<sources>;
+    using ImplClass = NodeImpl<CRTP, Properties, sinks, sources, strategy, Base>;
 
 public:
-    static constexpr std::string_view name = reflect::type_name<CRTP>();
+    NodeImpl(SerializedProperties properties = {})
+    {
+        Properties::Deserialize(properties, false); // Deserialize properties from the provided span, don't notify since there is no notifier set yet
+    }
+
+public:
     static void RegisterNode()
     {
-        auto callback = [](const vortex::Graphics& gfx, UpdateNotifier::External updater = {}) -> std::unique_ptr<INode> {
-            auto node = std::make_unique<CRTP>(gfx);
+        auto callback = [](const vortex::Graphics& gfx, UpdateNotifier::External updater = {}, SerializedProperties values = {}) -> std::unique_ptr<INode> {
+            auto node = std::make_unique<CRTP>(gfx, values);
             node->SetPropertyUpdateNotifier({ std::bit_cast<uintptr_t>(node.get()), std::move(updater) });
+            node->SetInitialized(); // Mark the node as initialized
             return node;
         };
-        NodeFactory::RegisterNode(name, callback);
+        NodeFactory::RegisterNode(reflect::type_name<CRTP>(), callback);
     }
     virtual void SetPropertyUpdateNotifier(UpdateNotifier notifier) override
     {
@@ -122,6 +127,16 @@ public:
         return _sources.GetSources();
     }
 
+    // Called from the node factory to initialize the node
+    void SetInitialized() noexcept
+    {
+        _initialized = true;
+    }
+    bool IsInitialized() const noexcept
+    {
+        return _initialized; // Check if the node is initialized
+    }
+
 public:
     template<typename Self>
     void SetInfoStub(this Self&& self, std::string info) noexcept
@@ -132,6 +147,7 @@ public:
     }
 
 private:
+    bool _initialized = false; ///< Flag to check if the node is initialized
     std::string _info = std::format("{}: {}", reflect::type_name<CRTP>(), "Unnamed");
 
 protected:

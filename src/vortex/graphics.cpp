@@ -121,4 +121,10 @@ void vortex::Graphics::CreateDevice(bool debug_extension)
     if (!success(result)) {
         throw std::runtime_error(std::format("Failed to create resource allocator: {}", result.error));
     }
+
+    // Create the fence for throttling
+    _fence = _device.CreateFence(result);
+    if (!success(result)) {
+        throw std::runtime_error(std::format("Failed to create fence: {}", result.error));
+    }
 }

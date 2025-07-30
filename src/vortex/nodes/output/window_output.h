@@ -3,7 +3,6 @@
 #include <wisdom/wisdom.hpp>
 #include <wisdom/wisdom_platform.hpp>
 #include <vortex/graph/interfaces.h>
-#include <vortex/gfx/swapchain.h>
 #include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/probe.h>
 #include <vortex/properties/props.hpp>
@@ -12,9 +11,10 @@ namespace vortex {
 // Debug output is a window with a swapchain for rendering contents directly to the screen
 class WindowOutput : public vortex::graph::OutputImpl<WindowOutput, WindowOutputProperties>
 {
+    static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for render targets
 public:
-    WindowOutput(const vortex::Graphics& gfx, wis::Size2D size = { 1280, 720 }, wis::DataFormat format = wis::DataFormat::RGBA8Unorm, std::string_view name = "Vortex 1")
-        : _window(name.data(), int(size.width), int(size.height), false)
+    WindowOutput(const vortex::Graphics& gfx, SerializedProperties props)
+        : ImplClass(props), _window(name.data(), int(window_size.x), int(window_size.y), false)
     {
         wis::Result result = wis::success;
         auto [gfx_width, gfx_height] = _window.PixelSize();
@@ -28,8 +28,6 @@ public:
             .scaling = wis::SwapchainScaling::Stretch
         };
         _swapchain = _window.CreateSwapchain(gfx, desc);
-
-        size = desc.size; // Update size to match the swapchain size
 
         _textures = _swapchain.GetBufferSpan();
 
@@ -76,11 +74,16 @@ public:
     void SetName(std::string_view name, bool notify = false)
     {
         WindowOutputProperties::SetName(name, true);
-        _window.SetTitle(name.data());
+        if (IsInitialized()) {
+            _window.SetTitle(name.data());
+        }
     }
     void SetWindowSize(DirectX::XMUINT2 size, bool notify = false)
     {
         WindowOutputProperties::SetWindowSize(size, true);
+        if (!IsInitialized()) {
+            return; // Do not resize the window if it is not initialized
+        }
         _window.SetSize(int(size.x), int(size.y));
         _resized = true; // Mark as resized to trigger swapchain resize
     }

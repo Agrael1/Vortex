@@ -9,14 +9,15 @@
 namespace vortex {
 class NDIOutput : public vortex::graph::OutputImpl<NDIOutput, NDIOutputProperties>
 {
+    static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for render targets
 public:
-    NDIOutput(const vortex::Graphics& gfx)
-        : _swapchain(gfx, { window_size.x, window_size.y })
+    NDIOutput(const vortex::Graphics& gfx, SerializedProperties props)
+        : ImplClass(props), _swapchain(gfx, { window_size.x, window_size.y }, format, name)
     {
         wis::Result result = wis::success;
         // Create the render target for the NDI output
         wis::RenderTargetDesc rt_desc{
-            .format = wis::DataFormat::RGBA8Unorm,
+            .format = format,
         };
         _render_target = gfx.GetDevice().CreateRenderTarget(result, _swapchain.GetTexture(), rt_desc);
         if (!vortex::success(result)) {
@@ -31,6 +32,21 @@ public:
                 return;
             }
         }
+
+        auto& cmd_list = _command_lists[0];
+        cmd_list.TextureBarrier({
+                                        .sync_before = wis::BarrierSync::None,
+                                        .sync_after = wis::BarrierSync::None,
+                                        .access_before = wis::ResourceAccess::NoAccess,
+                                        .access_after = wis::ResourceAccess::NoAccess,
+                                        .state_before = wis::TextureState::Undefined,
+                                        .state_after = wis::TextureState::CopySource,
+                                },
+                                _swapchain.GetTexture());
+        cmd_list.Close();
+        wis::CommandListView views[]{ cmd_list };
+        gfx.GetMainQueue().ExecuteCommandLists(views, 1);
+        gfx.WaitForGPU(); // Ensure the command list is executed before proceeding
     }
 
 public:
@@ -38,12 +54,14 @@ public:
     void SetName(std::string_view value, bool notify = false)
     {
         NDIOutputProperties::SetName(value, notify);
-        _swapchain.SetName(value);
+        if (IsInitialized()) {
+            _swapchain.SetName(value);
+        }
     }
     void SetWindowSize(DirectX::XMUINT2 value, bool notify = false)
     {
         NDIOutputProperties::SetWindowSize(value, notify);
-        _resized = true;
+        _resized = IsInitialized();
     }
 
 public:

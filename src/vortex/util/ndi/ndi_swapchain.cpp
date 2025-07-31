@@ -6,7 +6,9 @@ vortex::NDISwapchain::NDISwapchain(const vortex::Graphics& gfx, wis::Size2D size
     : _video_frame(
               int32_t(size.width),
               int32_t(size.height),
-              GetNDIFormat(format))
+              GetNDIFormat(format),
+              60000, 1001
+        )
     , _format(format)
     , _send_instance(name)
 {

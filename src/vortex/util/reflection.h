@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/util/lib/reflect.h>
 #include <vortex/util/log.h>
+#include <vortex/util/rational.h>
 #include <charconv>
 #include <DirectXMath.h>
 
@@ -249,6 +250,47 @@ struct reflection_traits<E> : reflection_traits_base<E> {
     static std::string serialize(const E& obj) noexcept
     {
         return std::to_string(static_cast<std::underlying_type_t<E>>(obj)); // Serialize as integer
+    }
+};
+
+// Template pattern matching approach
+template<typename T>
+struct is_vortex_ratio : std::false_type {};
+
+template<typename D>
+struct is_vortex_ratio<vortex::ratio<D>> : std::true_type {
+    using denominator_type = D;
+};
+
+template<typename R>
+concept rational_type = is_vortex_ratio<R>::value;
+
+template<rational_type R>
+struct reflection_traits<R> : reflection_traits_base<R> {
+    using denominator_type = typename is_vortex_ratio<R>::denominator_type;
+    
+    static constexpr bool deserialize(R* obj, std::string_view data) noexcept
+    {
+        // ratio is serialized as [numerator,denominator]
+        if (data.size() < 5 || data.front() != '[' || data.back() != ']') {
+            vortex::error("Failed to deserialize {}: Invalid format {}", reflect::type_name<R>(), data);
+            return false; // Invalid format
+        }
+        std::string_view content = data.substr(1, data.size() - 2); // Remove brackets
+        std::array<std::string_view, 2> values = split_string<2>(content, ',');
+        denominator_type num = 0, denom = 1; // Default to 0/1
+        if (!reflection_traits<denominator_type>::deserialize(&num, values[0]) ||
+            !reflection_traits<denominator_type>::deserialize(&denom, values[1])) {
+            vortex::error("Failed to deserialize ratio {}: Invalid values {}", reflect::type_name<R>(), data);
+            return false; // Deserialization failed
+        }
+        return false;
+    }
+    
+    static std::string serialize(const R& obj) noexcept
+    {
+        // Serialize the ratio value
+        return std::to_string(obj.value()); // Assuming ratio has a value() method
     }
 };
 

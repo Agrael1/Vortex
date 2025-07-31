@@ -57,6 +57,7 @@ struct alignas(16) INode {
     }
 };
 struct IOutput : public INode {
+    virtual bool IsReady() const noexcept = 0; ///< Check if the output is ready for rendering
 };
 
 // Factory for creating nodes

@@ -202,13 +202,11 @@ public:
             { "image_size", 1 },
             { "origin", 2 },
             { "rotation_2d", 3 },
-            { "crop_rect", 4 },
     });
     std::string image_path{}; //<UI attribute - Image Path: Path to image file.
     DirectX::XMFLOAT2 image_size{}; //<UI attribute - Image Size: Size of the image in pixels.
     DirectX::XMFLOAT2 origin{}; //<UI attribute - Origin: Origin (Anchor) point of the image.
     float rotation_2d{ 0.0 }; //<UI attribute - Rotation (2D): Rotation of the image in degrees.
-    std::optional<DirectX::XMFLOAT4> crop_rect{}; //<UI attribute - Crop Rectangle: Rectangle to crop the image.
 
 public:
     void SetImagePath(std::string_view value, bool notify = false)
@@ -239,13 +237,6 @@ public:
             NotifyPropertyChange(3);
         }
     }
-    void SetCropRect(std::optional<DirectX::XMFLOAT4> value, bool notify = false)
-    {
-        crop_rect = value;
-        if (notify) {
-            NotifyPropertyChange(4);
-        }
-    }
 
 public:
     template<typename Self>
@@ -268,11 +259,6 @@ public:
     {
         return self.rotation_2d;
     }
-    template<typename Self>
-    std::optional<DirectX::XMFLOAT4> GetCropRect(this Self&& self)
-    {
-        return self.crop_rect;
-    }
 
 public:
     template<typename Self>
@@ -294,9 +280,6 @@ public:
             break;
         case 3:
             self.notifier(3, vortex::reflection_traits<float>::serialize(self.GetRotation2d()));
-            break;
-        case 4:
-            //self.notifier(4, vortex::reflection_traits<DirectX::XMFLOAT4>::serialize(self.GetCropRect()));
             break;
         default:
             vortex::error("ImageInput: Invalid property index for notification: {}", index);
@@ -329,11 +312,6 @@ public:
                 self.SetRotation2d(out_value, notify);
                 break;
             }
-        case 4:
-            if (DirectX::XMFLOAT4 out_value; vortex::reflection_traits<DirectX::XMFLOAT4>::deserialize(&out_value, value)) {
-                self.SetCropRect(out_value, notify);
-                break;
-            }
         default:
             vortex::error("ImageInput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -342,7 +320,7 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return "{" + "image_path:" + vortex::reflection_traits<Self>::serialize(self.GetImagePath()) + "," + "image_size:" + vortex::reflection_traits<Self>::serialize(self.GetImageSize()) + "," + "origin:" + vortex::reflection_traits<Self>::serialize(self.GetOrigin()) + "," + "rotation_2d:" + vortex::reflection_traits<Self>::serialize(self.GetRotation2d()) + "," + "crop_rect:" + vortex::reflection_traits<Self>::serialize(self.GetCropRect()) + "}";
+        return "{" + "image_path:" + vortex::reflection_traits<Self>::serialize(self.GetImagePath()) + "," + "image_size:" + vortex::reflection_traits<Self>::serialize(self.GetImageSize()) + "," + "origin:" + vortex::reflection_traits<Self>::serialize(self.GetOrigin()) + "," + "rotation_2d:" + vortex::reflection_traits<Self>::serialize(self.GetRotation2d()) + "}";
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -360,9 +338,11 @@ public:
     static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
             { "name", 0 },
             { "window_size", 1 },
+            { "framerate", 2 },
     });
     std::string name{ "Vortex Output Window" }; //<UI attribute - Window Title: Title of the output window.
     DirectX::XMUINT2 window_size{ 1920, 1080 }; //<UI attribute - Window Size: Resolution of the output window.
+    vortex::ratio32_t framerate{ 60, 1 }; //<UI attribute - Framerate: Framerate of the output window.
 
 public:
     void SetName(std::string_view value, bool notify = false)
@@ -379,6 +359,13 @@ public:
             NotifyPropertyChange(1);
         }
     }
+    void SetFramerate(vortex::ratio32_t value, bool notify = false)
+    {
+        framerate = value;
+        if (notify) {
+            NotifyPropertyChange(2);
+        }
+    }
 
 public:
     template<typename Self>
@@ -390,6 +377,11 @@ public:
     DirectX::XMUINT2 GetWindowSize(this Self&& self)
     {
         return self.window_size;
+    }
+    template<typename Self>
+    vortex::ratio32_t GetFramerate(this Self&& self)
+    {
+        return self.framerate;
     }
 
 public:
@@ -406,6 +398,9 @@ public:
             break;
         case 1:
             self.notifier(1, vortex::reflection_traits<DirectX::XMUINT2>::serialize(self.GetWindowSize()));
+            break;
+        case 2:
+            self.notifier(2, vortex::reflection_traits<vortex::ratio32_t>::serialize(self.GetFramerate()));
             break;
         default:
             vortex::error("WindowOutput: Invalid property index for notification: {}", index);
@@ -428,6 +423,11 @@ public:
                 self.SetWindowSize(out_value, notify);
                 break;
             }
+        case 2:
+            if (vortex::ratio32_t out_value; vortex::reflection_traits<vortex::ratio32_t>::deserialize(&out_value, value)) {
+                self.SetFramerate(out_value, notify);
+                break;
+            }
         default:
             vortex::error("WindowOutput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -436,7 +436,7 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return "{" + "name:" + vortex::reflection_traits<Self>::serialize(self.GetName()) + "," + "window_size:" + vortex::reflection_traits<Self>::serialize(self.GetWindowSize()) + "}";
+        return "{" + "name:" + vortex::reflection_traits<Self>::serialize(self.GetName()) + "," + "window_size:" + vortex::reflection_traits<Self>::serialize(self.GetWindowSize()) + "," + "framerate:" + vortex::reflection_traits<Self>::serialize(self.GetFramerate()) + "}";
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -454,9 +454,11 @@ public:
     static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
             { "name", 0 },
             { "window_size", 1 },
+            { "framerate", 2 },
     });
     std::string name{ "Vortex NDI Output" }; //<UI attribute - NDI Name: Name of the NDI stream.
     DirectX::XMUINT2 window_size{ 1920, 1080 }; //<UI attribute - Window Size: Resolution of the output window.
+    vortex::ratio32_t framerate{ 60, 1 }; //<UI attribute - Framerate: Framerate of the output window.
 
 public:
     void SetName(std::string_view value, bool notify = false)
@@ -473,6 +475,13 @@ public:
             NotifyPropertyChange(1);
         }
     }
+    void SetFramerate(vortex::ratio32_t value, bool notify = false)
+    {
+        framerate = value;
+        if (notify) {
+            NotifyPropertyChange(2);
+        }
+    }
 
 public:
     template<typename Self>
@@ -484,6 +493,11 @@ public:
     DirectX::XMUINT2 GetWindowSize(this Self&& self)
     {
         return self.window_size;
+    }
+    template<typename Self>
+    vortex::ratio32_t GetFramerate(this Self&& self)
+    {
+        return self.framerate;
     }
 
 public:
@@ -500,6 +514,9 @@ public:
             break;
         case 1:
             self.notifier(1, vortex::reflection_traits<DirectX::XMUINT2>::serialize(self.GetWindowSize()));
+            break;
+        case 2:
+            self.notifier(2, vortex::reflection_traits<vortex::ratio32_t>::serialize(self.GetFramerate()));
             break;
         default:
             vortex::error("NDIOutput: Invalid property index for notification: {}", index);
@@ -522,6 +539,11 @@ public:
                 self.SetWindowSize(out_value, notify);
                 break;
             }
+        case 2:
+            if (vortex::ratio32_t out_value; vortex::reflection_traits<vortex::ratio32_t>::deserialize(&out_value, value)) {
+                self.SetFramerate(out_value, notify);
+                break;
+            }
         default:
             vortex::error("NDIOutput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -530,7 +552,7 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return "{" + "name:" + vortex::reflection_traits<Self>::serialize(self.GetName()) + "," + "window_size:" + vortex::reflection_traits<Self>::serialize(self.GetWindowSize()) + "}";
+        return "{" + "name:" + vortex::reflection_traits<Self>::serialize(self.GetName()) + "," + "window_size:" + vortex::reflection_traits<Self>::serialize(self.GetWindowSize()) + "," + "framerate:" + vortex::reflection_traits<Self>::serialize(self.GetFramerate()) + "}";
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)

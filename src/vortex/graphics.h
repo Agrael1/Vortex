@@ -76,6 +76,10 @@ public:
     {
         Throttle();
     }
+    void ExecuteCommandLists(std::initializer_list<wis::CommandListView> lists) const
+    {
+        _main_queue.ExecuteCommandLists(lists.begin(), lists.size());
+    }
 
 private:
     void CreateDevice(bool debug_extension);

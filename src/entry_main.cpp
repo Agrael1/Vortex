@@ -4,6 +4,8 @@
 #include <vortex/ui/cef_app.h>
 #include <vortex/util/reflection.h>
 
+#include <vortex/util/rational.h>
+
 struct MainArgs {
 };
 

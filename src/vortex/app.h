@@ -30,7 +30,6 @@ struct AppExitControl {
 
 class App
 {
-    uintptr_t xo1 = 0; // Current frame index
     using MessageHandler = void (App::*)(CefListValue&);
 
 public:
@@ -83,8 +82,6 @@ public:
 
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
         _model.ConnectNodes(i1, 0, o2, 0); // Connect the input node to the NDI output node
-
-        xo1 = o2; // Set the current node to the first input node
     }
 
 public:

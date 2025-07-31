@@ -71,7 +71,7 @@ PUBLIC
   "src/vortex/graph/ports.h" 
   "src/vortex/graph/connection.h" 
   "src/vortex/graph/interfaces.h" 
-  "src/vortex/graph/node_factory.h"  "src/vortex/nodes/filter/blend.h" "src/vortex/util/ndi/ndi_library.h" "src/vortex/util/ndi/ndi_swapchain.h" "src/vortex/util/ndi/ndi_swapchain.cpp")
+  "src/vortex/graph/node_factory.h"  "src/vortex/nodes/filter/blend.h" "src/vortex/util/ndi/ndi_library.h" "src/vortex/util/ndi/ndi_swapchain.h" "src/vortex/util/ndi/ndi_swapchain.cpp" "src/vortex/util/rational.h")
 
 add_custom_target(ui)
 # Copy the UI html files to the output directory

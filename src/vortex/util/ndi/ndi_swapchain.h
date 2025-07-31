@@ -26,6 +26,7 @@ public:
             vortex::error("NDI send instance is not initialized");
             return;
         }
+
         // Copy the current texture to the staging buffer
         CopyToStagingBuffer(cmd_list);
         // Send the frame asynchronously

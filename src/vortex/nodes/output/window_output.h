@@ -11,6 +11,7 @@ namespace vortex {
 // Debug output is a window with a swapchain for rendering contents directly to the screen
 class WindowOutput : public vortex::graph::OutputImpl<WindowOutput, WindowOutputProperties>
 {
+    std::chrono::time_point<std::chrono::steady_clock> _last_frame_time;
     static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for render targets
 public:
     WindowOutput(const vortex::Graphics& gfx, SerializedProperties props)
@@ -49,6 +50,7 @@ public:
             }
         }
         _fence = gfx.GetDevice().CreateFence(result);
+        _last_frame_time = std::chrono::steady_clock::now();
     }
 
 public:
@@ -63,11 +65,27 @@ public:
         }
         return 0;
     }
-    void Throttle(const vortex::Graphics& gfx)
+    void Throttle() noexcept
     {
-        auto& q = gfx.GetMainQueue();
-        q.SignalQueue(_fence, ++_fence_value);
-        _fence.Wait(_fence_value);
+        _fence.Wait(_fence_values[_frame_index] - 1);
+    }
+    void Present(const vortex::Graphics& gfx) noexcept
+    {
+        // Present the swapchain
+        if (auto result = _swapchain.Present(); !vortex::success(result)) {
+            vortex::error("Failed to present swapchain: {}", result.error);
+            return;
+        }
+
+        auto& queue = gfx.GetMainQueue();
+        auto result = queue.SignalQueue(_fence, _fence_values[_frame_index]);
+        if (!vortex::success(result)) {
+            vortex::error("Failed to signal queue for WindowOutput: {}", result.error);
+            return;
+        }
+
+        _frame_index = (_frame_index + 1) % vortex::max_frames_in_flight;
+        _fence_values[_frame_index] = ++_fence_value;
     }
 
     // Setters for properties
@@ -88,12 +106,33 @@ public:
         _resized = true; // Mark as resized to trigger swapchain resize
     }
 
+public:
+    virtual bool IsReady() const noexcept override
+    {
+        // Check if the swapchain is ready for rendering
+        auto result = _fence.Wait(_fence_values[_frame_index] - 1, 0);
+        if (result.status == wis::Status::Timeout) {
+            // If the fence is not ready, return false
+            return false;
+        } else if (!vortex::success(result)) {
+            vortex::error("Failed to wait for fence in WindowOutput: {}", result.error);
+            return false;
+        }
+
+        return true;
+    }
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
+        if (!IsReady()) {
+            vortex::info("WindowOutput is not ready for rendering");
+            return;
+        }
+
         if (_resized) {
             // Resize the swapchain if the window has been resized
             auto [width, height] = _window.PixelSize();
-            Throttle(gfx); // Ensure the GPU is ready for the resize operation
+            Throttle(); // Ensure the GPU is ready for the resize operation
+
             _swapchain.Resize(width, height);
             // Recreate the render targets after resizing the swapchain
             wis::Result result = wis::success;
@@ -108,13 +147,13 @@ public:
             _resized = false; // Reset the resized flag
         }
 
-        _current_texture_index = _swapchain.GetCurrentIndex();
-        probe._command_list = &_command_lists[_current_texture_index];
+        auto current_texture_index = _swapchain.GetCurrentIndex();
+        probe._command_list = &_command_lists[_frame_index];
 
         // Pass to the sink nodes for post-order processing
         RenderPassForwardDesc desc{
-            ._current_rt_view = _render_targets[_current_texture_index],
-            ._current_rt_texture = &_textures[_current_texture_index],
+            ._current_rt_view = _render_targets[_frame_index],
+            ._current_rt_texture = &_textures[_frame_index],
             ._output_size = { window_size.x, window_size.y }
         };
 
@@ -131,7 +170,7 @@ public:
                                         .state_before = wis::TextureState::Present,
                                         .state_after = wis::TextureState::RenderTarget,
                                 },
-                                _textures[_current_texture_index]);
+                                _textures[current_texture_index]);
 
         // Pass to the next nodes in the graph
         for (auto& sink : _sinks.GetSinks() | std::views::filter([](auto& sink) { return sink; })) {
@@ -147,19 +186,27 @@ public:
                                         .state_before = wis::TextureState::RenderTarget,
                                         .state_after = wis::TextureState::Present,
                                 },
-                                _textures[_current_texture_index]);
+                                _textures[current_texture_index]);
 
         // End the command list
         if (!cmd_list.Close()) {
             vortex::error("Failed to close command list for WindowOutput");
             return;
         }
+        gfx.ExecuteCommandLists({ cmd_list });
 
-        wis::CommandListView views[]{ cmd_list };
-        gfx.GetMainQueue().ExecuteCommandLists(views, 1);
+        Present(gfx); // Present the swapchain after rendering
 
-        // Present the swapchain
-        _swapchain.Present();
+
+        // Get the current time for frame
+        auto now = std::chrono::steady_clock::now();
+        auto frame_duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - _last_frame_time).count();
+
+        // Change the window title to include the fps
+        std::string title = std::format("{} - FPS: {:.2f}", name, 1000.0 / frame_duration);
+
+        _last_frame_time = now;
+        _window.SetTitle(title.c_str());
     }
 
 private:
@@ -170,10 +217,12 @@ public:
     wis::SwapChain _swapchain;
     wis::RenderTarget _render_targets[2]; ///< Render target for the swapchain
     std::span<const wis::Texture> _textures; ///< Textures for the swapchain
-    uint32_t _current_texture_index = 0; ///< Current texture index for rendering
+
+    uint32_t _frame_index = 0; ///< Current frame index for synchronization
 
     wis::Fence _fence; ///< Fence for synchronization
-    uint64_t _fence_value = 0; ///< Current fence value for synchronization
+    uint64_t _fence_value = 1; ///< Current fence value for synchronization
+    uint64_t _fence_values[vortex::max_frames_in_flight] = { 1, 0 }; ///< Current fence value for synchronization
     bool _resized = false; ///< Flag to indicate if the window has been resized
 };
 } // namespace vortex

@@ -65,8 +65,18 @@ public:
     }
 
 public:
+    virtual bool IsReady() const noexcept override
+    {
+        // Check if the swapchain is ready for rendering
+        return true;
+    }
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
+        if (!IsReady()) {
+            vortex::error("NDIOutput is not ready for rendering");
+            return;
+        }
+
         if (_resized) {
             // Resize the swapchain and render target
             if (_swapchain.Resize(gfx, window_size.x, window_size.y)) {

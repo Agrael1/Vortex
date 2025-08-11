@@ -95,6 +95,14 @@ public:
         }
     }
 
+    auto GetNodeProperties(uintptr_t node_ptr) const -> std::string
+    {
+        if (auto* node = GetNode(node_ptr)) {
+            return node->GetProperties(); // Get properties of the node
+        }
+        return "{}"; // Return empty string if node not found
+    }
+
     void ConnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
     {
         auto* left_node = GetNode(node_ptr_left);

@@ -57,6 +57,10 @@ struct reflection_traits<I> : reflection_traits_base<I> {
             return false; // Failure
         }
     }
+    static std::string serialize(I obj) noexcept
+    {
+        return std::to_string(obj); // Convert integral or floating type to string
+    }
 };
 
 template<string_type S>
@@ -68,7 +72,7 @@ struct reflection_traits<S> : reflection_traits_base<S> {
     }
     static std::string serialize(const S& obj) noexcept
     {
-        return std::string(obj); // Convert string to string
+        return std::format("\"{}\"", obj); // Convert string to string
     }
 };
 
@@ -231,9 +235,7 @@ struct UpdateNotifier {
     }
 };
 
-
-
-template<typename T> 
+template<typename T>
 concept enum_type = std::is_enum_v<T>;
 
 template<typename E>
@@ -255,7 +257,8 @@ struct reflection_traits<E> : reflection_traits_base<E> {
 
 // Template pattern matching approach
 template<typename T>
-struct is_vortex_ratio : std::false_type {};
+struct is_vortex_ratio : std::false_type {
+};
 
 template<typename D>
 struct is_vortex_ratio<vortex::ratio<D>> : std::true_type {
@@ -268,7 +271,7 @@ concept rational_type = is_vortex_ratio<R>::value;
 template<rational_type R>
 struct reflection_traits<R> : reflection_traits_base<R> {
     using denominator_type = typename is_vortex_ratio<R>::denominator_type;
-    
+
     static constexpr bool deserialize(R* obj, std::string_view data) noexcept
     {
         // ratio is serialized as [numerator,denominator]
@@ -286,7 +289,7 @@ struct reflection_traits<R> : reflection_traits_base<R> {
         }
         return false;
     }
-    
+
     static std::string serialize(const R& obj) noexcept
     {
         // Serialize the ratio value
@@ -295,5 +298,41 @@ struct reflection_traits<R> : reflection_traits_base<R> {
 };
 
 using SerializedProperties = std::span<const std::pair<std::string_view, std::string_view>>; ///< Serialized properties for nodes
+
+struct StaticNodeInfo {
+    std::uint32_t sinks = 0;
+    std::uint32_t sources = 0;
+};
+
+template<>
+struct reflection_traits<StaticNodeInfo> : reflection_traits_base<StaticNodeInfo> {
+    static constexpr bool deserialize(StaticNodeInfo* obj, std::string_view data) noexcept
+    {
+        return false;
+    }
+
+    static std::string serialize(const StaticNodeInfo& obj) noexcept
+    {
+        std::string result = "{";
+        reflect::for_each([&](const auto I) {
+            using type = reflect::member_type<I, StaticNodeInfo>;
+            std::string x = reflection_traits<type>::serialize(reflect::get<I>(obj));
+
+            std::format_to(std::back_inserter(result), "{}: {}, ",
+                           reflect::member_name<I>(obj), x);
+        },
+                          obj);
+        result.pop_back(); // Remove last comma
+        result.pop_back(); // Remove last space
+        result += "}";
+        return result; // Serialize as "{sinks: x, sources: y}"
+    }
+};
+
+template<typename T>
+static std::string serialize(const T& obj) noexcept
+{
+    return reflection_traits<T>::serialize(obj);
+}
 
 } // namespace vortex

@@ -289,18 +289,20 @@ public:
     std::string GenerateSerialization(std::span<std::string_view> properties)
     {
         // Json serialization code generation
+        std::string args;
         std::string serialize_code = "template<typename Self>\n";
         serialize_code += "std::string Serialize(this Self& self) {\n";
-        serialize_code += "    return \"{\" + ";
+        serialize_code += "    return std::format(\"{{ ";
         for (size_t i = 0; i < properties.size(); ++i) {
             const auto& prop = properties[i];
-            serialize_code += std::format("\"{}:\" + ", prop);
-            serialize_code += std::format("vortex::reflection_traits<Self>::serialize(self.Get{}())", to_pascal_case(prop));
+            serialize_code += std::format("{}: {{}}", prop);
+            args += std::format("vortex::reflection_traits<decltype(self.Get{}())>::serialize(self.Get{}())", to_pascal_case(prop), to_pascal_case(prop));
             if (i < properties.size() - 1) {
-                serialize_code += " + \",\" + ";
+                serialize_code += ", ";
+                args += ",\n";
             }
         }
-        serialize_code += "+\"}\";\n";
+        serialize_code += "}}\",\n" + args + ");\n";
         serialize_code += "}\n";
 
         // A bit brutal deserialization code generation

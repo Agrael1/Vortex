@@ -1,10 +1,15 @@
 #pragma once
 #include <vortex/ui/implements.h>
+#include <vortex/ui/value.h>
 #include <vortex/ui/call_handler.h>
 #include <include/cef_app.h>
 #include <fstream>
+#include <include/wrapper/cef_helpers.h>
 
 namespace vortex::ui {
+
+
+
 class VortexResourceHandler : public CefImplements<VortexResourceHandler, CefResourceHandler>
 {
 public:
@@ -74,12 +79,13 @@ public:
         vortex::info("VortexCefApp::OnProcessMessageReceived: Received message from process {}: {}", reflect::enum_name(source_process), message->GetName().ToString());
         if (message->GetName() == "co_return") {
             // Handle the message using the VortexV8Handler
-            _handler->ResolvePromise(message->GetArgumentList()->GetInt(0));
+            _handler->ResolvePromise(message->GetArgumentList());
             return true; // Message handled
         }
         return false; // Message not handled
     }
-    private:
+
+private:
     CefRefPtr<VortexV8Handler> _handler;
 };
 } // namespace vortex::ui

@@ -2,9 +2,6 @@
 #include <vortex/app.h>
 #include <vortex/util/log.h>
 #include <vortex/ui/cef_app.h>
-#include <vortex/util/reflection.h>
-
-#include <vortex/util/rational.h>
 
 struct MainArgs {
 };
@@ -77,10 +74,16 @@ try {
 int main(int argc, char* argv[])
 {
     // Better main function
-    auto args = reinterpret_cast<std::string_view*>(alloca(argc * sizeof(std::string_view)));
+    std::size_t size = argc * sizeof(std::string_view);
+    std::size_t space = size + alignof(std::string_view) - 1;
+
+    auto* raw = alloca(space);
+    auto* args = static_cast<std::string_view*>(std::align(alignof(std::string_view), size, raw, space));
     for (int i = 0; i < argc; ++i) {
-        args[i] = argv[i];
+        std::construct_at(&args[i], argv[i]); // Construct std::string_view from char* without UB
     }
 
-    return entry_main(std::span(args, argc));
+    int ret = entry_main(std::span(args, argc));
+    std::destroy_n(args, argc); // Destroy std::string_view objects
+    return ret;
 }

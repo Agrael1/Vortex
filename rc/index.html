@@ -71,13 +71,19 @@
         const updateButton = document.getElementById('updateButton');
 
         // Initialize with current value from C++
-        function initializeUI() {
+        async function initializeUI() {
+            var nodes = await vortexCallAsync("GetNodeTypesAsync");
+            // nodes is a dictionary with string : json string pairs
+            // print the dictionary to console
+            console.log("Node Types:", JSON.stringify(nodes, null, 2));
         }
 
         // Add on button click
         button.addEventListener('click', async function () {
             // Toggle between two states
-            var a = await vortexCallAsync("GreetAsync");
+            var a = await vortexCallAsync("CreateNodeAsync", "ImageInput");
+            var b = await vortexCallAsync("GetNodePropertiesAsync", a);
+
             button.textContent = a;
         });
 

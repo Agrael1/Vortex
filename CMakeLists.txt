@@ -14,7 +14,7 @@ include(cmake/shaders.cmake)
 
 find_package(FFMPEG REQUIRED)
 
-if (VORTEX_GENERATE_PROPERTiES)
+if (VORTEX_GENERATE_PROPERTIES)
   add_subdirectory(gen)
 endif()
 

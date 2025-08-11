@@ -43,6 +43,10 @@ struct alignas(16) INode {
         return EvaluationStrategy::Static; // Default evaluation strategy
     }
     virtual void SetProperty(uint32_t index, std::string_view value, bool notify = false) { }
+    virtual std::string GetProperties() const
+    {
+        return ""; // Default implementation returns empty string
+    }
 
     virtual std::string_view GetInfo() const noexcept { return ""; }
     virtual void SetInfo(std::string info) { }
@@ -63,12 +67,16 @@ struct IOutput : public INode {
 // Factory for creating nodes
 template<typename CRTP,
          typename Properties,
-         std::size_t sinks = 0,
-         std::size_t sources = 0,
+         std::uint32_t sinks = 0,
+         std::uint32_t sources = 0,
          EvaluationStrategy strategy = EvaluationStrategy::Static,
          typename Base = INode>
 struct NodeImpl : public Base, public Properties {
     static constexpr EvaluationStrategy evaluation_strategy = strategy;
+    static constexpr StaticNodeInfo static_info = {
+        .sinks = sinks,
+        .sources = sources,
+    };
     using Sinks = SinkArray<sinks>;
     using Sources = SourceArray<sources>;
     using ImplClass = NodeImpl<CRTP, Properties, sinks, sources, strategy, Base>;
@@ -88,7 +96,7 @@ public:
             node->SetInitialized(); // Mark the node as initialized
             return node;
         };
-        NodeFactory::RegisterNode(reflect::type_name<CRTP>(), callback);
+        NodeFactory::RegisterNode(reflect::type_name<CRTP>(), callback, static_info);
     }
     virtual void SetPropertyUpdateNotifier(UpdateNotifier notifier) override
     {
@@ -111,6 +119,11 @@ public:
     {
         static_cast<CRTP*>(this)->SetPropertyStub(index, value, notify);
     }
+    virtual std::string GetProperties() const override
+    {
+        return static_cast<const CRTP*>(this)->Serialize(); // Serialize properties to string
+    }
+
     virtual std::string_view GetInfo() const noexcept override
     {
         return _info;

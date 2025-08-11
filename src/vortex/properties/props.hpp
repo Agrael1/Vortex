@@ -182,7 +182,11 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return "{" + "blend_mode:" + vortex::reflection_traits<Self>::serialize(self.GetBlendMode()) + "," + "blend_channel:" + vortex::reflection_traits<Self>::serialize(self.GetBlendChannel()) + "," + "opacity:" + vortex::reflection_traits<Self>::serialize(self.GetOpacity()) + "," + "clamp_result:" + vortex::reflection_traits<Self>::serialize(self.GetClampResult()) + "}";
+        return std::format("{{ blend_mode: {}, blend_channel: {}, opacity: {}, clamp_result: {}}}",
+                           vortex::reflection_traits<decltype(self.GetBlendMode())>::serialize(self.GetBlendMode()),
+                           vortex::reflection_traits<decltype(self.GetBlendChannel())>::serialize(self.GetBlendChannel()),
+                           vortex::reflection_traits<decltype(self.GetOpacity())>::serialize(self.GetOpacity()),
+                           vortex::reflection_traits<decltype(self.GetClampResult())>::serialize(self.GetClampResult()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -320,7 +324,11 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return "{" + "image_path:" + vortex::reflection_traits<Self>::serialize(self.GetImagePath()) + "," + "image_size:" + vortex::reflection_traits<Self>::serialize(self.GetImageSize()) + "," + "origin:" + vortex::reflection_traits<Self>::serialize(self.GetOrigin()) + "," + "rotation_2d:" + vortex::reflection_traits<Self>::serialize(self.GetRotation2d()) + "}";
+        return std::format("{{ image_path: {}, image_size: {}, origin: {}, rotation_2d: {}}}",
+                           vortex::reflection_traits<decltype(self.GetImagePath())>::serialize(self.GetImagePath()),
+                           vortex::reflection_traits<decltype(self.GetImageSize())>::serialize(self.GetImageSize()),
+                           vortex::reflection_traits<decltype(self.GetOrigin())>::serialize(self.GetOrigin()),
+                           vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(self.GetRotation2d()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -436,7 +444,10 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return "{" + "name:" + vortex::reflection_traits<Self>::serialize(self.GetName()) + "," + "window_size:" + vortex::reflection_traits<Self>::serialize(self.GetWindowSize()) + "," + "framerate:" + vortex::reflection_traits<Self>::serialize(self.GetFramerate()) + "}";
+        return std::format("{{ name: {}, window_size: {}, framerate: {}}}",
+                           vortex::reflection_traits<decltype(self.GetName())>::serialize(self.GetName()),
+                           vortex::reflection_traits<decltype(self.GetWindowSize())>::serialize(self.GetWindowSize()),
+                           vortex::reflection_traits<decltype(self.GetFramerate())>::serialize(self.GetFramerate()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -552,7 +563,10 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return "{" + "name:" + vortex::reflection_traits<Self>::serialize(self.GetName()) + "," + "window_size:" + vortex::reflection_traits<Self>::serialize(self.GetWindowSize()) + "," + "framerate:" + vortex::reflection_traits<Self>::serialize(self.GetFramerate()) + "}";
+        return std::format("{{ name: {}, window_size: {}, framerate: {}}}",
+                           vortex::reflection_traits<decltype(self.GetName())>::serialize(self.GetName()),
+                           vortex::reflection_traits<decltype(self.GetWindowSize())>::serialize(self.GetWindowSize()),
+                           vortex::reflection_traits<decltype(self.GetFramerate())>::serialize(self.GetFramerate()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)

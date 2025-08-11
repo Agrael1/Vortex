@@ -61,6 +61,10 @@ public:
             std::pair{ "name", "Vortex Mega Output" },
             std::pair{ "window_size", "[1080,1920]" }
         };
+        constexpr std::pair<std::string_view, std::string_view> output_values2[]{
+            std::pair{ "name", "Vortex Mega Output" },
+            std::pair{ "window_size", "[1920,1080]" }
+        };
         constexpr std::pair<std::string_view, std::string_view> image_values[]{
             std::pair{ "image_path", "ui/HDR.jpg" },
         };
@@ -148,6 +152,37 @@ private:
     }
 
     // Message handlers for specific messages
+    void GetNodeTypes([[maybe_unused]] CefListValue& args) 
+    {
+        const auto& node_types = vortex::graph::NodeFactory::GetNodesInfo();
+        CefRefPtr<CefDictionaryValue> return_dictionary = CefDictionaryValue::Create();
+
+        for (const auto& [name, info] : node_types) {
+            return_dictionary->SetString({ name.data() }, serialize(info));
+        }
+        _ui_app.SendUIReturn(std::move(return_dictionary)); // Send the node types to the UI
+    }
+
+    void GetNodeProperties(CefListValue& args)
+    {
+        if (args.GetSize() > 0 && args.GetType(0) == VTYPE_DOUBLE) {
+            uintptr_t node_ptr = std::bit_cast<uintptr_t>(args.GetDouble(0));
+            _ui_app.SendUIReturn(_model.GetNodeProperties(node_ptr)); // Send the properties to the UI
+        }
+    }
+
+    void SetNodeProperty(CefListValue& args)
+    {
+        if (args.GetSize() < 3 || args.GetType(0) != VTYPE_DOUBLE || args.GetType(1) != VTYPE_INT || args.GetType(2) != VTYPE_STRING) {
+            vortex::error("SetNodeProperty: Invalid arguments provided.");
+            return; // Invalid arguments, cannot set property
+        }
+        uintptr_t node_ptr = std::bit_cast<uintptr_t>(args.GetDouble(0));
+        uint32_t index = static_cast<uint32_t>(args.GetInt(1));
+        std::string_view value = args.GetString(2).ToString();
+        _model.SetNodeProperty(node_ptr, index, value); // Set the property in the model
+    }
+
     void CreateNode(CefListValue& args)
     {
         if (args.GetSize() > 0 && args.GetType(0) == VTYPE_STRING) {
@@ -210,11 +245,6 @@ private:
         _model.SetNodeInfo(node_ptr, args.GetString(1).ToString()); // Set the node info in the model
     }
 
-    void GreetAsync(CefListValue& args2)
-    {
-        _ui_app.SendUIReturn(counter++);
-    }
-
 private:
     // Thunk for node update observer
     static void OnNodeUpdateThunk(void* observer, uintptr_t node, uint32_t property_index, std::string_view value)
@@ -254,12 +284,17 @@ private:
 
     // used in hot code, so it should be fast
     std::unordered_map<std::u16string_view, MessageHandler> _message_handlers{
-        { u"CreateNode", &App::CreateNode },
+        // Coroutines
+        { u"GetNodeTypesAsync", &App::GetNodeTypes },
+        { u"CreateNodeAsync", &App::CreateNode },
+        { u"GetNodePropertiesAsync", &App::GetNodeProperties },
+
+        // Immediate calls (fire and forget)
         { u"RemoveNode", &App::RemoveNode },
         { u"ConnectNodes", &App::ConnectNodes },
         { u"DisconnectNodes", &App::DisconnectNodes },
         { u"SetNodeInfo", &App::SetNodeInfo },
-        { u"GreetAsync", &App::GreetAsync }
+        { u"SetNodeProperty", &App::SetNodeProperty }  
     };
 
 private:

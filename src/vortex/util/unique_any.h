@@ -21,8 +21,19 @@ struct unique_any_traits {
     }
 };
 
+/// @brief Strategy for clearing/resetting storage in unique_any
+enum class clear_strategy {
+    /// @brief Clear the current storage before putting a new value
+    /// @details Only calls the cleanup function without reconstructing the storage
+    none, 
+    /// @brief Reset the storage with default construction before putting a new value  
+    /// @details Calls cleanup function and then default-constructs the storage
+    default_construct 
+};
+
 template<typename Type, auto Cleanup>
 struct unique_any {
+public:
 public:
     using value_type = Type; // No decay, so this is the actual type.
     using get_type = std::conditional_t<detail::is_handle_or_pointer_v<value_type>, value_type, value_type&>; // Pointer if handle or pointer, reference otherwise.
@@ -49,7 +60,7 @@ public:
     }
     constexpr ~unique_any() noexcept
     {
-        clear_unsafe(); // No need to reset, just cleanup the storage.
+        clear<clear_strategy::none>(); // No need to reset, just cleanup the storage.
     }
 
 public:
@@ -67,29 +78,37 @@ public:
         return _storage;
     }
 
-    /// @brief Returns a pointer to the storage for initialization by external code.
-    /// @return Pointer to the storage after cleanup.
-    /// @note This function clears current storage before returning the pointer.
-    /// @note Primarily intended for output parameters and initialization patterns.
-    /// @warning After calling put(), the storage is in a default-constructed state.
+    /// @brief Clears storage and returns pointer for external initialization.
+    /// @tparam Strategy Controls post-cleanup behavior (default: default_construct for safety).
+    /// @return Pointer to storage after cleanup and optional reconstruction.
+    /// @note Use default_construct for guaranteed clean state (nullptr/0/default-initialized).
+    /// @note Use none for performance when external code will immediately overwrite storage.
+    /// @warning With Strategy::none, storage may be in an undefined state until overwritten.
+    template<clear_strategy Strategy = clear_strategy::default_construct>
     constexpr value_type* put() noexcept
     {
-        reset(); // Cleanup the current storage.
+        clear<Strategy>(); // Clear the current storage before returning the pointer.
         return &_storage; // Return a pointer to the storage.
     }
 
-    /// @brief Performs cleanup on the current storage if it is valid.
-    /// @note This function calls the cleanup function but does NOT reset/reconstruct the storage.
-    /// @note The cleanup function may modify the stored value in-place to mark it as invalid.
-    /// @warning After calling clear_unsafe(), the storage remains in whatever state the cleanup
-    ///          function left it in. For proper cleanup and reset, use reset() instead.
-    /// @warning Do not access the stored value after clear_unsafe() unless you know the cleanup
-    ///          function's behavior. The value may be in an undefined or invalid state.
-    /// @see reset() for cleanup followed by reconstruction with new values.
-    constexpr void clear_unsafe() noexcept
+    /// @brief Performs cleanup and optionally reconstructs the stored value.
+    /// @tparam Strategy Controls behavior after cleanup (default: default_construct).
+    /// @note Strategy::None - Only calls cleanup function. Storage remains in post-cleanup state.
+    /// @note Strategy::DefaultConstruct - Calls cleanup, then destroys and default-constructs fresh value.
+    /// @warning With Strategy::none, is_valid() may still return true if cleanup doesn't invalidate the value.
+    /// @warning With Strategy::none, accessing the value after clear() may be undefined behavior.
+    template<clear_strategy Strategy = clear_strategy::default_construct>
+    constexpr void clear() noexcept
     {
         if (traits_type::is_valid(_storage)) {
             do_cleanup(&_storage); // Cleanup the current storage.
+        }
+
+        if constexpr (Strategy == clear_strategy::default_construct) {
+            if constexpr (!std::is_trivially_destructible_v<value_type>) {
+                std::destroy_at(&_storage); // Clean up the current storage.
+            }
+            std::construct_at(&_storage); // Default construct the storage.
         }
     }
 
@@ -98,7 +117,7 @@ public:
     template<typename... Args>
     constexpr void reset(Args&&... args) noexcept
     {
-        clear_unsafe(); // Cleanup the current storage.
+        clear<clear_strategy::none>(); // Cleanup the current storage.
 
         // if trivially destructible, we can use placement new directly.
         if constexpr (!std::is_trivially_destructible_v<value_type>) {

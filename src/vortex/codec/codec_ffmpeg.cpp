@@ -98,7 +98,7 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
 
     // Read data from the stream
     unique_packet packet;
-    while (av_read_frame(format_context.get(), packet.put()) >= 0) {
+    while (av_read_frame(format_context.get(), packet.put<clear_strategy::none>()) >= 0) {
         if (packet->stream_index < 0 || packet->stream_index >= format_context->nb_streams) {
             continue; // Skip invalid stream index
         }

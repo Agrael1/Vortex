@@ -19,7 +19,7 @@ public:
 
 public:
     template<typename Self>
-    decltype(auto) Get(this Self&& self) noexcept
+    auto& Get(this Self&& self) noexcept
     {
         return self._texture;
     }

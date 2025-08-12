@@ -1,6 +1,7 @@
 ﻿cmake_minimum_required (VERSION 3.22)
 
 option(VORTEX_GENERATE_PROPERTIES "Build generator and generate properties" ON)
+set(WISDOM_FORCE_VULKAN ON CACHE BOOL "Force Vulkan backend for Wisdom")
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141 AND MSVC)
@@ -128,6 +129,7 @@ target_link_libraries(${PROJECT_NAME}
     wis::wisdom-platform-headers
     wis::wisdom-descriptor-buffer-headers
 )
+target_compile_definitions(${PROJECT_NAME} PRIVATE WISDOM_FORCE_VULKAN=1)
 target_precompile_headers(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
 add_dependencies(${PROJECT_NAME} shaders ui)
 

@@ -22,12 +22,12 @@ public:
 
     // TODO: Encapsulate
     template<typename Self>
-    decltype(auto) GetCurrentDescriptorBuffer(this Self&& self) noexcept
+    auto& GetCurrentDescriptorBuffer(this Self&& self) noexcept
     {
         return *self._current_desc;
     }
     template<typename Self>
-    decltype(auto) GetSamplerBuffer(this Self&& self) noexcept
+    auto& GetSamplerBuffer(this Self&& self) noexcept
     {
         return self._sampler_buffer;
     }

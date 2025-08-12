@@ -22,7 +22,7 @@ public:
 
         wis::DescriptorTableEntry entries[] = {
             { .type = wis::DescriptorType::Texture, .bind_register = 0, .binding = 0, .count = 1 },
-            { .type = wis::DescriptorType::Sampler, .bind_register = 0, .binding = 1, .count = 1 },
+            { .type = wis::DescriptorType::Sampler, .bind_register = 0, .binding = 0, .count = 1 },
         };
         wis::DescriptorTable tables[] = {
             { .type = wis::DescriptorHeapType::Descriptor, .entries = entries, .entry_count = 1, .stage = wis::ShaderStages::Pixel },

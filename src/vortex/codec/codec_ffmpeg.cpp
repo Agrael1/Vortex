@@ -37,10 +37,10 @@ int save_frame_as_ppm(AVFrame* frame, const char* filename)
 
 vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesystem::path& path)
 {
-    using unique_context = vortex::unique_any<AVFormatContext*, avformat_close_input, true>;
-    using unique_codec_context = vortex::unique_any<AVCodecContext*, avcodec_free_context, true>;
-    using unique_frame = vortex::unique_any<AVFrame*, av_frame_free, true>;
-    using unique_packet = vortex::unique_any<AVPacket, av_packet_unref, true>;
+    using unique_context = vortex::unique_any<AVFormatContext*, avformat_close_input>;
+    using unique_codec_context = vortex::unique_any<AVCodecContext*, avcodec_free_context>;
+    using unique_frame = vortex::unique_any<AVFrame*, av_frame_free>;
+    using unique_packet = vortex::unique_any<AVPacket, av_packet_unref>;
 
     wis::Texture texture;
 
@@ -50,8 +50,8 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
         return vortex::Texture2D(std::move(texture)); // File does not exist, nothing to load
     }
 
-    unique_context format_context = nullptr;
-    if (auto err = avformat_open_input(&format_context, path_str.c_str(), nullptr, nullptr); err < 0) {
+    unique_context format_context;
+    if (auto err = avformat_open_input(format_context.put(), path_str.c_str(), nullptr, nullptr); err < 0) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not open input file: {}. Error {}", path_str, err);
         return vortex::Texture2D(std::move(texture)); // Could not open the input file
     }
@@ -81,7 +81,7 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
     }
 
     // Open the codec
-    unique_codec_context codec_context = avcodec_alloc_context3(codec);
+    unique_codec_context codec_context{ avcodec_alloc_context3(codec) };
     if (!codec_context) {
         vortex::error("CodecFFmpeg::LoadTexture: Could not allocate codec context for file: {}", path_str);
         return vortex::Texture2D(std::move(texture)); // Could not allocate codec context
@@ -98,30 +98,26 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
 
     // Read data from the stream
     unique_packet packet;
-    while (av_read_frame(format_context.get(), &packet) >= 0) {
+    while (av_read_frame(format_context.get(), packet.put()) >= 0) {
         if (packet->stream_index < 0 || packet->stream_index >= format_context->nb_streams) {
-            av_packet_unref(&packet);
             continue; // Skip invalid stream index
         }
         // Decode the packet
-        int response = avcodec_send_packet(codec_context.get(), &packet);
+        int response = avcodec_send_packet(codec_context.get(), &packet.get());
         if (response < 0) {
             vortex::error("CodecFFmpeg::LoadTexture: Error sending packet for decoding: {}", response);
-            av_packet_unref(&packet);
             continue; // Error sending packet
         }
 
-        unique_frame frame = av_frame_alloc();
+        unique_frame frame{ av_frame_alloc() };
         if (!frame) {
             vortex::error("CodecFFmpeg::LoadTexture: Could not allocate frame for decoding");
-            av_packet_unref(&packet);
             continue; // Could not allocate frame
         }
 
         response = avcodec_receive_frame(codec_context.get(), frame.get());
         if (response < 0) {
             vortex::error("CodecFFmpeg::LoadTexture: Error receiving frame from decoder: {}", response);
-            av_packet_unref(&packet);
             continue; // Error receiving frame
         }
 
@@ -134,15 +130,13 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
                     SWS_BILINEAR, nullptr, nullptr, nullptr);
             if (!sws_ctx) {
                 vortex::error("CodecFFmpeg::LoadTexture: Could not create SwsContext for resampling");
-                av_packet_unref(&packet);
                 continue; // Could not create SwsContext
             }
             // Allocate a new frame for the resampled data
-            unique_frame resampled_frame = av_frame_alloc();
+            unique_frame resampled_frame{ av_frame_alloc() };
             if (!resampled_frame) {
                 vortex::error("CodecFFmpeg::LoadTexture: Could not allocate resampled frame");
                 sws_freeContext(sws_ctx);
-                av_packet_unref(&packet);
                 continue; // Could not allocate resampled frame
             }
             resampled_frame->format = AV_PIX_FMT_RGBA;
@@ -153,7 +147,6 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
             if (av_frame_get_buffer(resampled_frame.get(), 0) < 0) {
                 vortex::error("CodecFFmpeg::LoadTexture: Could not allocate buffer for resampled frame");
                 sws_freeContext(sws_ctx);
-                av_packet_unref(&packet);
                 continue; // Could not allocate buffer for resampled frame
             }
             // Perform the resampling
@@ -167,7 +160,6 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
             sws_freeContext(sws_ctx);
             if (resample_response < 0) {
                 vortex::error("CodecFFmpeg::LoadTexture: Error resampling frame: {}", resample_response);
-                av_packet_unref(&packet);
                 continue; // Error resampling frame
             }
             // Use the resampled frame for further processing
@@ -186,7 +178,6 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
 
         if (!success(result)) {
             vortex::error("CodecFFmpeg::LoadTexture: Failed to create texture for file: {}.\nError {}.\nTexture {}", path_str, result.error, desc);
-            av_packet_unref(&packet);
             continue; // Failed to create texture
         }
 
@@ -201,7 +192,6 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
         result = ext_alloc.WriteMemoryToSubresourceDirect(frame->data[0], texture, wis::TextureState::Common, frame_region);
         if (!success(result)) {
             vortex::error("CodecFFmpeg::LoadTexture: Failed to write memory to subresource for file: {}.\nError {}.\nTexture {}.\nRegion {}", path_str, result.error, desc, frame_region);
-            av_packet_unref(&packet);
             continue; // Failed to write memory to subresource
         }
         // Successfully loaded the texture

@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include <string_view>
 #include <wisdom/generated/api/api.hpp>
+#include <vortex/util/unique_any.h>
 #include <format>
 #include <vortex/util/lib/reflect.h>
 
@@ -100,99 +101,6 @@ struct string_hash : public std::hash<std::string_view> {
 };
 struct string_equal : public std::equal_to<std::string_view> {
     using is_transparent = void;
-};
-
-template<typename T, auto Deleter, bool pp = false>
-struct unique_any {
-    static constexpr bool is_pointer = std::is_pointer_v<T>;
-    using ptr_type = std::add_pointer_t<std::remove_pointer_t<T>>;
-    using cptr_type = const ptr_type;
-    using ref_type = std::conditional_t<is_pointer, T, T&>;
-    using cref_type = std::conditional_t<is_pointer, T, const T&>;
-
-
-
-    T data;
-
-    ~unique_any()
-    {
-        clear();
-    }
-
-    unique_any() = default;
-    unique_any(T ptr)
-        : data(ptr) { }
-
-    // Non-copyable.
-    unique_any(const unique_any&) = delete;
-    unique_any& operator=(const unique_any&) = delete;
-
-    // Movable.
-    unique_any(unique_any&& other) noexcept
-        : data(other.data)
-    {
-        other.data = nullptr;
-    }
-    unique_any& operator=(unique_any&& other) noexcept
-    {
-        if (this != std::addressof(other)) {
-            if (data) {
-                clear();
-            }
-            data = other.data;
-            other.data = nullptr;
-        }
-        return *this;
-    }
-
-public:
-    explicit operator bool() const noexcept
-    {
-        return data != nullptr;
-    }
-    decltype(auto) operator&() noexcept
-    {
-        return &data;
-    }
-    decltype(auto) operator&() const noexcept
-    {
-        return &data;
-    }
-    decltype(auto) operator->() noexcept
-    {
-        if constexpr (is_pointer) {
-            return data;
-        } else {
-            return &data;
-        }
-    }
-    cref_type get() const noexcept
-    {
-        return data;
-    }
-    T release() noexcept
-    {
-        T temp = data;
-        data = nullptr;
-        return temp;
-    }
-    void reset(cref_type ptr) noexcept
-    {
-        if (data) {
-            clear();
-        }
-        data = ptr;
-    }
-    void clear() noexcept
-    {
-        if constexpr (pp) {
-            // If Deleter is a pointer to a function, we call it directly.
-            Deleter(&data);
-        } else {
-            // Otherwise, we assume Deleter is a callable object.
-            Deleter(data);
-        }
-    }
 };
 
 using unique_file = unique_any<std::FILE*, std::fclose>;

@@ -2,6 +2,7 @@
 #include <include/cef_values.h>
 #include <string_view>
 #include <vortex/util/log.h>
+#include <vortex/util/reflection.h>
 
 namespace vortex::ui {
 struct string_traits {
@@ -57,8 +58,8 @@ struct value_traits<std::u16string_view> {
     }
 };
 
-template<>
-struct value_traits<std::string_view> {
+template<string_type S>
+struct value_traits<S> {
     static void add_value(CefListValue& list, size_t index, std::string_view value)
     {
         list.SetString(index, CefString(value.data(), value.size()));

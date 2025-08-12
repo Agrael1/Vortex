@@ -70,6 +70,11 @@ public:
         // Check if the swapchain is ready for rendering
         return true;
     }
+    virtual vortex::ratio32_t GetOutputFPS() const noexcept
+    {
+        return GetFramerate();
+    }
+
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
         if (!IsReady()) {

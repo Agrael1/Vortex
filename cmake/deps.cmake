@@ -125,6 +125,8 @@ if (VORTEX_GENERATE_PROPERTIES)
     NAME tinyxml2
     GITHUB_REPOSITORY leethomason/tinyxml2
     GIT_TAG master
+    OPTIONS
+    "tinyxml2_BUILD_TESTING OFF"
   )
 endif()
 

@@ -69,12 +69,17 @@ struct SourceTarget {
     std::size_t sink_index = 0; // Index of the source in the node
     INode* sink_node = nullptr; // Pointer to the node that is the source
 
-    operator bool() const noexcept
+    constexpr bool operator==(const SourceTarget& other) const noexcept
+    {
+        return sink_node == other.sink_node && sink_index == other.sink_index; // Compare node pointers and indices
+    }
+
+    constexpr explicit operator bool() const noexcept
     {
         return sink_node != nullptr; // Check if the source is valid
     }
 
-    void Reset() noexcept
+    constexpr void Reset() noexcept
     {
         sink_index = 0; // Reset index
         sink_node = nullptr; // Reset node pointer

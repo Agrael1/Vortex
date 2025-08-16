@@ -55,6 +55,9 @@ public:
             connection_to_remove.to_node = node;
             connection_to_remove.to_index = i;
             _connections.erase(connection_to_remove); // Remove all connections to this node
+
+            // Remove the source from the sink
+            sink.source_node->GetSources()[sink.source_index].targets.erase(SourceTarget{ uint32_t(i), node });
         }
 
         auto sources = node->GetSources();
@@ -104,89 +107,94 @@ public:
         return "{}"; // Return empty string if node not found
     }
 
-    void ConnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
+    void ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index)
     {
-        auto* left_node = GetNode(node_ptr_left);
-        auto* right_node = GetNode(node_ptr_right);
-
-        if (!left_node || !right_node) {
+        auto* from_node = GetNode(node_ptr_from);
+        auto* to_node = GetNode(node_ptr_to);
+        if (!from_node || !to_node) {
             vortex::error("Failed to connect nodes: one or both nodes not found.");
             return; // One or both nodes not found, cannot connect
         }
-        auto right_sinks = right_node->GetSinks();
-        auto left_sources = left_node->GetSources();
-        if (output_index < 0 || output_index >= static_cast<int32_t>(left_sources.size())) {
-            vortex::error("Invalid output index {} for node {}", output_index, left_node->GetInfo());
+
+
+        auto to_sinks = to_node->GetSinks();
+        auto from_sources = from_node->GetSources();
+        if (output_index < 0 || output_index >= static_cast<int32_t>(from_sources.size())) {
+            vortex::error("Invalid output index {} for node {}", output_index, from_node->GetInfo());
             return; // Invalid output index
         }
-        if (input_index < 0 || input_index >= static_cast<int32_t>(right_sinks.size())) {
-            vortex::error("Invalid input index {} for node {}", input_index, right_node->GetInfo());
+        if (input_index < 0 || input_index >= static_cast<int32_t>(to_sinks.size())) {
+            vortex::error("Invalid input index {} for node {}", input_index, to_node->GetInfo());
             return; // Invalid input index
         }
         vortex::info("Connecting nodes: {} (output {}) -> {} (input {})",
-                     left_node->GetInfo(), output_index,
-                     right_node->GetInfo(), input_index);
+                     from_node->GetInfo(), output_index,
+                     to_node->GetInfo(), input_index);
 
         // Create a connection and add it to the graph
-        auto &&[it, succ] = _connections.emplace(left_node, right_node, uint32_t(output_index), uint32_t(input_index));
+        auto &&[it, succ] = _connections.emplace(from_node, to_node, uint32_t(output_index), uint32_t(input_index));
         if (!succ) {
             vortex::warn("Connection already exists: {} -> {} ({} -> {})",
-                          left_node->GetInfo(), right_node->GetInfo(),
+                          from_node->GetInfo(), to_node->GetInfo(),
                           output_index, input_index);
             return; // Connection already exists
         }
 
 
         // remove any existing connection at the same input index
-        auto& target_sink = right_sinks[input_index];
-        auto& target_source = left_sources[output_index];
+        auto& target_sink = to_sinks[input_index];
+        auto& target_source = from_sources[output_index];
         if (target_sink) {
-            vortex::warn("Overwriting existing connection at input index {} on node {}", input_index, right_node->GetInfo());
-            _connections.erase(Connection{ target_sink.source_node, right_node, uint32_t(target_sink.source_index), uint32_t(output_index) }); // Remove existing connection
+            vortex::warn("Overwriting existing connection at input index {} on node {}", input_index, to_node->GetInfo());
+            _connections.erase(Connection{ target_sink.source_node, to_node, uint32_t(target_sink.source_index), uint32_t(input_index) }); // Remove existing connection
+            // Remove the target from the source
+            auto prev_target_sources = target_sink.source_node->GetSources();
+            prev_target_sources[target_sink.source_index].targets.erase(SourceTarget{ uint32_t(input_index), to_node });
+            _optimize_probe.MarkNodeDirty(target_sink.source_node); // Mark the source node as dirty
         }
 
-        target_sink.source_node = left_node; // Set the source node for the sink
+        target_sink.source_node = from_node; // Set the source node for the sink
         target_sink.source_index = uint32_t(output_index); // Set the source index for the sink
 
-        target_source.targets.emplace(SourceTarget{ uint32_t(input_index), right_node }); // Add the target to the source
+        target_source.targets.emplace(uint32_t(input_index), to_node); // Add the target to the source
 
-        UpdateIfStatic(right_node);
+        UpdateIfStatic(to_node);
 
         // Mark nodes for optimization
-        _optimize_probe.MarkNodeDirty(left_node);
-        _optimize_probe.MarkNodeDirty(right_node);
+        _optimize_probe.MarkNodeDirty(from_node);
+        _optimize_probe.MarkNodeDirty(to_node);
         _optimization_dirty = true;
     }
 
-    void DisconnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
+    void DisconnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index)
     {
-        auto* left_node = GetNode(node_ptr_left);
-        auto* right_node = GetNode(node_ptr_right);
-        if (!left_node || !right_node) {
+        auto* from_node = GetNode(node_ptr_from);
+        auto* to_node = GetNode(node_ptr_to);
+        if (!from_node || !to_node) {
             vortex::error("Failed to disconnect nodes: one or both nodes not found.");
             return; // One or both nodes not found, cannot disconnect
         }
-        auto right_sinks = right_node->GetSinks();
-        auto left_sources = left_node->GetSources();
+        auto right_sinks = to_node->GetSinks();
+        auto left_sources = from_node->GetSources();
         if (output_index < 0 || output_index >= static_cast<int32_t>(left_sources.size())) {
-            vortex::error("Invalid output index {} for node {}", output_index, left_node->GetInfo());
+            vortex::error("Invalid output index {} for node {}", output_index, from_node->GetInfo());
             return; // Invalid output index
         }
         if (input_index < 0 || input_index >= static_cast<int32_t>(right_sinks.size())) {
-            vortex::error("Invalid input index {} for node {}", input_index, right_node->GetInfo());
+            vortex::error("Invalid input index {} for node {}", input_index, to_node->GetInfo());
             return; // Invalid input index
         }
         vortex::info("Disconnecting nodes: {} (output {}) -> {} (input {})",
-                     left_node->GetInfo(), output_index,
-                     right_node->GetInfo(), input_index);
+                     from_node->GetInfo(), output_index,
+                     to_node->GetInfo(), input_index);
         // Remove the connection from the graph
-        Connection connection_to_remove{ left_node, right_node, uint32_t(output_index), uint32_t(input_index) };
+        Connection connection_to_remove{ from_node, to_node, uint32_t(output_index), uint32_t(input_index) };
         auto it = _connections.find(connection_to_remove);
         if (it != _connections.end()) {
             _connections.erase(it); // Remove the connection if it exists
         } else {
             vortex::warn("Connection does not exist: {} -> {} ({} -> {})",
-                         left_node->GetInfo(), right_node->GetInfo(),
+                         from_node->GetInfo(), to_node->GetInfo(),
                          output_index, input_index);
             return; // Connection does not exist
         }
@@ -195,13 +203,13 @@ public:
         target_sink.Reset(); // Reset the sink
 
         auto& target_source = left_sources[output_index];
-        target_source.targets.erase(SourceTarget{ uint32_t(input_index), right_node }); // Remove the target from the source
+        target_source.targets.erase(SourceTarget{ uint32_t(input_index), to_node }); // Remove the target from the source
 
-        UpdateIfStatic(right_node); // Update the right node if it was static
+        UpdateIfStatic(to_node); // Update the right node if it was static
 
         // Mark nodes for optimization
-        _optimize_probe.MarkNodeDirty(left_node);
-        _optimize_probe.MarkNodeDirty(right_node);
+        _optimize_probe.MarkNodeDirty(from_node);
+        _optimize_probe.MarkNodeDirty(to_node);
         _optimization_dirty = true;
     }
 

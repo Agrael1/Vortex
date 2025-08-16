@@ -2,12 +2,21 @@
 #include <limits>
 #include <span>
 #include <array>
+#include <unordered_map>
 
 namespace vortex::graph {
 class INode; // Forward declaration of INode
+
 enum class SinkType {
     RenderTexture, // Render texture sink
     RenderTarget, // Render target sink
+};
+
+enum class RenderStrategy {
+    None, // No rendering
+    Direct, // Direct rendering to target
+    Cache, // Cache output in texture cache
+    Bypass, // Bypass this source entirely
 };
 
 struct Sink {
@@ -84,6 +93,7 @@ struct SourceTarget {
 struct Source {
     static constexpr std::size_t dynamic_index = std::numeric_limits<std::size_t>::max(); // Invalid index for sink
     std::unordered_set<SourceTarget, SourceTarget::Hash> targets; // Set of sink descriptions for this source
+    RenderStrategy strategy = RenderStrategy::None; // Strategy for this source output
 };
 
 template<std::size_t N>

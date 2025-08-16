@@ -44,15 +44,24 @@ CPMAddPackage(
 set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${FFMPEG_SOURCE_DIR})
 set(FFmpeg_INSTALL_PATH ${FFMPEG_SOURCE_DIR})
 
-# SDL3
+
+# SDL3 imported target
 CPMAddPackage(
   NAME SDL3
-  GITHUB_REPOSITORY libsdl-org/SDL
-  GIT_TAG release-3.2.10
+  URL https://github.com/libsdl-org/SDL/releases/download/release-3.2.20/SDL3-devel-3.2.20-VC.zip
+  VERSION release-3.2.20
   OPTIONS
-  "SDL_WERROR OFF"
-  "SDL_LEAN_AND_MEAN ON"
+  DOWNLOAD_ONLY ON
 )
+
+# SDL3
+add_library(SDL3::SDL3 SHARED IMPORTED)
+set_target_properties(SDL3::SDL3 PROPERTIES
+  IMPORTED_LOCATION "${SDL3_SOURCE_DIR}/lib/x64/SDL3.dll"
+  IMPORTED_IMPLIB "${SDL3_SOURCE_DIR}/lib/x64/SDL3.lib"
+  INTERFACE_INCLUDE_DIRECTORIES "${SDL3_SOURCE_DIR}/include"
+)
+
 
 # Cef
 CPMAddPackage(
@@ -117,4 +126,17 @@ if (VORTEX_GENERATE_PROPERTIES)
     GITHUB_REPOSITORY leethomason/tinyxml2
     GIT_TAG master
   )
+endif()
+
+# catch2
+if(VORTEX_BUILD_TESTS)
+  CPMAddPackage(
+    NAME Catch2
+    GITHUB_REPOSITORY catchorg/Catch2
+    GIT_TAG v3.4.0
+    OPTIONS
+    "CATCH_BUILD_TESTING OFF"
+    "CATCH_INSTALL_DOCS OFF"
+  )
+  list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/extras)
 endif()

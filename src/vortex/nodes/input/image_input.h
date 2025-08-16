@@ -9,6 +9,7 @@
 #include <vortex/properties/props.hpp>
 
 namespace vortex {
+
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
 class ImageInput : public vortex::graph::NodeImpl<ImageInput, ImageInputProperties, 0, 1>
 {
@@ -96,7 +97,7 @@ public:
 
             auto& cmd_list = *probe._command_list;
             // Update state to shader resource
-            cmd_list.Reset();
+            std::ignore = cmd_list.Reset();
             cmd_list.TextureBarrier({
                                             .sync_before = wis::BarrierSync::None,
                                             .sync_after = wis::BarrierSync::None,

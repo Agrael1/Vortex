@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/graph/interfaces.h>
 #include <vortex/graph/connection.h>
+#include <vortex/graph/optimize_probe.h>
 #include <vortex/probe.h>
 #include <atomic>
 #include <unordered_set>
@@ -20,7 +21,7 @@ public:
             return 0; // Return 0 if node creation failed
         }
         if (node->GetType() == NodeType::Output) {
-            _outputs.push_back(node.get()); // Add to outputs if it's an output node
+            _outputs.push_back(static_cast<IOutput*>(node.get())); // Add to outputs if it's an output node
         }
 
         // Static nodes are to be updated on changes
@@ -150,6 +151,11 @@ public:
         target_source.targets.emplace(SourceTarget{ uint32_t(input_index), right_node }); // Add the target to the source
 
         UpdateIfStatic(right_node);
+
+        // Mark nodes for optimization
+        _optimize_probe.MarkNodeDirty(left_node);
+        _optimize_probe.MarkNodeDirty(right_node);
+        _optimization_dirty = true;
     }
 
     void DisconnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
@@ -192,6 +198,11 @@ public:
         target_source.targets.erase(SourceTarget{ uint32_t(input_index), right_node }); // Remove the target from the source
 
         UpdateIfStatic(right_node); // Update the right node if it was static
+
+        // Mark nodes for optimization
+        _optimize_probe.MarkNodeDirty(left_node);
+        _optimize_probe.MarkNodeDirty(right_node);
+        _optimization_dirty = true;
     }
 
     void SetNodeInfo(uintptr_t node_ptr, std::string info)
@@ -225,14 +236,16 @@ public:
         vortex::info(out);
     }
 
-private:
-    void ProcessUpdates(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
+    void OptimizeGraph()
     {
-        for (auto* node : _dirty_nodes) {
-            node->Update(gfx, probe); // Update the node with the graphics context and probe
+        if (_optimize_probe.HasPendingChanges() || _optimization_dirty) {
+            _optimize_probe.AnalyzeGraph(_outputs);
+            _optimize_probe.ApplyOptimizations();
+            _optimization_dirty = false;
         }
     }
 
+public:
     INode* GetNode(uintptr_t node_ptr) const
     {
         auto it = _nodes.find(node_ptr);
@@ -241,6 +254,14 @@ private:
         }
         vortex::error("Node not found in the graph: {}", node_ptr);
         return nullptr; // Node not found
+    }
+
+private:
+    void ProcessUpdates(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
+    {
+        for (auto* node : _dirty_nodes) {
+            node->Update(gfx, probe); // Update the node with the graphics context and probe
+        }
     }
 
     void UpdateIfStatic(INode* node)
@@ -255,7 +276,10 @@ private:
     std::unordered_set<Connection> _connections; ///< Map of connections by node pointers
     std::unordered_set<INode*> _dirty_nodes; ///< Set of nodes that have pending property updates
 
-    std::vector<INode*> _outputs;
+    std::vector<IOutput*> _outputs;
     uint32_t frame = 0; ///< Frame counter for rendering
+
+    OptimizeProbe _optimize_probe;
+    bool _optimization_dirty = true;
 };
 } // namespace vortex::graph

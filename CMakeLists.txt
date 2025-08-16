@@ -1,6 +1,7 @@
 ﻿cmake_minimum_required (VERSION 3.22)
 
 option(VORTEX_GENERATE_PROPERTIES "Build generator and generate properties" ON)
+option(VORTEX_BUILD_TESTS "Build tests" ON)
 set(WISDOM_FORCE_VULKAN ON CACHE BOOL "Force Vulkan backend for Wisdom")
 
 # Enable Hot Reload for MSVC compilers if supported.
@@ -20,59 +21,113 @@ if (VORTEX_GENERATE_PROPERTIES)
 endif()
 
 
-add_executable(${PROJECT_NAME})
-target_include_directories(${PROJECT_NAME} PRIVATE "src")
-target_sources(${PROJECT_NAME} 
-PRIVATE
-  "src/entry_main.cpp"
-  
+add_library(VortexLib STATIC)
+target_sources(VortexLib
 PUBLIC
-  "src/vortex/app.h"
-  "src/vortex/graphics.h"
-  "src/vortex/util/common.h"
-  
-  "src/vortex/nodes/node_registry.h"
-  "src/vortex/ui/ui_app.h"
+  "src/vortex/pch.hpp"
+
   "src/vortex/gfx/swapchain.h"
-
-  "src/vortex/nodes/input/image_input.h"
-  "src/vortex/nodes/filter/composition.h"
-
-  "src/vortex/codec/codec_ffmpeg.h" 
-  "src/vortex/codec/codec_ffmpeg.cpp" 
-   
-  "src/vortex/probe.h" 
-  "src/vortex/pipeline_storage.h" 
-
-  "src/vortex/ui/cef_app.h"
-  "src/vortex/ui/sdl.h"
-  "src/vortex/ui/implements.h"
-  "src/vortex/ui/client.h" 
-  "src/vortex/ui/value.h" 
-  "src/vortex/ui/ui_app.h"
-  "src/vortex/ui/ui_app.cpp" 
-  "src/vortex/ui/sdl.cpp"
-  "src/vortex/ui/call_handler.h" 
-  "src/vortex/ui/cef_app.cpp"  
-
   "src/vortex/gfx/descriptor_buffer.h" 
   "src/vortex/gfx/consts.h" 
   "src/vortex/gfx/descriptor_buffer.cpp" 
   "src/vortex/gfx/texture.cpp"
   "src/vortex/gfx/texture.h"
+  "src/vortex/gfx/texture_pool.cpp"
+  "src/vortex/gfx/texture_pool.h"
+
+  "src/vortex/graph/optimize_probe.h" 
+  "src/vortex/graph/optimize_probe.cpp"
+  "src/vortex/graph/ports.h" 
+  "src/vortex/graph/connection.h" 
+  "src/vortex/graph/interfaces.h" 
+  "src/vortex/graph/node_factory.h" 
 
   "src/vortex/util/lib/SPSC-Queue.h" 
   "src/vortex/util/reflection.h" 
   "src/vortex/util/log.h"
+  "src/vortex/util/ndi/ndi_library.h"  
+  "src/vortex/util/ndi/ndi_swapchain.h" 
+  "src/vortex/util/ndi/ndi_swapchain.cpp"
+  "src/vortex/util/rational.h"
+  "src/vortex/util/unique_any.h"
+  "src/vortex/util/common.h"
 
+  "src/vortex/nodes/input/image_input.h"
+  "src/vortex/nodes/filter/composition.h"
+  "src/vortex/nodes/filter/blend.h"
+  "src/vortex/nodes/node_registry.h"
+
+  "src/vortex/codec/codec_ffmpeg.h" 
+  "src/vortex/codec/codec_ffmpeg.cpp" 
+
+  "src/vortex/sync/wall_clock.h"
+  "src/vortex/sync/timeline.h"
+
+  "src/vortex/ui/sdl.h"
+  "src/vortex/ui/sdl.cpp"
+
+  "src/vortex/graphics.h"
+  "src/vortex/probe.h" 
+  "src/vortex/pipeline_storage.h" 
   "src/vortex/platform.cpp" 
   "src/vortex/graphics.cpp" 
   "src/vortex/model.h" 
   "src/vortex/update_queue.h" 
-  "src/vortex/graph/ports.h" 
-  "src/vortex/graph/connection.h" 
-  "src/vortex/graph/interfaces.h" 
-  "src/vortex/graph/node_factory.h"  "src/vortex/nodes/filter/blend.h" "src/vortex/util/ndi/ndi_library.h" "src/vortex/util/ndi/ndi_swapchain.h" "src/vortex/util/ndi/ndi_swapchain.cpp" "src/vortex/util/rational.h" "src/vortex/util/unique_any.h" "src/vortex/sync/wall_clock.h" "src/vortex/sync/timeline.h")
+)
+target_include_directories(VortexLib PUBLIC "src")
+set_target_properties(VortexLib PROPERTIES
+  CXX_STANDARD 23
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+# Add the /Zc:__cplusplus flag
+target_compile_options(VortexLib PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus /wd5050>)
+target_link_libraries(VortexLib
+  PUBLIC
+    spdlog::spdlog
+    SDL3::SDL3
+    NDI::NDI
+    
+    FFmpeg::FFmpeg
+    frozen::frozen-headers
+
+
+    wis::wisdom-headers
+    wis::wisdom-debug-headers
+    wis::wisdom-extended-allocation-headers
+    wis::wisdom-platform-headers
+    wis::wisdom-descriptor-buffer-headers
+)
+target_compile_definitions(VortexLib PUBLIC WISDOM_FORCE_VULKAN=1)
+target_precompile_headers(VortexLib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
+
+
+
+
+
+
+
+
+
+add_executable(${PROJECT_NAME})
+target_include_directories(${PROJECT_NAME} PUBLIC "src")
+target_sources(${PROJECT_NAME} 
+PRIVATE
+  "src/entry_main.cpp"
+
+  "src/vortex/ui/cef_app.h"
+  "src/vortex/ui/implements.h"
+  "src/vortex/ui/client.h" 
+  "src/vortex/ui/value.h" 
+  "src/vortex/ui/ui_app.h"
+  "src/vortex/ui/ui_app.cpp" 
+  "src/vortex/ui/call_handler.h" 
+  "src/vortex/ui/cef_app.cpp"  
+  "src/vortex/ui/ui_app.h"
+
+  "src/vortex/app.h"
+
+)
 
 add_custom_target(ui)
 # Copy the UI html files to the output directory
@@ -102,7 +157,6 @@ add_custom_command(TARGET ui POST_BUILD
 #  add_dependencies(${PROJECT_NAME} properties)
 #endif()
 
-
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON
@@ -111,26 +165,14 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 # Add the /Zc:__cplusplus flag
-target_compile_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus /wd5050>)
+target_compile_options(${PROJECT_NAME} PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus /wd5050>)
 target_link_libraries(${PROJECT_NAME} 
-  PRIVATE 
-    spdlog::spdlog
-    SDL3::SDL3
-    NDI::NDI
+  PUBLIC 
+    VortexLib
     libcef_dll_wrapper
-    
-    FFmpeg::FFmpeg
-    frozen::frozen-headers
-
-
-    wis::wisdom-headers
-    wis::wisdom-debug-headers
-    wis::wisdom-extended-allocation-headers
-    wis::wisdom-platform-headers
-    wis::wisdom-descriptor-buffer-headers
 )
-target_compile_definitions(${PROJECT_NAME} PRIVATE WISDOM_FORCE_VULKAN=1)
-target_precompile_headers(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
+target_compile_definitions(${PROJECT_NAME} PUBLIC WISDOM_FORCE_VULKAN=1)
+#target_precompile_headers(${PROJECT_NAME} REUSE_FROM VortexLib)
 add_dependencies(${PROJECT_NAME} shaders ui)
 
 WIS_INSTALL_DEPS(${PROJECT_NAME})
@@ -171,4 +213,9 @@ if (WIN32)
             -outputresource:"$<TARGET_FILE:${PROJECT_NAME}>"\;\#1
     COMMENT "Adding manifest..."
   )
+endif()
+
+if (VORTEX_BUILD_TESTS)
+enable_testing()
+add_subdirectory(test)
 endif()

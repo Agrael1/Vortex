@@ -1,5 +1,5 @@
 #pragma once
-
+#include <unordered_map>
 
 namespace vortex {
 class Graphics;
@@ -10,14 +10,11 @@ class RenderProbe
 {
 public:
     vortex::DescriptorBuffer& _descriptor_buffer;
-
     PipelineStorage& _pipeline_storage;
-
     wis::CommandList* _command_list = nullptr; // Command list for recording commands
 
     wis::RenderTargetView _current_rt_view;
     const wis::Texture* _current_rt_texture;
-
     wis::Size2D _output_size; // Useful for different render targets
     uint32_t frame = 0;
 };

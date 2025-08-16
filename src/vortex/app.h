@@ -3,6 +3,7 @@
 #include <vortex/nodes/node_registry.h>
 #include <vortex/pipeline_storage.h>
 #include <vortex/gfx/descriptor_buffer.h>
+#include <vortex/gfx/texture_pool.h>
 
 #include <vortex/ui/ui_app.h>
 #include <vortex/model.h>
@@ -52,7 +53,6 @@ public:
 
         _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
 
-
         constexpr std::pair<std::string_view, std::string_view> ndi_values[]{
             std::pair{ "name", "Vortex AEE Output" },
             std::pair{ "window_size", "[1000,1000]" }
@@ -96,6 +96,8 @@ public:
             }
             ProcessMessages(); // Process messages from the UI
 
+            _model.OptimizeGraph();
+
             // Process the model and render the nodes
             vortex::RenderProbe probe{
                 _descriptor_buffer,
@@ -105,14 +107,14 @@ public:
                 nullptr,
 
                 1,
-                frame_index
+                uint32_t(frame_index)
             };
             _model.TraverseNodes(_gfx, probe); // Traverse the nodes in the model
 
-            _gfx.GetMainQueue().SignalQueue(fence, fence_value);
+            std::ignore = _gfx.GetMainQueue().SignalQueue(fence, fence_value);
 
             frame_index = (frame_index + 1) % max_frames_in_flight;
-            fence.Wait(fence_values[frame_index]);
+            std::ignore = fence.Wait(fence_values[frame_index]);
 
             fence_values[frame_index] = ++fence_value;
         }
@@ -149,7 +151,7 @@ private:
     }
 
     // Message handlers for specific messages
-    void GetNodeTypes([[maybe_unused]] CefListValue& args) 
+    void GetNodeTypes([[maybe_unused]] CefListValue& args)
     {
         const auto& node_types = vortex::graph::NodeFactory::GetNodesInfo();
         CefRefPtr<CefDictionaryValue> return_dictionary = CefDictionaryValue::Create();
@@ -262,6 +264,7 @@ private:
     vortex::Graphics _gfx;
     vortex::PipelineStorage _pipeline_storage;
     vortex::DescriptorBuffer _descriptor_buffer;
+    vortex::TexturePool _texture_pool[vortex::max_frames_in_flight]; ///< Texture storage for each frame in flight
 
     dro::SPSCQueue<CefRefPtr<CefProcessMessage>, 64> _message_queue; ///< Queue for messages from the UI
 
@@ -291,7 +294,7 @@ private:
         { u"ConnectNodes", &App::ConnectNodes },
         { u"DisconnectNodes", &App::DisconnectNodes },
         { u"SetNodeInfo", &App::SetNodeInfo },
-        { u"SetNodeProperty", &App::SetNodeProperty }  
+        { u"SetNodeProperty", &App::SetNodeProperty }
     };
 
 private:

@@ -69,8 +69,8 @@ public:
     void Throttle() const
     {
         auto& q = GetMainQueue();
-        q.SignalQueue(_fence, ++_fence_value);
-        _fence.Wait(_fence_value);
+        std::ignore = q.SignalQueue(_fence, ++_fence_value);
+        std::ignore = _fence.Wait(_fence_value);
     }
     void WaitForGPU() const
     {

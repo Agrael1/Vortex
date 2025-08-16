@@ -1,5 +1,6 @@
 #pragma once
 #include <include/cef_values.h>
+#include <include/cef_v8.h>
 #include <string_view>
 #include <vortex/util/log.h>
 #include <vortex/util/reflection.h>

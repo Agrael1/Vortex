@@ -67,7 +67,7 @@ public:
     }
     void Throttle() noexcept
     {
-        _fence.Wait(_fence_values[_frame_index] - 1);
+        std::ignore = _fence.Wait(_fence_values[_frame_index] - 1);
     }
     void Present(const vortex::Graphics& gfx) noexcept
     {
@@ -125,6 +125,10 @@ public:
     {
         return GetFramerate();
     }
+    virtual wis::Size2D GetOutputSize() const noexcept
+    {
+        return { window_size.x, window_size.y };
+    }
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
         if (!IsReady()) {
@@ -137,7 +141,7 @@ public:
             auto [width, height] = _window.PixelSize();
             Throttle(); // Ensure the GPU is ready for the resize operation
 
-            _swapchain.Resize(width, height);
+            std::ignore = _swapchain.Resize(width, height);
             // Recreate the render targets after resizing the swapchain
             wis::Result result = wis::success;
             for (size_t i = 0; i < _textures.size(); ++i) {
@@ -163,7 +167,7 @@ public:
 
         // Barrier to ensure the render target is ready for rendering
         auto& cmd_list = *probe._command_list;
-        cmd_list.Reset();
+        std::ignore = cmd_list.Reset();
         probe._descriptor_buffer.BindBuffers(gfx, cmd_list);
 
         cmd_list.TextureBarrier({

@@ -63,6 +63,7 @@ struct alignas(16) INode {
 struct IOutput : public INode {
     virtual bool IsReady() const noexcept = 0; ///< Check if the output is ready for rendering
     virtual vortex::ratio32_t GetOutputFPS() const noexcept = 0; ///< Get the output FPS
+    virtual wis::Size2D GetOutputSize() const noexcept = 0; ///< Get the output size
 };
 
 // Factory for creating nodes

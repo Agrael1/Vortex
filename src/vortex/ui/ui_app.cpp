@@ -1,4 +1,5 @@
 #include "ui_app.h"
+#include <include/cef_browser.h>
 
 void vortex::ui::UIApp::InitializeCEF()
 {

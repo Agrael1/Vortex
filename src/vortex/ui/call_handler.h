@@ -2,6 +2,7 @@
 #include <vortex/ui/implements.h>
 #include <vortex/ui/value.h>
 #include <include/cef_v8.h>
+#include <include/cef_values.h>
 #include <vortex/util/log.h>
 #include <include/cef_parser.h>
 

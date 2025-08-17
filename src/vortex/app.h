@@ -262,6 +262,7 @@ private:
     vortex::ui::SDLLibrary _sdl;
 
     vortex::Graphics _gfx;
+    vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
     vortex::PipelineStorage _pipeline_storage;
     vortex::DescriptorBuffer _descriptor_buffer;
     vortex::TexturePool _texture_pool[vortex::max_frames_in_flight]; ///< Texture storage for each frame in flight

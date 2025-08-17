@@ -53,6 +53,7 @@ PUBLIC
   "src/vortex/util/common.h"
 
   "src/vortex/nodes/input/image_input.h"
+  "src/vortex/nodes/input/image_input.cpp"
   "src/vortex/nodes/filter/composition.h"
   "src/vortex/nodes/filter/blend.h"
   "src/vortex/nodes/node_registry.h"
@@ -73,7 +74,7 @@ PUBLIC
   "src/vortex/graphics.cpp" 
   "src/vortex/model.h" 
   "src/vortex/update_queue.h" 
-)
+  "src/vortex/util/lazy.h")
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
   CXX_STANDARD 23

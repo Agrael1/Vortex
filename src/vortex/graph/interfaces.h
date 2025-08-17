@@ -75,6 +75,7 @@ template<typename CRTP,
          typename Base = INode>
 struct NodeImpl : public Base, public Properties {
     static constexpr EvaluationStrategy evaluation_strategy = strategy;
+    static constexpr bool has_lazy_data = requires { CRTP::LazyData; }; ///< Check if the CRTP class has LazyData
     static constexpr StaticNodeInfo static_info = {
         .sinks = sinks,
         .sources = sources,

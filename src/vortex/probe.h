@@ -4,13 +4,11 @@
 namespace vortex {
 class Graphics;
 class DescriptorBuffer;
-class PipelineStorage;
 
 class RenderProbe
 {
 public:
     vortex::DescriptorBuffer& _descriptor_buffer;
-    PipelineStorage& _pipeline_storage;
     wis::CommandList* _command_list = nullptr; // Command list for recording commands
 
     wis::RenderTargetView _current_rt_view;

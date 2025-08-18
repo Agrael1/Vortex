@@ -1,6 +1,6 @@
 #pragma once
 #include <wisdom/wisdom_descriptor_buffer.hpp>
-#include <vortex/gfx/consts.h>
+#include <vortex/consts.h>
 
 namespace vortex {
 class Graphics;

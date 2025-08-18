@@ -2,7 +2,9 @@
 #include <limits>
 #include <span>
 #include <array>
-#include <unordered_map>
+#include <unordered_set>
+#include <vortex/consts.h>
+#include <bitset>
 
 namespace vortex::graph {
 class INode; // Forward declaration of INode
@@ -98,7 +100,7 @@ struct SourceTarget {
 struct Source {
     static constexpr std::size_t dynamic_index = std::numeric_limits<std::size_t>::max(); // Invalid index for sink
     std::unordered_set<SourceTarget, SourceTarget::Hash> targets; // Set of sink descriptions for this source
-    RenderStrategy strategy = RenderStrategy::None; // Strategy for this source output
+    std::bitset<max_outputs> rendered_outputs; // Bitset of rendered outputs (come from optimization)
 };
 
 template<std::size_t N>

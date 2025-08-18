@@ -1,7 +1,6 @@
 #pragma once
 #include <vortex/graphics.h>
 #include <vortex/nodes/node_registry.h>
-#include <vortex/pipeline_storage.h>
 #include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/gfx/texture_pool.h>
 
@@ -96,12 +95,9 @@ public:
             }
             ProcessMessages(); // Process messages from the UI
 
-            _model.OptimizeGraph();
-
             // Process the model and render the nodes
             vortex::RenderProbe probe{
                 _descriptor_buffer,
-                _pipeline_storage,
                 &_command_list[frame_index],
                 {},
                 nullptr,
@@ -263,7 +259,6 @@ private:
 
     vortex::Graphics _gfx;
     vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
-    vortex::PipelineStorage _pipeline_storage;
     vortex::DescriptorBuffer _descriptor_buffer;
     vortex::TexturePool _texture_pool[vortex::max_frames_in_flight]; ///< Texture storage for each frame in flight
 

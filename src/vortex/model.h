@@ -5,6 +5,7 @@
 #include <vortex/probe.h>
 #include <atomic>
 #include <unordered_set>
+#include <algorithm>
 
 namespace vortex::graph {
 class GraphModel
@@ -12,246 +13,14 @@ class GraphModel
 public:
     GraphModel() = default;
 
-public:
-    uintptr_t CreateNode(const vortex::Graphics& gfx, std::string_view node_name, UpdateNotifier::External updater = {}, SerializedProperties values = {})
-    {
-        auto node = NodeFactory::CreateNode(node_name, gfx, updater, values);
-        if (!node) {
-            vortex::error("Failed to create node: {}", node_name);
-            return 0; // Return 0 if node creation failed
-        }
-        if (node->GetType() == NodeType::Output) {
-            _outputs.push_back(static_cast<IOutput*>(node.get())); // Add to outputs if it's an output node
-        }
-
-        // Static nodes are to be updated on changes
-        UpdateIfStatic(node.get());
-
-        auto node_ptr = std::bit_cast<uintptr_t>(node.get());
-        _nodes.emplace(node_ptr, std::move(node));
-        return node_ptr; // Return the pointer to the created node
-    }
-
-    void RemoveNode(uintptr_t node_ptr)
-    {
-        auto it = _nodes.find(node_ptr);
-        if (it == _nodes.end()) {
-            vortex::error("Node not found in the graph: {}", node_ptr);
-            return; // Node not found, nothing to remove
-        }
-        INode* node = std::bit_cast<INode*>(node_ptr);
-
-        // Remove connections associated with the node
-        Connection connection_to_remove{ nullptr, nullptr, 0, 0 };
-        auto sinks = node->GetSinks();
-        for (std::size_t i = 0; i < sinks.size(); i++) {
-            auto& sink = sinks[i];
-            if (!sink) {
-                continue; // Skip invalid sinks
-            }
-
-            connection_to_remove.from_node = sink.source_node;
-            connection_to_remove.from_index = sink.source_index;
-            connection_to_remove.to_node = node;
-            connection_to_remove.to_index = i;
-            _connections.erase(connection_to_remove); // Remove all connections to this node
-
-            // Remove the source from the sink
-            sink.source_node->GetSources()[sink.source_index].targets.erase(SourceTarget{ uint32_t(i), node });
-        }
-
-        auto sources = node->GetSources();
-        for (std::size_t i = 0; i < sources.size(); i++) {
-            auto& source = sources[i];
-            connection_to_remove.from_index = i;
-            connection_to_remove.from_node = node;
-            for (const auto& target : source.targets) {
-                if (!target) {
-                    continue; // Skip invalid targets
-                }
-                // Reset the connection sink
-                target.sink_node->GetSinks()[target.sink_index].Reset();
-
-                // Reset the sink to remove the connection
-                connection_to_remove.to_node = target.sink_node;
-                connection_to_remove.to_index = target.sink_index;
-                _connections.erase(connection_to_remove); // Remove all connections from this node
-            }
-        }
-
-        // Remove from dirty set when deleting
-        _dirty_nodes.erase(node);
-        if (node->GetType() == NodeType::Output) {
-            if (auto output_it = std::ranges::find(_outputs, node); output_it != _outputs.end()) {
-                _outputs.erase(output_it); // Remove from outputs if it's an output node
-            } else {
-                vortex::error("Output node not found in outputs: {}", node_ptr);
-            }
-        }
-        _nodes.erase(it); // Remove the node from the graph
-    }
-
-    void SetNodeProperty(uintptr_t node_ptr, uint32_t index, std::string_view value, bool notify_ui = false)
-    {
-        if (auto* node = GetNode(node_ptr)) {
-            UpdateIfStatic(node); // Update the node if it is static, dynamic nodes update every frame
-            node->SetProperty(index, value, notify_ui);
-        }
-    }
-
-    auto GetNodeProperties(uintptr_t node_ptr) const -> std::string
-    {
-        if (auto* node = GetNode(node_ptr)) {
-            return node->GetProperties(); // Get properties of the node
-        }
-        return "{}"; // Return empty string if node not found
-    }
-
-    void ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index)
-    {
-        auto* from_node = GetNode(node_ptr_from);
-        auto* to_node = GetNode(node_ptr_to);
-        if (!from_node || !to_node) {
-            vortex::error("Failed to connect nodes: one or both nodes not found.");
-            return; // One or both nodes not found, cannot connect
-        }
-
-
-        auto to_sinks = to_node->GetSinks();
-        auto from_sources = from_node->GetSources();
-        if (output_index < 0 || output_index >= static_cast<int32_t>(from_sources.size())) {
-            vortex::error("Invalid output index {} for node {}", output_index, from_node->GetInfo());
-            return; // Invalid output index
-        }
-        if (input_index < 0 || input_index >= static_cast<int32_t>(to_sinks.size())) {
-            vortex::error("Invalid input index {} for node {}", input_index, to_node->GetInfo());
-            return; // Invalid input index
-        }
-        vortex::info("Connecting nodes: {} (output {}) -> {} (input {})",
-                     from_node->GetInfo(), output_index,
-                     to_node->GetInfo(), input_index);
-
-        // Create a connection and add it to the graph
-        auto &&[it, succ] = _connections.emplace(from_node, to_node, uint32_t(output_index), uint32_t(input_index));
-        if (!succ) {
-            vortex::warn("Connection already exists: {} -> {} ({} -> {})",
-                          from_node->GetInfo(), to_node->GetInfo(),
-                          output_index, input_index);
-            return; // Connection already exists
-        }
-
-
-        // remove any existing connection at the same input index
-        auto& target_sink = to_sinks[input_index];
-        auto& target_source = from_sources[output_index];
-        if (target_sink) {
-            vortex::warn("Overwriting existing connection at input index {} on node {}", input_index, to_node->GetInfo());
-            _connections.erase(Connection{ target_sink.source_node, to_node, uint32_t(target_sink.source_index), uint32_t(input_index) }); // Remove existing connection
-            // Remove the target from the source
-            auto prev_target_sources = target_sink.source_node->GetSources();
-            prev_target_sources[target_sink.source_index].targets.erase(SourceTarget{ uint32_t(input_index), to_node });
-            _optimize_probe.MarkNodeDirty(target_sink.source_node); // Mark the source node as dirty
-        }
-
-        target_sink.source_node = from_node; // Set the source node for the sink
-        target_sink.source_index = uint32_t(output_index); // Set the source index for the sink
-
-        target_source.targets.emplace(uint32_t(input_index), to_node); // Add the target to the source
-
-        UpdateIfStatic(to_node);
-
-        // Mark nodes for optimization
-        _optimize_probe.MarkNodeDirty(from_node);
-        _optimize_probe.MarkNodeDirty(to_node);
-        _optimization_dirty = true;
-    }
-
-    void DisconnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index)
-    {
-        auto* from_node = GetNode(node_ptr_from);
-        auto* to_node = GetNode(node_ptr_to);
-        if (!from_node || !to_node) {
-            vortex::error("Failed to disconnect nodes: one or both nodes not found.");
-            return; // One or both nodes not found, cannot disconnect
-        }
-        auto right_sinks = to_node->GetSinks();
-        auto left_sources = from_node->GetSources();
-        if (output_index < 0 || output_index >= static_cast<int32_t>(left_sources.size())) {
-            vortex::error("Invalid output index {} for node {}", output_index, from_node->GetInfo());
-            return; // Invalid output index
-        }
-        if (input_index < 0 || input_index >= static_cast<int32_t>(right_sinks.size())) {
-            vortex::error("Invalid input index {} for node {}", input_index, to_node->GetInfo());
-            return; // Invalid input index
-        }
-        vortex::info("Disconnecting nodes: {} (output {}) -> {} (input {})",
-                     from_node->GetInfo(), output_index,
-                     to_node->GetInfo(), input_index);
-        // Remove the connection from the graph
-        Connection connection_to_remove{ from_node, to_node, uint32_t(output_index), uint32_t(input_index) };
-        auto it = _connections.find(connection_to_remove);
-        if (it != _connections.end()) {
-            _connections.erase(it); // Remove the connection if it exists
-        } else {
-            vortex::warn("Connection does not exist: {} -> {} ({} -> {})",
-                         from_node->GetInfo(), to_node->GetInfo(),
-                         output_index, input_index);
-            return; // Connection does not exist
-        }
-        // Reset the sink and source to remove the connection
-        auto& target_sink = right_sinks[input_index];
-        target_sink.Reset(); // Reset the sink
-
-        auto& target_source = left_sources[output_index];
-        target_source.targets.erase(SourceTarget{ uint32_t(input_index), to_node }); // Remove the target from the source
-
-        UpdateIfStatic(to_node); // Update the right node if it was static
-
-        // Mark nodes for optimization
-        _optimize_probe.MarkNodeDirty(from_node);
-        _optimize_probe.MarkNodeDirty(to_node);
-        _optimization_dirty = true;
-    }
-
-    void SetNodeInfo(uintptr_t node_ptr, std::string info)
-    {
-        if (auto* node = GetNode(node_ptr)) {
-            node->SetInfo(std::move(info));
-        }
-    }
-
-    void TraverseNodes(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
-    {
-        // Process all pending updates before rendering
-        ProcessUpdates(gfx, probe);
-
-        for (auto* output : _outputs) {
-            output->Evaluate(gfx, probe); // Visit each output node to render
-        }
-    }
-
-    void PrintGraph() const
-    {
-        std::string out = "Graph Model:\n";
-        for (const auto& [node_ptr, node] : _nodes) {
-            std::format_to(std::back_inserter(out), "Node: {} (Info: {})\n", node_ptr, node->GetInfo());
-        }
-        for (const auto& connection : _connections) {
-            std::format_to(std::back_inserter(out), "Connection: {} -> {} ({} -> {})\n",
-                         connection.from_node->GetInfo(), connection.to_node->GetInfo(),
-                         connection.from_index, connection.to_index);
-        }
-        vortex::info(out);
-    }
-
-    void OptimizeGraph()
-    {
-        if (_optimize_probe.HasPendingChanges() || _optimization_dirty) {
-            _optimize_probe.AnalyzeGraph(_outputs);
-            _optimize_probe.ApplyOptimizations();
-            _optimization_dirty = false;
-        }
-    }
+public: // Model API
+    auto CreateNode(const vortex::Graphics& gfx, std::string_view node_name, UpdateNotifier::External updater = {}, SerializedProperties values = {}) -> uintptr_t;
+    void RemoveNode(uintptr_t node_ptr);
+    void SetNodeProperty(uintptr_t node_ptr, uint32_t index, std::string_view value, bool notify_ui = false);
+    auto GetNodeProperties(uintptr_t node_ptr) const -> std::string;
+    void ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
+    void DisconnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
+    void SetNodeInfo(uintptr_t node_ptr, std::string info);
 
 public:
     INode* GetNode(uintptr_t node_ptr) const
@@ -264,9 +33,124 @@ public:
         return nullptr; // Node not found
     }
 
+    void TraverseNodes(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
+    {
+        // Sort outputs if needed
+        SortOutputs();
+
+        // Process all pending updates before rendering
+        ProcessUpdates(gfx, probe);
+
+        // Execute outputs in sorted order
+        for (auto* output : _outputs) {
+            if (output && output->IsReady()) {
+                output->Evaluate(gfx, probe);
+            }
+        }
+
+        ++frame;
+    }
+
+    void PrintGraph() const
+    {
+        std::string out = "Graph Model:\n";
+        for (const auto& [node_ptr, node] : _nodes) {
+            std::format_to(std::back_inserter(out), "Node: {} (Info: {})\n", node_ptr, node->GetInfo());
+        }
+        for (const auto& connection : _connections) {
+            std::format_to(std::back_inserter(out), "Connection: {} -> {} ({} -> {})\n",
+                           connection.from_node->GetInfo(), connection.to_node->GetInfo(),
+                           connection.from_index, connection.to_index);
+        }
+        vortex::info(out);
+    }
+
+    void SortOutputs()
+    {
+        if (!_sorting_dirty) {
+            return;
+        }
+
+        // Group outputs by compatibility first, then sort within groups
+        std::vector<std::vector<IOutput*>> compatibility_groups;
+
+        for (auto* output : _outputs) {
+            if (!output || !output->IsReady()) {
+                continue;
+            }
+
+            // Find compatible group or create new one
+            bool found_group = false;
+            for (auto& group : compatibility_groups) {
+                if (!group.empty() && AreSizeCompatible(group[0], output)) {
+                    group.push_back(output);
+                    found_group = true;
+                    break;
+                }
+            }
+
+            if (!found_group) {
+                compatibility_groups.emplace_back().push_back(output);
+            }
+        }
+
+        // Sort groups by importance (largest first) and sort within groups
+        std::ranges::sort(compatibility_groups, [](const auto& a, const auto& b) {
+            if (a.empty() || b.empty()) {
+                return !a.empty();
+            }
+
+            auto a_pixels = static_cast<uint64_t>(a[0]->GetOutputSize().width) * a[0]->GetOutputSize().height;
+            auto b_pixels = static_cast<uint64_t>(b[0]->GetOutputSize().width) * b[0]->GetOutputSize().height;
+            return a_pixels > b_pixels;
+        });
+
+        // Sort within each group
+        for (auto& group : compatibility_groups) {
+            std::ranges::sort(group, CompareBySizeCompatibility);
+        }
+
+        // Flatten back to single list
+        _outputs.clear();
+        for (const auto& group : compatibility_groups) {
+            _outputs.insert(_outputs.end(), group.begin(), group.end());
+        }
+
+        _sorting_dirty = false;
+
+        // Enhanced logging
+        if (!_outputs.empty()) {
+            vortex::trace("GraphModel: Sorted {} outputs into {} compatibility groups",
+                          _outputs.size(), compatibility_groups.size());
+            for (size_t i = 0; i < _outputs.size(); ++i) {
+                if (_outputs[i] && _outputs[i]->IsReady()) {
+                    auto size = _outputs[i]->GetOutputSize();
+                    vortex::trace("  Output {}: {:x} ({} pixels)", i, size,
+                                  static_cast<uint64_t>(size.width) * size.height);
+                }
+            }
+        }
+    }
+
+    void PropagateOutputs()
+    {
+
+    }
+
+    std::span<IOutput*> GetOutputs() noexcept
+    {
+        return _outputs; // Return a span of outputs
+    }
+
 private:
     void ProcessUpdates(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
     {
+        // Optimize the graph if needed
+        if (_optimization_dirty) {
+            _optimize_probe.PropagateOutputs(_outputs); // Optimize the graph using the probe
+            _optimization_dirty = false; // Reset the optimization dirty flag
+        }
+
         for (auto* node : _dirty_nodes) {
             node->Update(gfx, probe); // Update the node with the graphics context and probe
         }
@@ -279,6 +163,96 @@ private:
         }
     }
 
+    // Improved compatibility-based comparison for output sorting
+    static bool CompareBySizeCompatibility(const IOutput* a, const IOutput* b)
+    {
+        auto a_size = a->GetOutputSize();
+        auto b_size = b->GetOutputSize();
+
+        // First, group by aspect ratio (primary grouping criterion)
+        float aspect_a = static_cast<float>(a_size.width) / a_size.height;
+        float aspect_b = static_cast<float>(b_size.width) / b_size.height;
+
+        // Calculate aspect ratio difference for grouping
+        float aspect_diff_a = std::abs(aspect_a - 1.0f); // Distance from square (1:1)
+        float aspect_diff_b = std::abs(aspect_b - 1.0f);
+
+        // Group similar aspect ratios together (within compatibility tolerance)
+        const float aspect_tolerance = 0.1f;
+        bool a_near_square = aspect_diff_a <= aspect_tolerance;
+        bool b_near_square = aspect_diff_b <= aspect_tolerance;
+
+        if (a_near_square != b_near_square) {
+            return a_near_square > b_near_square; // Square-like outputs first
+        }
+
+        // Within the same aspect ratio group, sort by scale factor
+        // Calculate base scale (using smaller dimension as reference)
+        uint32_t a_min_dim = std::min(a_size.width, a_size.height);
+        uint32_t b_min_dim = std::min(b_size.width, b_size.height);
+
+        // Group by scale ranges: [1-512], [513-1024], [1025-2048], [2049+]
+        auto get_scale_group = [](uint32_t min_dim) -> int {
+            if (min_dim <= 512) {
+                return 0;
+            }
+            if (min_dim <= 1024) {
+                return 1;
+            }
+            if (min_dim <= 2048) {
+                return 2;
+            }
+            return 3;
+        };
+
+        int scale_group_a = get_scale_group(a_min_dim);
+        int scale_group_b = get_scale_group(b_min_dim);
+
+        if (scale_group_a != scale_group_b) {
+            return scale_group_a > scale_group_b; // Larger scale groups first
+        }
+
+        // Within the same scale group, sort by total pixels (larger first)
+        uint64_t a_pixels = static_cast<uint64_t>(a_size.width) * a_size.height;
+        uint64_t b_pixels = static_cast<uint64_t>(b_size.width) * b_size.height;
+
+        if (a_pixels != b_pixels) {
+            return a_pixels > b_pixels;
+        }
+
+        // Final tie-breaker: width then height
+        if (a_size.width != b_size.width) {
+            return a_size.width > b_size.width;
+        }
+
+        return a_size.height > b_size.height;
+    }
+
+public:
+    // Helper method to check if two outputs are size-compatible for caching
+    static bool AreSizeCompatible(const IOutput* a, const IOutput* b) noexcept
+    {
+        auto a_size = a->GetOutputSize();
+        auto b_size = b->GetOutputSize();
+
+        // Check aspect ratio compatibility (within 10% tolerance)
+        float aspect_a = static_cast<float>(a_size.width) / a_size.height;
+        float aspect_b = static_cast<float>(b_size.width) / b_size.height;
+        float aspect_diff = std::abs(aspect_a - aspect_b) / std::max(aspect_a, aspect_b);
+
+        if (aspect_diff > 0.1f) {
+            return false; // Incompatible aspect ratios
+        }
+
+        // Check scale factor (max 2x scaling)
+        float scale_x = static_cast<float>(std::max(a_size.width, b_size.width)) /
+                std::min(a_size.width, b_size.width);
+        float scale_y = static_cast<float>(std::max(a_size.height, b_size.height)) /
+                std::min(a_size.height, b_size.height);
+
+        return std::max(scale_x, scale_y) <= 2.0f; // Compatible scaling
+    }
+
 private:
     std::unordered_map<uintptr_t, std::unique_ptr<INode>> _nodes;
     std::unordered_set<Connection> _connections; ///< Map of connections by node pointers
@@ -289,5 +263,6 @@ private:
 
     OptimizeProbe _optimize_probe;
     bool _optimization_dirty = true;
+    bool _sorting_dirty = true; ///< Flag to indicate if output sorting is needed
 };
 } // namespace vortex::graph

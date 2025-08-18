@@ -28,7 +28,7 @@ PUBLIC
 
   "src/vortex/gfx/swapchain.h"
   "src/vortex/gfx/descriptor_buffer.h" 
-  "src/vortex/gfx/consts.h" 
+  "src/vortex/consts.h" 
   "src/vortex/gfx/descriptor_buffer.cpp" 
   "src/vortex/gfx/texture.cpp"
   "src/vortex/gfx/texture.h"
@@ -69,11 +69,12 @@ PUBLIC
 
   "src/vortex/graphics.h"
   "src/vortex/probe.h" 
-  "src/vortex/pipeline_storage.h" 
+   
   "src/vortex/platform.cpp" 
   "src/vortex/graphics.cpp" 
   "src/vortex/model.h" 
-  "src/vortex/update_queue.h" 
+  "src/vortex/model.cpp" 
+   
   "src/vortex/util/lazy.h")
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
@@ -99,7 +100,7 @@ target_link_libraries(VortexLib
     wis::wisdom-platform-headers
     wis::wisdom-descriptor-buffer-headers
 )
-target_compile_definitions(VortexLib PUBLIC WISDOM_FORCE_VULKAN=1)
+#target_compile_definitions(VortexLib PUBLIC WISDOM_FORCE_VULKAN=1)
 target_precompile_headers(VortexLib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
 
 

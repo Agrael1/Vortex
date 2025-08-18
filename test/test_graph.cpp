@@ -15,7 +15,7 @@ public:
     vortex::graph::GraphModel model;
 };
 
-TEST_CASE_METHOD(GraphTest, "AddConnection_OverwriteConnection", "[connect]")
+TEST_CASE_METHOD(GraphTest, "Connection.OverwriteConnection", "[connect]")
 {
     auto n1 = CreateNode("MockOutput");
     REQUIRE(n1 != 0);
@@ -43,7 +43,7 @@ TEST_CASE_METHOD(GraphTest, "AddConnection_OverwriteConnection", "[connect]")
     REQUIRE(target.sink_node == std::bit_cast<vortex::graph::INode*>(n2));
 }
 
-TEST_CASE_METHOD(GraphTest, "AddConnection_RemoveConnection", "[connect]")
+TEST_CASE_METHOD(GraphTest, "Connection.RemoveConnection", "[connect]")
 {
     auto n1 = CreateNode("MockOutput");
     REQUIRE(n1 != 0);
@@ -71,7 +71,7 @@ TEST_CASE_METHOD(GraphTest, "AddConnection_RemoveConnection", "[connect]")
     REQUIRE(sinks_n1[0].source_node == nullptr); // n1 should have no connections now
 }
 
-TEST_CASE_METHOD(GraphTest, "DeleteNode_RemovesAllConnections", "[connect]")
+TEST_CASE_METHOD(GraphTest, "Connection.DeleteNodeRemovesAllConnections", "[connect]")
 {
     auto n1 = CreateNode("MockOutput");
     REQUIRE(n1 != 0);

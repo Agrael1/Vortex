@@ -201,7 +201,7 @@ public:
                                                   pascal_prop_name);
             set_property_stub += std::format(
                     "case {}: if ({} out_value; vortex::reflection_traits<{}>::deserialize(&out_value, value)) {{"
-                    "self.Set{}(out_value, notify);break; }}",
+                    "self.Set{}(out_value, notify); }}break;",
                     prop_count,
                     transform_type,
                     transform_type,

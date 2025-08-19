@@ -5,6 +5,7 @@
 
 #include <vortex/nodes/output/window_output.h>
 #include <vortex/nodes/input/image_input.h>
+#include <vortex/nodes/input/stream_input.h>
 #include <vortex/nodes/filter/blend.h>
 
 namespace vortex {
@@ -16,6 +17,7 @@ inline void RegisterHardwareNodes()
 
     vortex::WindowOutput::RegisterNode();
     vortex::ImageInput::RegisterNode();
+    vortex::StreamInput::RegisterNode();
     vortex::Blend::RegisterNode();
 }
 } // namespace vortex

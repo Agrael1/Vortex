@@ -223,8 +223,7 @@ std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::Lo
 std::expected<vortex::ffmpeg::unique_context, std::error_code>
 vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url)
 {
-    vortex::ffmpeg::unique_context format_context;
-
+    ffmpeg::unique_context format_context;
     int ret = avformat_open_input(format_context.address_of(), stream_url.data(), nullptr, nullptr);
     if (ret < 0) {
         auto ec = ffmpeg::make_ffmpeg_error(ret);
@@ -240,4 +239,79 @@ vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url)
         return std::unexpected(ec);
     }
     return format_context;
+}
+
+std::expected<std::vector<vortex::codec::StreamInfo>, std::error_code>
+vortex::codec::CodecFFmpeg::GetStreamInfo(const vortex::ffmpeg::unique_context& context)
+{
+    if (!context.is_valid()) {
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+
+    std::vector<StreamInfo> streams;
+    auto* format_ctx = context.get();
+
+    for (unsigned int i = 0; i < format_ctx->nb_streams; i++) {
+        AVStream* stream = format_ctx->streams[i];
+
+        StreamInfo info;
+        info.stream_index = i;
+
+        // Get codec information
+        const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
+        if (codec) {
+            info.codec_name = codec->name;
+        }
+
+        // Media type
+        switch (stream->codecpar->codec_type) {
+        case AVMEDIA_TYPE_VIDEO:
+            info.width = stream->codecpar->width;
+            info.height = stream->codecpar->height;
+
+            // Convert AVRational to our ratio type
+            auto av_to_ratio = [](AVRational av_rat) {
+                return vortex::ratio64_t(av_rat.num, av_rat.den);
+            };
+
+            info.time_base = av_to_ratio(stream->time_base);
+            info.frame_rate = av_to_ratio(stream->codecpar->framerate);
+            info.avg_frame_rate = av_to_ratio(stream->avg_frame_rate);
+            info.r_frame_rate = av_to_ratio(stream->r_frame_rate);
+            break;
+
+        case AVMEDIA_TYPE_AUDIO:
+            info.sample_rate = stream->codecpar->sample_rate;
+            info.channels = stream->codecpar->ch_layout.nb_channels;
+            break;
+
+        default:
+            break;
+        }
+
+        info.start_time = stream->start_time;
+        info.duration = stream->duration;
+
+        streams.push_back(std::move(info));
+    }
+
+    return streams;
+}
+
+std::expected<vortex::codec::StreamInfo, std::error_code>
+vortex::codec::CodecFFmpeg::FindBestVideoStream(const vortex::ffmpeg::unique_context& context)
+{
+    auto streams_result = GetStreamInfo(context);
+    if (!streams_result) {
+        return std::unexpected(streams_result.error());
+    }
+
+    // Find first video stream
+    for (const auto& stream : *streams_result) {
+        if (stream.media_type == "video") {
+            return stream;
+        }
+    }
+
+    return std::unexpected(vortex::ffmpeg::make_error_code(vortex::ffmpeg::ffmpeg_errc::stream_not_found));
 }

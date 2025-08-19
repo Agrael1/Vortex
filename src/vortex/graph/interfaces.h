@@ -87,7 +87,7 @@ struct NodeImpl : public Base, public Properties {
 public:
     NodeImpl(SerializedProperties properties = {})
     {
-        Properties::Deserialize(properties, false); // Deserialize properties from the provided span, don't notify since there is no notifier set yet
+        static_cast<CRTP*>(this)->Deserialize(properties, false); // Deserialize properties from the provided span, don't notify since there is no notifier set yet
     }
 
 public:

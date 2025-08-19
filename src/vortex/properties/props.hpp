@@ -157,23 +157,23 @@ public:
         case 0:
             if (BlendMode out_value; vortex::reflection_traits<BlendMode>::deserialize(&out_value, value)) {
                 self.SetBlendMode(out_value, notify);
-                break;
             }
+            break;
         case 1:
             if (BlendChannel out_value; vortex::reflection_traits<BlendChannel>::deserialize(&out_value, value)) {
                 self.SetBlendChannel(out_value, notify);
-                break;
             }
+            break;
         case 2:
             if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
                 self.SetOpacity(out_value, notify);
-                break;
             }
+            break;
         case 3:
             if (bool out_value; vortex::reflection_traits<bool>::deserialize(&out_value, value)) {
                 self.SetClampResult(out_value, notify);
-                break;
             }
+            break;
         default:
             vortex::error("Blend: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -299,23 +299,23 @@ public:
         case 0:
             if (std::string_view out_value; vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
                 self.SetImagePath(out_value, notify);
-                break;
             }
+            break;
         case 1:
             if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
                 self.SetImageSize(out_value, notify);
-                break;
             }
+            break;
         case 2:
             if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
                 self.SetOrigin(out_value, notify);
-                break;
             }
+            break;
         case 3:
             if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
                 self.SetRotation2d(out_value, notify);
-                break;
             }
+            break;
         default:
             vortex::error("ImageInput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -441,23 +441,23 @@ public:
         case 0:
             if (std::string_view out_value; vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
                 self.SetStreamUrl(out_value, notify);
-                break;
             }
+            break;
         case 1:
             if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
                 self.SetStreamSize(out_value, notify);
-                break;
             }
+            break;
         case 2:
             if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
                 self.SetOrigin(out_value, notify);
-                break;
             }
+            break;
         case 3:
             if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
                 self.SetRotation2d(out_value, notify);
-                break;
             }
+            break;
         default:
             vortex::error("StreamInput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -566,18 +566,18 @@ public:
         case 0:
             if (std::string_view out_value; vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
                 self.SetName(out_value, notify);
-                break;
             }
+            break;
         case 1:
             if (DirectX::XMUINT2 out_value; vortex::reflection_traits<DirectX::XMUINT2>::deserialize(&out_value, value)) {
                 self.SetWindowSize(out_value, notify);
-                break;
             }
+            break;
         case 2:
             if (vortex::ratio32_t out_value; vortex::reflection_traits<vortex::ratio32_t>::deserialize(&out_value, value)) {
                 self.SetFramerate(out_value, notify);
-                break;
             }
+            break;
         default:
             vortex::error("WindowOutput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -685,18 +685,18 @@ public:
         case 0:
             if (std::string_view out_value; vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
                 self.SetName(out_value, notify);
-                break;
             }
+            break;
         case 1:
             if (DirectX::XMUINT2 out_value; vortex::reflection_traits<DirectX::XMUINT2>::deserialize(&out_value, value)) {
                 self.SetWindowSize(out_value, notify);
-                break;
             }
+            break;
         case 2:
             if (vortex::ratio32_t out_value; vortex::reflection_traits<vortex::ratio32_t>::deserialize(&out_value, value)) {
                 self.SetFramerate(out_value, notify);
-                break;
             }
+            break;
         default:
             vortex::error("NDIOutput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property

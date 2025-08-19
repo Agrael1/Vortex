@@ -65,12 +65,16 @@ public:
             std::pair{ "window_size", "[1920,1080]" }
         };
         constexpr std::pair<std::string_view, std::string_view> image_values[]{
-            std::pair{ "image_path", "ui/HDRx.jpg" },
+            std::pair{ "image_path", "ui/HDR.jpg" },
+        };
+        
+        constexpr std::pair<std::string_view, std::string_view> stream_values[]{
+            std::pair{ "stream_url", "rtp://127.0.0.1:6000" },
         };
 
         // Test setup of the model
         auto i0 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values); // Create a default node for testing
-        auto i1 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values); // Create a default node for testing
+        auto i1 = _model.CreateNode(_gfx, "StreamInput", external_observer, stream_values); // Create a default node for testing
         auto b0 = _model.CreateNode(_gfx, "Blend", external_observer); // Create a blend node for testing
         auto o1 = _model.CreateNode(_gfx, "WindowOutput", external_observer, ndi_values); // Create a default output for testing
 

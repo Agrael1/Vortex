@@ -63,24 +63,16 @@ public:
     }
 
 public:
-    void SetStreamUrl(std::string_view path, bool notify = true)
+    void SetStreamUrl(std::string_view value, bool notify = false)
     {
-        if (GetStreamUrl() == path) {
-            return; // No change in path, skip setting
-        }
-        if (std::filesystem::exists(path)) {
-            StreamInputProperties::SetStreamUrl(path, notify);
-        } else {
-            vortex::error("ImageInput: Image path does not exist: {}", path);
-            StreamInputProperties::SetStreamUrl("", notify);
-        }
-        path_changed = true; // Mark that the path has changed
+        StreamInputProperties::SetStreamUrl(value, notify);
+        url_changed = true; // Mark that the path has changed
     }
 
 private:
     static inline const StreamInputLazy* _lazy_data = nullptr; // Lazy data for static resources
     vortex::Texture2D _texture; // Texture loaded from the image file
     wis::ShaderResource _texture_resource; // Shader resource for the texture
-    bool path_changed = false; // Flag to check if the node has been initialized
+    bool url_changed = true; // Flag to check if the node has been initialized
 };
 } // namespace vortex

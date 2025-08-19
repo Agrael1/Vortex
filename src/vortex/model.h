@@ -132,11 +132,6 @@ public:
         }
     }
 
-    void PropagateOutputs()
-    {
-
-    }
-
     std::span<IOutput*> GetOutputs() noexcept
     {
         return _outputs; // Return a span of outputs

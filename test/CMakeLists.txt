@@ -1,4 +1,4 @@
-project(VortexTests)
+project(vortex_tests)
 
 include(CTest)
 include(Catch)

@@ -340,6 +340,148 @@ public:
         return true;
     }
 };
+struct StreamInputProperties {
+    UpdateNotifier notifier; // Callback for property change notifications
+public:
+    static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
+            { "stream_url", 0 },
+            { "stream_size", 1 },
+            { "origin", 2 },
+            { "rotation_2d", 3 },
+    });
+    std::string stream_url{}; //<UI attribute - Stream URL: URL of the video stream.
+    DirectX::XMFLOAT2 stream_size{}; //<UI attribute - Stream Size: Size of the video stream in pixels.
+    DirectX::XMFLOAT2 origin{}; //<UI attribute - Origin: Origin (Anchor) point of the stream.
+    float rotation_2d{ 0.0 }; //<UI attribute - Rotation (2D): Rotation of the stream in degrees.
+
+public:
+    void SetStreamUrl(std::string_view value, bool notify = false)
+    {
+        stream_url = std::string{ value };
+        if (notify) {
+            NotifyPropertyChange(0);
+        }
+    }
+    void SetStreamSize(DirectX::XMFLOAT2 value, bool notify = false)
+    {
+        stream_size = value;
+        if (notify) {
+            NotifyPropertyChange(1);
+        }
+    }
+    void SetOrigin(DirectX::XMFLOAT2 value, bool notify = false)
+    {
+        origin = value;
+        if (notify) {
+            NotifyPropertyChange(2);
+        }
+    }
+    void SetRotation2d(float value, bool notify = false)
+    {
+        rotation_2d = value;
+        if (notify) {
+            NotifyPropertyChange(3);
+        }
+    }
+
+public:
+    template<typename Self>
+    std::string_view GetStreamUrl(this Self&& self)
+    {
+        return self.stream_url;
+    }
+    template<typename Self>
+    DirectX::XMFLOAT2 GetStreamSize(this Self&& self)
+    {
+        return self.stream_size;
+    }
+    template<typename Self>
+    DirectX::XMFLOAT2 GetOrigin(this Self&& self)
+    {
+        return self.origin;
+    }
+    template<typename Self>
+    float GetRotation2d(this Self&& self)
+    {
+        return self.rotation_2d;
+    }
+
+public:
+    template<typename Self>
+    void NotifyPropertyChange(this Self&& self, uint32_t index)
+    {
+        if (!self.notifier) {
+            vortex::error("StreamInput: Notifier callback is not set.");
+            return; // No notifier set, cannot notify
+        }
+        switch (index) {
+        case 0:
+            self.notifier(0, vortex::reflection_traits<std::string_view>::serialize(self.GetStreamUrl()));
+            break;
+        case 1:
+            self.notifier(1, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetStreamSize()));
+            break;
+        case 2:
+            self.notifier(2, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetOrigin()));
+            break;
+        case 3:
+            self.notifier(3, vortex::reflection_traits<float>::serialize(self.GetRotation2d()));
+            break;
+        default:
+            vortex::error("StreamInput: Invalid property index for notification: {}", index);
+            break;
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (std::string_view out_value; vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
+                self.SetStreamUrl(out_value, notify);
+                break;
+            }
+        case 1:
+            if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
+                self.SetStreamSize(out_value, notify);
+                break;
+            }
+        case 2:
+            if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
+                self.SetOrigin(out_value, notify);
+                break;
+            }
+        case 3:
+            if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
+                self.SetRotation2d(out_value, notify);
+                break;
+            }
+        default:
+            vortex::error("StreamInput: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+    template<typename Self>
+    std::string Serialize(this Self& self)
+    {
+        return std::format("{{ stream_url: {}, stream_size: {}, origin: {}, rotation_2d: {}}}",
+                           vortex::reflection_traits<decltype(self.GetStreamUrl())>::serialize(self.GetStreamUrl()),
+                           vortex::reflection_traits<decltype(self.GetStreamSize())>::serialize(self.GetStreamSize()),
+                           vortex::reflection_traits<decltype(self.GetOrigin())>::serialize(self.GetOrigin()),
+                           vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(self.GetRotation2d()));
+    }
+    template<typename Self>
+    bool Deserialize(this Self& self, SerializedProperties values, bool notify)
+    {
+        for (auto&& [k, v] : values) {
+            size_t index = self.property_map.at(k);
+            self.SetPropertyStub(index, v, notify);
+        }
+        return true;
+    }
+};
 struct WindowOutputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:

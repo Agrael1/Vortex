@@ -34,7 +34,6 @@ enum class clear_strategy {
 template<typename Type, auto Cleanup>
 struct unique_any {
 public:
-public:
     using value_type = Type; // No decay, so this is the actual type.
     using get_type = std::conditional_t<detail::is_handle_or_pointer_v<value_type>, value_type, value_type&>; // Pointer if handle or pointer, reference otherwise.
     using traits_type = unique_any_traits<value_type>; // Type traits for validation.
@@ -52,7 +51,7 @@ public:
     }
     constexpr unique_any& operator=(unique_any&& other) noexcept
     {
-        if (this != &other) {
+        if (this != std::addressof(other)) {
             reset(); // Cleanup the current object before moving.
             _storage = std::exchange(other._storage, value_type{}); // Move the storage from the other object.
         }
@@ -168,6 +167,15 @@ public:
         } else {
             return std::move(_storage); // For non-trivial types, just move the storage.
         }
+    }
+
+    constexpr value_type* address_of() noexcept
+    {
+        return std::addressof(_storage); // Return a pointer to the storage.
+    }
+    constexpr const value_type* address_of() const noexcept
+    {
+        return std::addressof(_storage); // Return a const pointer to the storage.
     }
 
 private:

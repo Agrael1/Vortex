@@ -65,7 +65,7 @@ public:
             std::pair{ "window_size", "[1920,1080]" }
         };
         constexpr std::pair<std::string_view, std::string_view> image_values[]{
-            std::pair{ "image_path", "ui/HDR.jpg" },
+            std::pair{ "image_path", "ui/HDRx.jpg" },
         };
 
         // Test setup of the model

@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/graph/interfaces.h>
 #include <vortex/probe.h>
+#include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/codec/codec_ffmpeg.h>
 #include <vortex/util/reflection.h>
 #include <DirectXMath.h>
@@ -10,15 +11,15 @@
 
 namespace vortex {
 // Will hold static data for the image input node
-struct ImageInputLazy : public Lazy<ImageInputLazy> {
+struct StreamInputLazy : public Lazy<StreamInputLazy> {
     struct Data {
         wis::Sampler _sampler; // Sampler for the texture
         wis::RootSignature _root_signature; // Root signature for the image input node
         wis::PipelineState _pipeline_state; // Pipeline state for rendering the image
     };
-    static ImageInputLazy& Create(const vortex::Graphics& gfx)
+    static StreamInputLazy& Create(const vortex::Graphics& gfx)
     {
-        static ImageInputLazy instance(gfx);
+        static StreamInputLazy instance(gfx);
         return instance;
     }
     void Destroy() noexcept
@@ -27,28 +28,24 @@ struct ImageInputLazy : public Lazy<ImageInputLazy> {
     }
 
 private:
-    ImageInputLazy(const vortex::Graphics& gfx);
+    StreamInputLazy(const vortex::Graphics& gfx);
 
 public:
     std::optional<Data> _data; // Optional data for the image input node
 };
 
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
-class ImageInput : public vortex::graph::NodeImpl<ImageInput, ImageInputProperties, 0, 1>
+class StreamInput : public vortex::graph::NodeImpl<StreamInput, StreamInputProperties, 0, 1>
 {
-    
+
 public:
-    ImageInput(const vortex::Graphics& gfx, SerializedProperties props)
+    StreamInput(const vortex::Graphics& gfx, SerializedProperties props)
         : ImplClass(props)
     {
         if (!_lazy_data) {
-            _lazy_data = &ImageInputLazy::Create(gfx); // Create the lazy data for static resources
+            _lazy_data = &StreamInputLazy::Create(gfx); // Create the lazy data for static resources
         }
-        // Create a root signature for the image input node
-        if (!image_path.empty()) {
-            // Load the texture from the image path
-            path_changed = true; // Mark that the path has changed
-        }
+
     }
 
 public:
@@ -58,7 +55,7 @@ public:
     vortex::graph::NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {
         // Validate that the texture was loaded successfully
-        if (!_texture || image_size.x == 0 || image_size.y == 0) {
+        if (!_texture || stream_size.x == 0 || stream_size.y == 0) {
             return vortex::graph::NodeExecution::Skip; // Skip rendering if texture is not valid
         }
 
@@ -66,22 +63,22 @@ public:
     }
 
 public:
-    void SetImagePath(std::string_view path, bool notify = true)
+    void SetStreamUrl(std::string_view path, bool notify = true)
     {
-        if (GetImagePath() == path) {
+        if (GetStreamUrl() == path) {
             return; // No change in path, skip setting
         }
         if (std::filesystem::exists(path)) {
-            ImageInputProperties::SetImagePath(path, notify);
+            StreamInputProperties::SetStreamUrl(path, notify);
         } else {
             vortex::error("ImageInput: Image path does not exist: {}", path);
-            ImageInputProperties::SetImagePath("", notify);
+            StreamInputProperties::SetStreamUrl("", notify);
         }
         path_changed = true; // Mark that the path has changed
     }
 
 private:
-    static inline const ImageInputLazy* _lazy_data = nullptr; // Lazy data for static resources
+    static inline const StreamInputLazy* _lazy_data = nullptr; // Lazy data for static resources
     vortex::Texture2D _texture; // Texture loaded from the image file
     wis::ShaderResource _texture_resource; // Shader resource for the texture
     bool path_changed = false; // Flag to check if the node has been initialized

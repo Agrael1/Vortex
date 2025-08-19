@@ -1,4 +1,6 @@
 #include <vortex/nodes/input/image_input.h>
+#include <vortex/gfx/descriptor_buffer.h>
+
 #include <vortex/graphics.h>
 
 vortex::ImageInputLazy::ImageInputLazy(const vortex::Graphics& gfx)
@@ -66,7 +68,15 @@ void vortex::ImageInput::Update(const vortex::Graphics& gfx, vortex::RenderProbe
 {
     // Load the texture from the image path if it has changed
     if (path_changed && !image_path.empty()) {
-        _texture = codec::CodecFFmpeg::LoadTexture(gfx, image_path);
+        auto result = codec::CodecFFmpeg::LoadTexture(gfx, image_path);
+        if (!result) {
+            vortex::error("ImageInput: Failed to load texture from path: {}. Error: {}", image_path, result.error().message());
+            image_path = ""; // Clear the path if loading failed
+            path_changed = false; // Reset the path changed flag
+            return; // Skip rendering if texture loading failed
+        }
+
+        _texture = std::move(result.value()); // Store the loaded texture
         _texture_resource = _texture.CreateShaderResource(gfx);
 
         // Bind the texture and sampler to the command list
@@ -99,7 +109,7 @@ void vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPro
 {
     // Check if the texture is valid before rendering
     if (!_texture || _texture.GetSize().width == 0 || _texture.GetSize().height == 0) {
-        vortex::info("ImageInput: Texture is not valid or has zero size.");
+        //vortex::info("ImageInput: Texture is not valid or has zero size.");
         return; // Skip rendering if texture is not valid
     }
 

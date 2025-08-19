@@ -2,13 +2,9 @@
 #include <vortex/graphics.h>
 #include <vortex/util/common.h>
 #include <vortex/util/log.h>
+#include <vortex/util/ffmpeg/error.h>
 
-// FFmpeg includes
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libswscale/swscale.h>
-}
+
 
 int save_frame_as_ppm(AVFrame* frame, const char* filename)
 {
@@ -35,31 +31,25 @@ int save_frame_as_ppm(AVFrame* frame, const char* filename)
     return 0;
 }
 
-vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesystem::path& path)
+std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesystem::path& path)
 {
-    using unique_context = vortex::unique_any<AVFormatContext*, avformat_close_input>;
-    using unique_codec_context = vortex::unique_any<AVCodecContext*, avcodec_free_context>;
-    using unique_frame = vortex::unique_any<AVFrame*, av_frame_free>;
-    using unique_packet = vortex::unique_any<AVPacket, av_packet_unref>;
-
-    wis::Texture texture;
-
-    auto path_str = path.string();
+    using namespace vortex::ffmpeg;
+    
     if (!std::filesystem::exists(path)) {
-        vortex::error("CodecFFmpeg::LoadTexture: File does not exist: {}", path_str);
-        return vortex::Texture2D(std::move(texture)); // File does not exist, nothing to load
+        auto ec = std::make_error_code(std::errc::no_such_file_or_directory);
+        vortex::error("CodecFFmpeg::LoadTextureModern: File does not exist: {}", path.string());
+        return std::unexpected(ec);
     }
 
-    unique_context format_context;
-    if (auto err = avformat_open_input(format_context.put(), path_str.c_str(), nullptr, nullptr); err < 0) {
-        vortex::error("CodecFFmpeg::LoadTexture: Could not open input file: {}. Error {}", path_str, err);
-        return vortex::Texture2D(std::move(texture)); // Could not open the input file
+    // Open input file
+
+    auto connection_result = ConnectToStream(path.string());
+    if (!connection_result) {
+        vortex::error("CodecFFmpeg::LoadTextureModern: Failed to connect to stream: {}", connection_result.error().message());
+        return std::unexpected(connection_result.error());
     }
 
-    if (auto err = avformat_find_stream_info(format_context.get(), nullptr); err < 0) {
-        vortex::error("CodecFFmpeg::LoadTexture: Could not find stream info for file: {}. Error {}", path_str, err);
-        return vortex::Texture2D(std::move(texture)); // Could not find stream info
-    }
+    auto format_context = std::move(connection_result.value());
 
     // Find the first video stream
     const AVCodec* codec = nullptr;
@@ -76,126 +66,178 @@ vortex::Texture2D vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, c
     }
 
     if (!codec) {
-        vortex::error("CodecFFmpeg::LoadTexture: Could not find a suitable codec for file: {}", path_str);
-        return vortex::Texture2D(std::move(texture)); // No suitable codec found
+        auto ec = make_error_code(ffmpeg_errc::decoder_not_found);
+        vortex::error("CodecFFmpeg::LoadTextureModern: Could not find a suitable codec for file: {}", path.string());
+        return std::unexpected(ec);
     }
 
     // Open the codec
     unique_codec_context codec_context{ avcodec_alloc_context3(codec) };
     if (!codec_context) {
-        vortex::error("CodecFFmpeg::LoadTexture: Could not allocate codec context for file: {}", path_str);
-        return vortex::Texture2D(std::move(texture)); // Could not allocate codec context
+        auto ec = std::make_error_code(std::errc::not_enough_memory);
+        vortex::error("CodecFFmpeg::LoadTextureModern: Could not allocate codec context for file: {}", path.string());
+        return std::unexpected(ec);
     }
 
-    if (auto err = avcodec_parameters_to_context(codec_context.get(), codec_params); err < 0) {
-        vortex::error("CodecFFmpeg::LoadTexture: Could not copy codec parameters to context for file: {}. Error {}", path_str, err);
-        return vortex::Texture2D(std::move(texture)); // Could not copy codec parameters to context
-    }
-    if (auto err = avcodec_open2(codec_context.get(), codec, nullptr); err < 0) {
-        vortex::error("CodecFFmpeg::LoadTexture: Could not open codec for file: {}. Error {}", path_str, err);
-        return vortex::Texture2D(std::move(texture)); // Could not open codec
+    int ret = avcodec_parameters_to_context(codec_context.get(), codec_params);
+    if (ret < 0) {
+        auto ec = make_ffmpeg_error(ret);
+        vortex::error("CodecFFmpeg::LoadTextureModern: Could not copy codec parameters to context for file: {}. Error: {}", 
+                     path.string(), ec.message());
+        return std::unexpected(ec);
     }
 
-    // Read data from the stream
+    ret = avcodec_open2(codec_context.get(), codec, nullptr);
+    if (ret < 0) {
+        auto ec = make_ffmpeg_error(ret);
+        vortex::error("CodecFFmpeg::LoadTextureModern: Could not open codec for file: {}. Error: {}", 
+                     path.string(), ec.message());
+        return std::unexpected(ec);
+    }
+
+    // Read and decode frames
     unique_packet packet;
     while (av_read_frame(format_context.get(), packet.put<clear_strategy::none>()) >= 0) {
         if (packet->stream_index < 0 || packet->stream_index >= format_context->nb_streams) {
             continue; // Skip invalid stream index
         }
+
         // Decode the packet
-        int response = avcodec_send_packet(codec_context.get(), &packet.get());
-        if (response < 0) {
-            vortex::error("CodecFFmpeg::LoadTexture: Error sending packet for decoding: {}", response);
-            continue; // Error sending packet
+        ret = avcodec_send_packet(codec_context.get(), &packet.get());
+        if (ret < 0) {
+            auto ec = make_ffmpeg_error(ret);
+            vortex::error("CodecFFmpeg::LoadTextureModern: Error sending packet for decoding: {}", ec.message());
+            continue; // Try next packet
         }
 
         unique_frame frame{ av_frame_alloc() };
         if (!frame) {
-            vortex::error("CodecFFmpeg::LoadTexture: Could not allocate frame for decoding");
-            continue; // Could not allocate frame
+            auto ec = std::make_error_code(std::errc::not_enough_memory);
+            vortex::error("CodecFFmpeg::LoadTextureModern: Could not allocate frame for decoding");
+            return std::unexpected(ec);
         }
 
-        response = avcodec_receive_frame(codec_context.get(), frame.get());
-        if (response < 0) {
-            vortex::error("CodecFFmpeg::LoadTexture: Error receiving frame from decoder: {}", response);
-            continue; // Error receiving frame
-        }
-
-        // Resample the frame if necessary
-        if (frame->format != AV_PIX_FMT_RGBA) {
-            // Create a SwsContext for resampling
-            SwsContext* sws_ctx = sws_getContext(
-                    frame->width, frame->height, static_cast<AVPixelFormat>(frame->format),
-                    frame->width, frame->height, AV_PIX_FMT_RGBA,
-                    SWS_BILINEAR, nullptr, nullptr, nullptr);
-            if (!sws_ctx) {
-                vortex::error("CodecFFmpeg::LoadTexture: Could not create SwsContext for resampling");
-                continue; // Could not create SwsContext
+        ret = avcodec_receive_frame(codec_context.get(), frame.get());
+        if (ret < 0) {
+            if (ret == AVERROR(EAGAIN)) {
+                continue; // Need more input
             }
+            auto ec = make_ffmpeg_error(ret);
+            vortex::error("CodecFFmpeg::LoadTextureModern: Error receiving frame from decoder: {}", ec.message());
+            continue; // Try next packet
+        }
+
+        // Convert frame to RGBA if necessary
+        unique_frame final_frame = std::move(frame);
+        if (final_frame->format != AV_PIX_FMT_RGBA) {
+            // Create a SwsContext for resampling
+            unique_swscontext sws_ctx{ sws_getContext(
+                    final_frame->width, final_frame->height, static_cast<AVPixelFormat>(final_frame->format),
+                    final_frame->width, final_frame->height, AV_PIX_FMT_RGBA,
+                    SWS_BILINEAR, nullptr, nullptr, nullptr) };
+            if (!sws_ctx) {
+                auto ec = make_error_code(ffmpeg_errc::invalid_data);
+                vortex::error("CodecFFmpeg::LoadTextureModern: Could not create SwsContext for resampling");
+                return std::unexpected(ec);
+            }
+
             // Allocate a new frame for the resampled data
             unique_frame resampled_frame{ av_frame_alloc() };
             if (!resampled_frame) {
-                vortex::error("CodecFFmpeg::LoadTexture: Could not allocate resampled frame");
-                sws_freeContext(sws_ctx);
-                continue; // Could not allocate resampled frame
+                auto ec = std::make_error_code(std::errc::not_enough_memory);
+                vortex::error("CodecFFmpeg::LoadTextureModern: Could not allocate resampled frame");
+                return std::unexpected(ec);
             }
+
             resampled_frame->format = AV_PIX_FMT_RGBA;
-            resampled_frame->width = frame->width;
-            resampled_frame->height = frame->height;
-            resampled_frame->linesize[0] = frame->width * 4; // RGBA has 4 bytes per pixel
+            resampled_frame->width = final_frame->width;
+            resampled_frame->height = final_frame->height;
+            resampled_frame->linesize[0] = final_frame->width * 4; // RGBA has 4 bytes per pixel
 
             if (av_frame_get_buffer(resampled_frame.get(), 0) < 0) {
-                vortex::error("CodecFFmpeg::LoadTexture: Could not allocate buffer for resampled frame");
-                sws_freeContext(sws_ctx);
-                continue; // Could not allocate buffer for resampled frame
+                auto ec = std::make_error_code(std::errc::not_enough_memory);
+                vortex::error("CodecFFmpeg::LoadTextureModern: Could not allocate buffer for resampled frame");
+                return std::unexpected(ec);
             }
+
             // Perform the resampling
-            int resample_response = sws_scale(
-                    sws_ctx, frame->data, frame->linesize,
-                    0, frame->height,
-                    resampled_frame->data, resampled_frame->linesize);
+            ret = sws_scale(sws_ctx.get(), final_frame->data, final_frame->linesize,
+                           0, final_frame->height,
+                           resampled_frame->data, resampled_frame->linesize);
 
-
-
-            sws_freeContext(sws_ctx);
-            if (resample_response < 0) {
-                vortex::error("CodecFFmpeg::LoadTexture: Error resampling frame: {}", resample_response);
-                continue; // Error resampling frame
+            if (ret < 0) {
+                auto ec = make_ffmpeg_error(ret);
+                vortex::error("CodecFFmpeg::LoadTextureModern: Error resampling frame: {}", ec.message());
+                return std::unexpected(ec);
             }
+
             // Use the resampled frame for further processing
-            frame = std::move(resampled_frame);
+            final_frame = std::move(resampled_frame);
         }
 
-        // Process the decoded frame (e.g., convert to texture)
+        // Create GPU texture
         wis::Result result = wis::success;
         auto& ext_alloc = gfx.GetExtendedAllocation();
         wis::TextureDesc desc{
             .format = wis::DataFormat::RGBA8Unorm,
-            .size = { static_cast<uint32_t>(frame->width), static_cast<uint32_t>(frame->height) },
+            .size = { static_cast<uint32_t>(final_frame->width), static_cast<uint32_t>(final_frame->height) },
             .usage = wis::TextureUsage::HostCopy | wis::TextureUsage::ShaderResource
         };
-        texture = ext_alloc.CreateGPUUploadTexture(result, gfx.GetAllocator(), desc);
-
+        
+        wis::Texture texture = ext_alloc.CreateGPUUploadTexture(result, gfx.GetAllocator(), desc);
         if (!success(result)) {
-            vortex::error("CodecFFmpeg::LoadTexture: Failed to create texture for file: {}.\nError {}.\nTexture {}", path_str, result.error, desc);
-            continue; // Failed to create texture
+            // Map wis::Result to std::error_code (you may want to create a specific mapping function)
+            auto ec = std::make_error_code(std::errc::not_enough_memory); // Simplified mapping
+            vortex::error("CodecFFmpeg::LoadTextureModern: Failed to create texture for file: {}. Error: {}", 
+                         path.string(), result.error);
+            return std::unexpected(ec);
         }
 
-        // Copy the frame data to the texture
+        // Copy frame data to texture
         wis::TextureRegion frame_region{
             .offset = { 0, 0, 0 },
-            .size = { static_cast<uint32_t>(frame->width), static_cast<uint32_t>(frame->height), 1 },
+            .size = { static_cast<uint32_t>(final_frame->width), static_cast<uint32_t>(final_frame->height), 1 },
             .mip = 0,
             .array_layer = 0,
             .format = wis::DataFormat::RGBA8Unorm
         };
-        result = ext_alloc.WriteMemoryToSubresourceDirect(frame->data[0], texture, wis::TextureState::Common, frame_region);
+        
+        result = ext_alloc.WriteMemoryToSubresourceDirect(final_frame->data[0], texture, wis::TextureState::Common, frame_region);
         if (!success(result)) {
-            vortex::error("CodecFFmpeg::LoadTexture: Failed to write memory to subresource for file: {}.\nError {}.\nTexture {}.\nRegion {}", path_str, result.error, desc, frame_region);
-            continue; // Failed to write memory to subresource
+            auto ec = std::make_error_code(std::errc::io_error); // Simplified mapping
+            vortex::error("CodecFFmpeg::LoadTextureModern: Failed to write memory to subresource for file: {}. Error: {}", 
+                         path.string(), result.error);
+            return std::unexpected(ec);
         }
+
         // Successfully loaded the texture
         return vortex::Texture2D(std::move(texture), wis::Size2D{ desc.size.width, desc.size.height }, desc.format);
     }
-    return vortex::Texture2D(std::move(texture)); // Return the texture if no frames were processed
+
+    // No frames were processed
+    auto ec = make_error_code(ffmpeg_errc::end_of_file);
+    vortex::error("CodecFFmpeg::LoadTextureModern: No frames decoded from file: {}", path.string());
+    return std::unexpected(ec);
+}
+
+std::expected<vortex::ffmpeg::unique_context, std::error_code>
+vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url)
+{
+    vortex::ffmpeg::unique_context format_context;
+
+    int ret = avformat_open_input(format_context.address_of(), stream_url.data(), nullptr, nullptr);
+    if (ret < 0) {
+        auto ec = ffmpeg::make_ffmpeg_error(ret);
+        vortex::error("CodecFFmpeg::ConnectToStream: Could not open input stream or file: {}. Error: {}",
+                      stream_url, ec.message());
+        return std::unexpected(ec);
+    }
+    ret = avformat_find_stream_info(format_context.get(), nullptr);
+    if (ret < 0) {
+        auto ec = ffmpeg::make_ffmpeg_error(ret);
+        vortex::error("CodecFFmpeg::ConnectToStream: Could not find stream info for: {}. Error: {}",
+                      stream_url, ec.message());
+        return std::unexpected(ec);
+    }
+    return format_context;
 }

@@ -4,8 +4,23 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <filesystem>
 #include <format>
+#include <vortex/util/interprocess_lock.h>
 
 namespace vortex {
+struct console_interprocess_mutex {
+    using mutex_t = vortex::interprocess_lock;
+    static mutex_t& mutex()
+    {
+        static mutex_t s_mutex;
+        return s_mutex;
+    }
+};
+#ifdef _WIN32
+using cross_process_console_sink = spdlog::sinks::wincolor_stdout_sink<console_interprocess_mutex>;
+#else
+using cross_process_console_sink = spdlog::sinks::ansicolor_stdout_sink<console_interprocess_mutex>;
+#endif
+
 struct LogOptions {
     std::string_view name;
     std::string_view pattern_prefix;
@@ -91,7 +106,7 @@ class Log
 public:
     Log(const LogOptions& options)
     {
-        sinks[0] = std::make_shared<spdlog::sinks::stdout_color_sink_st>();
+        sinks[0] = std::make_shared<cross_process_console_sink>();
         sinks[1] = !options.output_file_path.empty()
                 ? std::make_shared<spdlog::sinks::basic_file_sink_st>(options.output_file_path.string(), true)
                 : nullptr;
@@ -107,6 +122,7 @@ public:
             file_sink.set_pattern(pattern);
         }
         logger = std::make_shared<spdlog::logger>(std::string(options.name), sinks.begin(), sinks.end() - !to_file);
+        logger->set_level(spdlog::level::trace);
 
         spdlog::register_logger(logger);
     }

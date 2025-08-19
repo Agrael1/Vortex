@@ -54,6 +54,8 @@ PUBLIC
 
   "src/vortex/nodes/input/image_input.h"
   "src/vortex/nodes/input/image_input.cpp"
+  "src/vortex/nodes/input/stream_input.h"
+  "src/vortex/nodes/input/stream_input.cpp"
   "src/vortex/nodes/filter/composition.h"
   "src/vortex/nodes/filter/blend.h"
   "src/vortex/nodes/node_registry.h"
@@ -75,7 +77,7 @@ PUBLIC
   "src/vortex/model.h" 
   "src/vortex/model.cpp" 
    
-  "src/vortex/util/lazy.h")
+  "src/vortex/util/lazy.h"  "src/vortex/util/ffmpeg/types.h" "src/vortex/util/ffmpeg/error.h" "src/vortex/util/interprocess_lock.h" "src/vortex/util/interprocess_lock.cpp")
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
   CXX_STANDARD 23
@@ -86,7 +88,7 @@ set_target_properties(VortexLib PROPERTIES
 target_compile_options(VortexLib PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus /wd5050>)
 target_link_libraries(VortexLib
   PUBLIC
-    spdlog::spdlog
+    spdlog::spdlog_header_only
     SDL3::SDL3
     NDI::NDI
     

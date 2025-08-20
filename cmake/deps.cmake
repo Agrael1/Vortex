@@ -66,12 +66,18 @@ set_target_properties(SDL3::SDL3 PROPERTIES
 # Cef
 CPMAddPackage(
   NAME CEF
-  URL https://cef-builds.spotifycdn.com/cef_binary_138.0.15%2Bgd0f1f64%2Bchromium-138.0.7204.50_windows64_minimal.tar.bz2
-  VERSION 138.0.15+gd0f1f64+chromium-138.0.7204.50
+  URL https://cef-builds.spotifycdn.com/cef_binary_139.0.24%2Bgce684ab%2Bchromium-139.0.7258.128_windows64_minimal.tar.bz2
+  VERSION 139.0.24
   OPTIONS
   "USE_SANDBOX OFF"
   "CEF_RUNTIME_LIBRARY_FLAG /MD"
 )
+#CPMAddPackage(
+#  NAME CEFPDB
+#  URL https://cef-builds.spotifycdn.com/cef_binary_139.0.24%2Bgce684ab%2Bchromium-139.0.7258.128_windows64_release_symbols.tar.bz2
+#  VERSION 139.0.24
+#  DOWNLOAD_ONLY ON
+#)
 target_include_directories(libcef_dll_wrapper PUBLIC
   "${CEF_SOURCE_DIR}"
 )

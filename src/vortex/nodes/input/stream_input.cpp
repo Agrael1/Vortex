@@ -72,6 +72,12 @@ void vortex::StreamInput::Update(const vortex::Graphics& gfx, vortex::RenderProb
             url_changed = false; // Reset the URL changed flag
             return; // Skip rendering if connection failed
         }
+        auto stream_context = std::move(result.value());
+        auto best_stream = codec::CodecFFmpeg::GetBestStream(stream_context.get(), AVMEDIA_TYPE_VIDEO);
+        auto stream = best_stream.value();
+
+        vortex::info("StreamInput: Connected to stream: {} stream: {}", stream_url, *stream);
+
         url_changed = false; // Reset the URL changed flag after connecting
     }
 }

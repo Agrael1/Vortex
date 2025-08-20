@@ -4,8 +4,6 @@
 #include <vortex/util/log.h>
 #include <vortex/util/ffmpeg/error.h>
 
-
-
 int save_frame_as_ppm(AVFrame* frame, const char* filename)
 {
     FILE* f = fopen(filename, "wb");
@@ -34,7 +32,7 @@ int save_frame_as_ppm(AVFrame* frame, const char* filename)
 std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesystem::path& path)
 {
     using namespace vortex::ffmpeg;
-    
+
     if (!std::filesystem::exists(path)) {
         auto ec = std::make_error_code(std::errc::no_such_file_or_directory);
         vortex::error("CodecFFmpeg::LoadTextureModern: File does not exist: {}", path.string());
@@ -48,23 +46,20 @@ std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::Lo
         vortex::error("CodecFFmpeg::LoadTextureModern: Failed to connect to stream: {}", connection_result.error().message());
         return std::unexpected(connection_result.error());
     }
-
     auto format_context = std::move(connection_result.value());
 
     // Find the first video stream
-    const AVCodec* codec = nullptr;
-    AVCodecParameters* codec_params = nullptr;
-    std::span<AVStream*> streams(format_context->streams, format_context->nb_streams);
-    for (AVStream* stream : streams) {
-        if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            codec_params = stream->codecpar;
-            codec = avcodec_find_decoder(codec_params->codec_id);
-            if (codec) {
-                break;
-            }
-        }
+    auto best_stream_result = GetBestStream(format_context.get(), AVMEDIA_TYPE_VIDEO);
+    if (!best_stream_result) {
+        auto& ec = best_stream_result.error();
+        vortex::error("CodecFFmpeg::LoadTextureModern: Could not find a suitable video stream in file: {}. Error: {}",
+                      path.string(), ec.message());
+        return std::unexpected(ec);
     }
 
+    auto stream = best_stream_result.value();
+    AVCodecParameters* codec_params = stream->codecpar;
+    const AVCodec* codec = avcodec_find_decoder(codec_params->codec_id);
     if (!codec) {
         auto ec = make_error_code(ffmpeg_errc::decoder_not_found);
         vortex::error("CodecFFmpeg::LoadTextureModern: Could not find a suitable codec for file: {}", path.string());
@@ -82,16 +77,16 @@ std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::Lo
     int ret = avcodec_parameters_to_context(codec_context.get(), codec_params);
     if (ret < 0) {
         auto ec = make_ffmpeg_error(ret);
-        vortex::error("CodecFFmpeg::LoadTextureModern: Could not copy codec parameters to context for file: {}. Error: {}", 
-                     path.string(), ec.message());
+        vortex::error("CodecFFmpeg::LoadTextureModern: Could not copy codec parameters to context for file: {}. Error: {}",
+                      path.string(), ec.message());
         return std::unexpected(ec);
     }
 
     ret = avcodec_open2(codec_context.get(), codec, nullptr);
     if (ret < 0) {
         auto ec = make_ffmpeg_error(ret);
-        vortex::error("CodecFFmpeg::LoadTextureModern: Could not open codec for file: {}. Error: {}", 
-                     path.string(), ec.message());
+        vortex::error("CodecFFmpeg::LoadTextureModern: Could not open codec for file: {}. Error: {}",
+                      path.string(), ec.message());
         return std::unexpected(ec);
     }
 
@@ -162,8 +157,8 @@ std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::Lo
 
             // Perform the resampling
             ret = sws_scale(sws_ctx.get(), final_frame->data, final_frame->linesize,
-                           0, final_frame->height,
-                           resampled_frame->data, resampled_frame->linesize);
+                            0, final_frame->height,
+                            resampled_frame->data, resampled_frame->linesize);
 
             if (ret < 0) {
                 auto ec = make_ffmpeg_error(ret);
@@ -183,13 +178,13 @@ std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::Lo
             .size = { static_cast<uint32_t>(final_frame->width), static_cast<uint32_t>(final_frame->height) },
             .usage = wis::TextureUsage::HostCopy | wis::TextureUsage::ShaderResource
         };
-        
+
         wis::Texture texture = ext_alloc.CreateGPUUploadTexture(result, gfx.GetAllocator(), desc);
         if (!success(result)) {
             // Map wis::Result to std::error_code (you may want to create a specific mapping function)
             auto ec = std::make_error_code(std::errc::not_enough_memory); // Simplified mapping
-            vortex::error("CodecFFmpeg::LoadTextureModern: Failed to create texture for file: {}. Error: {}", 
-                         path.string(), result.error);
+            vortex::error("CodecFFmpeg::LoadTextureModern: Failed to create texture for file: {}. Error: {}",
+                          path.string(), result.error);
             return std::unexpected(ec);
         }
 
@@ -201,12 +196,12 @@ std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::Lo
             .array_layer = 0,
             .format = wis::DataFormat::RGBA8Unorm
         };
-        
+
         result = ext_alloc.WriteMemoryToSubresourceDirect(final_frame->data[0], texture, wis::TextureState::Common, frame_region);
         if (!success(result)) {
             auto ec = std::make_error_code(std::errc::io_error); // Simplified mapping
-            vortex::error("CodecFFmpeg::LoadTextureModern: Failed to write memory to subresource for file: {}. Error: {}", 
-                         path.string(), result.error);
+            vortex::error("CodecFFmpeg::LoadTextureModern: Failed to write memory to subresource for file: {}. Error: {}",
+                          path.string(), result.error);
             return std::unexpected(ec);
         }
 
@@ -220,10 +215,33 @@ std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::Lo
     return std::unexpected(ec);
 }
 
+struct TimeoutCallbackContext {
+    std::chrono::microseconds timeout;
+    std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
+
+    static int operator()(void* ctx) {
+        auto* self = static_cast<TimeoutCallbackContext*>(ctx);
+        auto elapsed = std::chrono::steady_clock::now() - self->start_time;
+        return elapsed > self->timeout ? 1 : 0; // Return 1 if timeout exceeded, else 0
+    }
+};
+
 std::expected<vortex::ffmpeg::unique_context, std::error_code>
-vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url)
+vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url, std::chrono::microseconds timeout)
 {
-    ffmpeg::unique_context format_context;
+    ffmpeg::unique_context format_context{ avformat_alloc_context() };
+    if (!format_context) {
+        auto ec = std::make_error_code(std::errc::not_enough_memory);
+        vortex::error("CodecFFmpeg::ConnectToStream: Could not allocate format context for stream: {}", stream_url);
+        return std::unexpected(ec);
+    }
+
+    TimeoutCallbackContext timeout_context{ timeout };
+
+    // Set the interrupt callback for the format context
+    format_context->interrupt_callback.opaque = &timeout_context;
+    format_context->interrupt_callback.callback = TimeoutCallbackContext::operator();
+
     int ret = avformat_open_input(format_context.address_of(), stream_url.data(), nullptr, nullptr);
     if (ret < 0) {
         auto ec = ffmpeg::make_ffmpeg_error(ret);
@@ -241,77 +259,44 @@ vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url)
     return format_context;
 }
 
-std::expected<std::vector<vortex::codec::StreamInfo>, std::error_code>
-vortex::codec::CodecFFmpeg::GetStreamInfo(const vortex::ffmpeg::unique_context& context)
+std::expected<vortex::codec::StreamCollection, std::error_code>
+vortex::codec::CodecFFmpeg::GetStreams(const AVFormatContext* context)
 {
-    if (!context.is_valid()) {
+    if (!context) {
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
+    vortex::codec::StreamCollection collection;
 
-    std::vector<StreamInfo> streams;
-    auto* format_ctx = context.get();
-
-    for (unsigned int i = 0; i < format_ctx->nb_streams; i++) {
-        AVStream* stream = format_ctx->streams[i];
-
-        StreamInfo info;
-        info.stream_index = i;
-
-        // Get codec information
-        const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
-        if (codec) {
-            info.codec_name = codec->name;
+    for (unsigned int i = 0; i < context->nb_streams; i++) {
+        AVStream* stream = context->streams[i];
+        if (!stream) {
+            continue; // Skip invalid streams
         }
-
-        // Media type
         switch (stream->codecpar->codec_type) {
-        case AVMEDIA_TYPE_VIDEO:
-            info.width = stream->codecpar->width;
-            info.height = stream->codecpar->height;
-
-            // Convert AVRational to our ratio type
-            auto av_to_ratio = [](AVRational av_rat) {
-                return vortex::ratio64_t(av_rat.num, av_rat.den);
-            };
-
-            info.time_base = av_to_ratio(stream->time_base);
-            info.frame_rate = av_to_ratio(stream->codecpar->framerate);
-            info.avg_frame_rate = av_to_ratio(stream->avg_frame_rate);
-            info.r_frame_rate = av_to_ratio(stream->r_frame_rate);
-            break;
-
-        case AVMEDIA_TYPE_AUDIO:
-            info.sample_rate = stream->codecpar->sample_rate;
-            info.channels = stream->codecpar->ch_layout.nb_channels;
-            break;
-
-        default:
+        case AVMEDIA_TYPE_VIDEO: {
+            collection.video_streams.emplace_back(stream);
             break;
         }
-
-        info.start_time = stream->start_time;
-        info.duration = stream->duration;
-
-        streams.push_back(std::move(info));
+        case AVMEDIA_TYPE_AUDIO: {
+            collection.audio_streams.emplace_back(stream);
+            break;
+        }
+        default:
+            break; // Ignore other types for now
+        }
     }
-
-    return streams;
+    return collection; // Return the collection of streams found
 }
 
-std::expected<vortex::codec::StreamInfo, std::error_code>
-vortex::codec::CodecFFmpeg::FindBestVideoStream(const vortex::ffmpeg::unique_context& context)
+std::expected<AVStream*, std::error_code>
+vortex::codec::CodecFFmpeg::GetBestStream(AVFormatContext* context, AVMediaType stream_type)
 {
-    auto streams_result = GetStreamInfo(context);
-    if (!streams_result) {
-        return std::unexpected(streams_result.error());
+    int index = av_find_best_stream(context, stream_type, -1, -1, nullptr, 0);
+    if (index < 0) {
+        auto ec = ffmpeg::make_ffmpeg_error(index);
+        vortex::error("CodecFFmpeg::GetBestStream: Could not find best stream of type {}. Error: {}",
+                      reflect::enum_name(stream_type), ec.message());
+        return std::unexpected(ec);
     }
-
-    // Find first video stream
-    for (const auto& stream : *streams_result) {
-        if (stream.media_type == "video") {
-            return stream;
-        }
-    }
-
-    return std::unexpected(vortex::ffmpeg::make_error_code(vortex::ffmpeg::ffmpeg_errc::stream_not_found));
+    return context->streams[index]; // Return the best stream found
 }

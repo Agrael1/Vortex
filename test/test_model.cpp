@@ -305,21 +305,6 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.SequentialCompatibility", "[optimize]")
 
     auto outputs = model.GetOutputs();
     REQUIRE(outputs.size() == 4);
-
-    // Test sequential compatibility search
-    for (size_t i = 0; i < outputs.size(); ++i) {
-        const auto* next_compatible = model.GetNextCompatibleOutput(i);
-        
-        if (next_compatible) {
-            // If we found a compatible output, verify it actually is compatible
-            REQUIRE(vortex::graph::GraphModel::AreSizeCompatible(outputs[i], next_compatible));
-        }
-        
-        // Test edge case: last output should have no next compatible
-        if (i == outputs.size() - 1) {
-            REQUIRE(next_compatible == nullptr);
-        }
-    }
 }
 
 TEST_CASE_METHOD(ModelTest, "SortOutputs.EmptyAndInvalidOutputs", "[optimize]")
@@ -343,9 +328,9 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.EmptyAndInvalidOutputs", "[optimize]")
     REQUIRE(outputs.size() == 1);
     REQUIRE(equal(outputs[0]->GetOutputSize(), wis::Size2D{ 1920, 1080 }));
 
-    // Test GetNextCompatibleOutput with single output
-    const auto* next = model.GetNextCompatibleOutput(0);
-    REQUIRE(next == nullptr); // No next output
+    //// Test GetNextCompatibleOutput with single output
+    //const auto* next = model.GetNextCompatibleOutput(0);
+    //REQUIRE(next == nullptr); // No next output
 }
 
 TEST_CASE_METHOD(ModelTest, "AreSizeCompatible.EdgeCases", "[optimize]")

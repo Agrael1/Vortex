@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <expected>
 #include <system_error>
+#include <chrono>
 #include <vortex/gfx/texture.h>
 #include <vortex/util/ffmpeg/types.h>
 #include <vortex/util/rational.h>
@@ -11,26 +12,9 @@ class Graphics;
 }
 
 namespace vortex::codec {
-struct StreamInfo {
-    int stream_index = -1;
-    std::string codec_name;
-    std::string media_type; // "video", "audio", "subtitle", etc.
-
-    // Video specific
-    int width = 0;
-    int height = 0;
-    vortex::ratio64_t frame_rate{ 0, 1 };
-    vortex::ratio64_t time_base{ 0, 1 };
-
-    // Audio specific
-    int sample_rate = 0;
-    int channels = 0;
-
-    // Timing (your broken fps issue)
-    vortex::ratio64_t avg_frame_rate{ 0, 1 }; // Average framerate
-    vortex::ratio64_t r_frame_rate{ 0, 1 }; // Real base framerate (tbr)
-    int64_t start_time = 0;
-    int64_t duration = 0;
+struct StreamCollection {
+    std::vector<AVStream*> video_streams;
+    std::vector<AVStream*> audio_streams;
 };
 
 // Main codec class - keeping existing interface
@@ -40,15 +24,14 @@ public:
     static std::expected<vortex::Texture2D, std::error_code>
     LoadTexture(const Graphics& gfx, const std::filesystem::path& path);
 
-    // NEW: Just stream connection
     static std::expected<ffmpeg::unique_context, std::error_code>
-    ConnectToStream(std::string_view stream_url);
+    ConnectToStream(std::string_view stream_url, std::chrono::microseconds timeout = std::chrono::microseconds{ 5000000 });
 
-    static std::expected<std::vector<StreamInfo>, std::error_code>
-    GetStreamInfo(const vortex::ffmpeg::unique_context& context);
+    static std::expected<vortex::codec::StreamCollection, std::error_code>
+    GetStreams(const AVFormatContext* context);
 
-    static std::expected<StreamInfo, std::error_code>
-    FindBestVideoStream(const vortex::ffmpeg::unique_context& context);
+    static std::expected<AVStream*, std::error_code>
+    GetBestStream(AVFormatContext* context, AVMediaType stream_type);
 };
 
 } // namespace vortex::codec

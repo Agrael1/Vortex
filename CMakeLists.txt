@@ -77,7 +77,7 @@ PUBLIC
   "src/vortex/model.h" 
   "src/vortex/model.cpp" 
    
-  "src/vortex/util/lazy.h"  "src/vortex/util/ffmpeg/types.h" "src/vortex/util/ffmpeg/error.h" "src/vortex/util/interprocess_lock.h" "src/vortex/util/interprocess_lock.cpp")
+  "src/vortex/util/lazy.h"  "src/vortex/util/ffmpeg/types.h" "src/vortex/util/ffmpeg/error.h" "src/vortex/util/interprocess_lock.h" "src/vortex/util/interprocess_lock.cpp" "src/vortex/util/ffmpeg/stream_manager.h" "src/vortex/util/ffmpeg/stream_manager.cpp" "src/vortex/util/ffmpeg/hw_decoder.h")
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
   CXX_STANDARD 23
@@ -175,7 +175,7 @@ target_link_libraries(${PROJECT_NAME}
     VortexLib
     libcef_dll_wrapper
 )
-target_compile_definitions(${PROJECT_NAME} PUBLIC WISDOM_FORCE_VULKAN=1)
+#target_compile_definitions(${PROJECT_NAME} PUBLIC WISDOM_FORCE_VULKAN=1)
 #target_precompile_headers(${PROJECT_NAME} REUSE_FROM VortexLib)
 add_dependencies(${PROJECT_NAME} shaders ui)
 

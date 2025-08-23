@@ -29,7 +29,8 @@ int save_frame_as_ppm(AVFrame* frame, const char* filename)
     return 0;
 }
 
-std::expected<vortex::Texture2D, std::error_code> vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesystem::path& path)
+std::expected<vortex::Texture2D, std::error_code> 
+vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesystem::path& path)
 {
     using namespace vortex::ffmpeg;
 
@@ -219,7 +220,8 @@ struct TimeoutCallbackContext {
     std::chrono::microseconds timeout;
     std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
 
-    static int operator()(void* ctx) {
+    static int operator()(void* ctx)
+    {
         auto* self = static_cast<TimeoutCallbackContext*>(ctx);
         auto elapsed = std::chrono::steady_clock::now() - self->start_time;
         return elapsed > self->timeout ? 1 : 0; // Return 1 if timeout exceeded, else 0
@@ -227,7 +229,9 @@ struct TimeoutCallbackContext {
 };
 
 std::expected<vortex::ffmpeg::unique_context, std::error_code>
-vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url, std::chrono::microseconds timeout)
+vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url,
+                                            ffmpeg::unique_dictionary context_options,
+                                            std::chrono::microseconds timeout)
 {
     ffmpeg::unique_context format_context{ avformat_alloc_context() };
     if (!format_context) {
@@ -242,7 +246,7 @@ vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url, std::ch
     format_context->interrupt_callback.opaque = &timeout_context;
     format_context->interrupt_callback.callback = TimeoutCallbackContext::operator();
 
-    int ret = avformat_open_input(format_context.address_of(), stream_url.data(), nullptr, nullptr);
+    int ret = avformat_open_input(format_context.address_of(), stream_url.data(), nullptr, context_options.address_of());
     if (ret < 0) {
         auto ec = ffmpeg::make_ffmpeg_error(ret);
         vortex::error("CodecFFmpeg::ConnectToStream: Could not open input stream or file: {}. Error: {}",
@@ -256,16 +260,20 @@ vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url, std::ch
                       stream_url, ec.message());
         return std::unexpected(ec);
     }
+
+    // Clean up the interrupt callback
+    format_context->interrupt_callback.opaque = nullptr;
+    format_context->interrupt_callback.callback = nullptr;
     return format_context;
 }
 
-std::expected<vortex::codec::StreamCollection, std::error_code>
+std::expected<vortex::codec::StreamChannels, std::error_code>
 vortex::codec::CodecFFmpeg::GetStreams(const AVFormatContext* context)
 {
     if (!context) {
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
-    vortex::codec::StreamCollection collection;
+    vortex::codec::StreamChannels collection;
 
     for (unsigned int i = 0; i < context->nb_streams; i++) {
         AVStream* stream = context->streams[i];
@@ -274,11 +282,11 @@ vortex::codec::CodecFFmpeg::GetStreams(const AVFormatContext* context)
         }
         switch (stream->codecpar->codec_type) {
         case AVMEDIA_TYPE_VIDEO: {
-            collection.video_streams.emplace_back(stream);
+            collection.video_channels.emplace_back(stream);
             break;
         }
         case AVMEDIA_TYPE_AUDIO: {
-            collection.audio_streams.emplace_back(stream);
+            collection.audio_channels.emplace_back(stream);
             break;
         }
         default:

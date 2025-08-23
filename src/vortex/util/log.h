@@ -213,5 +213,7 @@ inline LogView GetLog(std::string_view name)
 }
 
 constexpr inline std::string_view graphics_log_name = "vortex.graphics";
+constexpr inline std::string_view stream_log_name = "vortex.stream";
+constexpr inline std::string_view ui_log_name = "vortex.ui";
 constexpr inline std::string_view app_log_name = "vortex";
 } // namespace vortex

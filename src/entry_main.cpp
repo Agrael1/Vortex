@@ -17,11 +17,18 @@ try {
     vortex::LogOptions options_gfx{
         .name = vortex::graphics_log_name,
         .pattern_prefix = "vortex.graphics",
-        .output_file_path = debug ? "" : "logs/vortex.log"
+        .output_file_path = debug ? "" : "logs/vortex.gfx.log"
+    };
+    
+    vortex::LogOptions options_stream{
+        .name = vortex::stream_log_name,
+        .pattern_prefix = "vortex.stream",
+        .output_file_path = debug ? "" : "logs/vortex.stream.log"
     };
 
     vortex::Log log_global{ options };
     vortex::Log log_graphics{ options_gfx };
+    vortex::Log log_stream{ options_stream };
     log_global.SetAsDefault();
 
     // catch Ctrl+C

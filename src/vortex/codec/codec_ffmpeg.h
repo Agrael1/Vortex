@@ -6,15 +6,16 @@
 #include <vortex/gfx/texture.h>
 #include <vortex/util/ffmpeg/types.h>
 #include <vortex/util/rational.h>
+#include <unordered_map>
 
 namespace vortex {
 class Graphics;
 }
 
 namespace vortex::codec {
-struct StreamCollection {
-    std::vector<AVStream*> video_streams;
-    std::vector<AVStream*> audio_streams;
+struct StreamChannels {
+    std::vector<AVStream*> video_channels;
+    std::vector<AVStream*> audio_channels;
 };
 
 // Main codec class - keeping existing interface
@@ -25,9 +26,11 @@ public:
     LoadTexture(const Graphics& gfx, const std::filesystem::path& path);
 
     static std::expected<ffmpeg::unique_context, std::error_code>
-    ConnectToStream(std::string_view stream_url, std::chrono::microseconds timeout = std::chrono::microseconds{ 5000000 });
+    ConnectToStream(std::string_view stream_url,
+                    ffmpeg::unique_dictionary context_options = ffmpeg::unique_dictionary{},
+                    std::chrono::microseconds timeout = std::chrono::microseconds{ 5000000 });
 
-    static std::expected<vortex::codec::StreamCollection, std::error_code>
+    static std::expected<vortex::codec::StreamChannels, std::error_code>
     GetStreams(const AVFormatContext* context);
 
     static std::expected<AVStream*, std::error_code>

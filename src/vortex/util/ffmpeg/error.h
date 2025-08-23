@@ -7,6 +7,14 @@ extern "C" {
 }
 
 namespace vortex::ffmpeg {
+inline std::string ffmpeg_error_string(int errnum)
+{
+    char buf[AV_ERROR_MAX_STRING_SIZE];
+    if (av_strerror(errnum, buf, sizeof(buf)) == 0) {
+        return std::string(buf);
+    }
+    return "Unknown FFmpeg error";
+}
 
 // FFmpeg error category for std::error_code
 class ffmpeg_error_category : public std::error_category {
@@ -16,11 +24,7 @@ public:
     }
     
     std::string message(int ev) const override {
-        char errbuf[AV_ERROR_MAX_STRING_SIZE];
-        if (av_strerror(ev, errbuf, sizeof(errbuf)) == 0) {
-            return std::string(errbuf);
-        }
-        return "Unknown FFmpeg error";
+        return ffmpeg_error_string(ev);
     }
     
     std::error_condition default_error_condition(int ev) const noexcept override {
@@ -70,6 +74,7 @@ enum class ffmpeg_errc {
 inline std::error_code make_error_code(ffmpeg_errc e) {
     return std::error_code(static_cast<int>(e), ffmpeg_category());
 }
+
 
 } // namespace vortex::ffmpeg
 

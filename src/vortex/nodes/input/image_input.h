@@ -10,27 +10,14 @@
 
 namespace vortex {
 // Will hold static data for the image input node
-struct ImageInputLazy : public Lazy<ImageInputLazy> {
-    struct Data {
-        wis::Sampler _sampler; // Sampler for the texture
-        wis::RootSignature _root_signature; // Root signature for the image input node
-        wis::PipelineState _pipeline_state; // Pipeline state for rendering the image
-    };
-    static ImageInputLazy& Create(const vortex::Graphics& gfx)
-    {
-        static ImageInputLazy instance(gfx);
-        return instance;
-    }
-    void Destroy() noexcept
-    {
-        _data.reset(); // Reset the data to release resources
-    }
-
-private:
+struct ImageInputLazy {
+public:
     ImageInputLazy(const vortex::Graphics& gfx);
 
 public:
-    std::optional<Data> _data; // Optional data for the image input node
+    wis::Sampler _sampler; // Sampler for the texture
+    wis::RootSignature _root_signature; // Root signature for the image input node
+    wis::PipelineState _pipeline_state; // Pipeline state for rendering the image
 };
 
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
@@ -39,11 +26,8 @@ class ImageInput : public vortex::graph::NodeImpl<ImageInput, ImageInputProperti
     
 public:
     ImageInput(const vortex::Graphics& gfx, SerializedProperties props)
-        : ImplClass(props)
+        : ImplClass(props), _lazy_data(gfx)
     {
-        if (!_lazy_data) {
-            _lazy_data = &ImageInputLazy::Create(gfx); // Create the lazy data for static resources
-        }
         // Create a root signature for the image input node
         if (!image_path.empty()) {
             // Load the texture from the image path
@@ -81,7 +65,7 @@ public:
     }
 
 private:
-    static inline const ImageInputLazy* _lazy_data = nullptr; // Lazy data for static resources
+    lazy_ptr<ImageInputLazy> _lazy_data; // Lazy data for static resources
     vortex::Texture2D _texture; // Texture loaded from the image file
     wis::ShaderResource _texture_resource; // Shader resource for the texture
     bool path_changed = false; // Flag to check if the node has been initialized

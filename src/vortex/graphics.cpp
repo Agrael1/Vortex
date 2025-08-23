@@ -34,6 +34,7 @@ void vortex::Debug::OnDebugMessage(wis::Severity severity, const char* message)
 wis::Shader vortex::Graphics::LoadShader(std::filesystem::path path) const
 {
     wis::Result result = wis::success;
+    vortex::LogView log = vortex::GetLog(vortex::graphics_log_name);
     if constexpr (wis::shader_intermediate == wis::ShaderIntermediate::DXIL) {
         path += u".cso";
     } else {
@@ -44,21 +45,21 @@ wis::Shader vortex::Graphics::LoadShader(std::filesystem::path path) const
 
     // Check if the file exists
     if (!std::filesystem::exists(path)) {
-        vortex::error("Graphics::LoadShader: Shader file does not exist: {}", path_string);
+        log.error("Graphics::LoadShader: Shader file does not exist: {}", path_string);
         return {};
     }
 
     // Load the shader from the file
     std::ifstream shader{ path, std::ios::binary };
     if (!shader.is_open()) {
-        vortex::error("Graphics::LoadShader: Failed to open shader file: {}", path_string);
+        log.error("Graphics::LoadShader: Failed to open shader file: {}", path_string);
         return {};
     }
     std::vector<char> shader_data((std::istreambuf_iterator<char>(shader)), std::istreambuf_iterator<char>());
 
     wis::Shader result_shader = _device.CreateShader(result, shader_data.data(), shader_data.size());
     if (!vortex::success(result)) {
-        vortex::error("Graphics::LoadShader: Failed to load shader from {}: {}", path_string, result.error);
+        log.error("Graphics::LoadShader: Failed to load shader from {}: {}", path_string, result.error);
     }
     return result_shader;
 }

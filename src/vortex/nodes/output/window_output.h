@@ -132,7 +132,7 @@ public:
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
         if (!IsReady()) {
-            vortex::info("WindowOutput is not ready for rendering");
+            //vortex::info("WindowOutput is not ready for rendering");
             return;
         }
 

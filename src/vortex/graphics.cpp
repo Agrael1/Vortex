@@ -12,7 +12,7 @@ void vortex::Debug::OnDebugMessage(wis::Severity severity, const char* message)
         _log.info(message);
         break;
     case wis::Severity::Warning:
-        _log.warn(message);
+        //_log.warn(message);
         break;
     case wis::Severity::Error:
         _log.error(message);

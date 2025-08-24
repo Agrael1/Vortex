@@ -66,8 +66,8 @@ public:
 
 private:
     void InitializeStream();
-
-    static AVPixelFormat GetHWFormat(AVCodecContext* ctx, const AVPixelFormat* pix_fmts);
+    void DecodeStreamFrames(const vortex::Graphics& gfx);
+    void TrimOldFrames();
 
 private:
     [[no_unique_address]] lazy_ptr<StreamInputLazy> _lazy_data; // Lazy data for static resources
@@ -76,6 +76,10 @@ private:
 
     // Stream related data
     codec::StreamChannels _stream_collection; // Collection of streams
+
+    std::map<int64_t, ffmpeg::unique_frame> _video_frames; // Map of video frames by pts
+    std::map<int64_t, ffmpeg::unique_frame> _audio_frames; // Map of audio frames by pts
+
     unique_stream _stream_handle; // Handle to the stream managed by StreamManager
 
     bool url_changed = true; // Flag to check if the node has been initialized

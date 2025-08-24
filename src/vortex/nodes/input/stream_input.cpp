@@ -71,6 +71,9 @@ void vortex::StreamInput::Update(const vortex::Graphics& gfx, vortex::RenderProb
         InitializeStream();
         url_changed = false;
     }
+
+    // Decode new frames from the stream
+    DecodeStreamFrames(gfx);
 }
 void vortex::StreamInput::InitializeStream()
 {
@@ -81,7 +84,17 @@ void vortex::StreamInput::InitializeStream()
     // Set a timeout to make av_read_frame non-blocking.
     // The value is in microseconds.
     ffmpeg::unique_dictionary options;
-    av_dict_set(options.address_of(), "timeout", "5000", 0); // 5ms timeout
+    av_dict_set(options.address_of(), "timeout", "5000000", 0); // 1ms timeout
+    av_dict_set(options.address_of(), "max_delay", "5000000", 0);
+    av_dict_set(options.address_of(), "rtsp_transport", "tcp", 0);
+    av_dict_set(options.address_of(), "buffer_size", "2097152", 0); // 2MB buffer size
+    av_dict_set(options.address_of(), "rtsp_flags", "prefer_tcp", 0);
+
+    // Add these options for better error handling
+    av_dict_set(options.address_of(), "fflags", "+genpts+discardcorrupt", 0);
+    av_dict_set(options.address_of(), "flags", "+low_delay", 0);
+    av_dict_set(options.address_of(), "analyzeduration", "0", 0);
+
 
     auto context_result = codec::CodecFFmpeg::ConnectToStream(stream_url, std::move(options));
     if (!context_result) {
@@ -97,15 +110,73 @@ void vortex::StreamInput::InitializeStream()
 
     _stream_collection = std::move(channels_result.value());
 
-    // For this example, let's just activate the first video stream.
     std::array<int, 1> active_indices = { -1 }; // -1 means activate all streams
     _stream_handle = MakeUniqueStream(std::move(context), active_indices);
+}
+void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
+{
+    if (!_stream_handle) {
+        return;
+    }
 
-    
+    // TODO: make this less ugly
+    auto& stream = *std::bit_cast<ffmpeg::ManagedStream*>(_stream_handle.get());
+    auto& video_channel = stream.channels.at(0);
+    auto& audio_channel = stream.channels.at(1);
 
+    // Decode video frames
+    video_channel.decoder_sem.acquire();
+    while (true) {
+        ffmpeg::unique_frame frame{ av_frame_alloc() };
+        int ret = avcodec_receive_frame(video_channel.decoder_ctx.get(), frame.get());
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            video_channel.sent_packets.store(0, std::memory_order::relaxed); // Reset sent packets count on EAGAIN or EOF
+            frame.reset();
+            break;
+        } else if (ret < 0) {
+            vortex::error("Error receiving video frame: {}", ffmpeg::ffmpeg_error_string(ret));
+            video_channel.sent_packets.store(0, std::memory_order::relaxed); // Reset sent packets count on EAGAIN or EOF
+            frame.reset();
+            break;
+        }
+        _video_frames[frame->pts] = std::move(frame);
+    }
+    video_channel.decoder_sem.release();
+
+    // Decode audio frames
+    audio_channel.decoder_sem.acquire();
+    while (true) {
+        ffmpeg::unique_frame frame{ av_frame_alloc() };
+        int ret = avcodec_receive_frame(audio_channel.decoder_ctx.get(), frame.get());
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            audio_channel.sent_packets.store(0, std::memory_order::relaxed); // Reset sent packets count on EAGAIN or EOF
+            frame.reset();
+            break;
+        } else if (ret < 0) {
+            vortex::error("Error receiving audio frame: {}", ffmpeg::ffmpeg_error_string(ret));
+            audio_channel.sent_packets.store(0, std::memory_order::relaxed); // Reset sent packets count on EAGAIN or EOF
+            frame.reset();
+            break;
+        }
+        _audio_frames[frame->pts] = std::move(frame);
+    }
+    audio_channel.decoder_sem.release();
+    TrimOldFrames();
+}
+
+void vortex::StreamInput::TrimOldFrames()
+{
+    static constexpr std::size_t max_cached_frames = 16; // Max number of frames to cache
+    // Trim video frames
+    while (_video_frames.size() > max_cached_frames) {
+        _video_frames.erase(_video_frames.begin());
+    }
+    // Trim audio frames
+    while (_audio_frames.size() > max_cached_frames) {
+        _audio_frames.erase(_audio_frames.begin());
+    }
 }
 
 void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info)
 {
 }
-

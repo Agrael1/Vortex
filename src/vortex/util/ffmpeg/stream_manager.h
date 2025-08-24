@@ -1,10 +1,11 @@
 #pragma once
 #include <vortex/util/ffmpeg/hw_decoder.h>
-#include <vortex/util/lib/SPSC-Queue.h>
 #include <unordered_map>
 #include <shared_mutex>
 #include <semaphore>
 #include <thread>
+#include <queue>
+#include <chrono>
 
 namespace vortex {
 class Graphics;
@@ -12,9 +13,14 @@ class Graphics;
 
 namespace vortex::ffmpeg {
 struct PacketStorage {
-    dro::SPSCQueue<ffmpeg::unique_packet, 16> packets; // Queue for storing AVPackets
+    static constexpr std::size_t max_sent_packets = 512; // Max packets sent without receiving frames
+
+    std::queue<ffmpeg::unique_packet> packets; // This does not need to be thread-safe, only accessed from I/O thread
+
+    // Accessed from both I/O and main thread
     vortex::ffmpeg::unique_codec_context decoder_ctx;
     std::binary_semaphore decoder_sem{ 1 }; // Semaphore to signal availability of packets for decoding
+    std::atomic<std::size_t> sent_packets{ 0 }; // Number of packets sent to the decoder
 };
 
 // Represents a stream being read by the StreamManager
@@ -44,6 +50,9 @@ public:
     ~StreamManager();
 
 public:
+    bool InitVideoDecoder(vortex::ffmpeg::ManagedStream& stream, int channel);
+    bool InitAudioDecoder(vortex::ffmpeg::ManagedStream& stream, int channel);
+    void InitDecoder(vortex::ffmpeg::ManagedStream& stream, int i);
     StreamHandle RegisterStream(ffmpeg::unique_context context, std::span<int> active_channel_indices);
     void UnregisterStream(StreamHandle handle);
 
@@ -51,12 +60,12 @@ public:
     void ActivateChannels(StreamHandle handle, std::span<int> active_channel_indices);
     void DeactivateChannels(StreamHandle handle, std::span<int> inactive_channel_indices);
 
-    std::optional<ffmpeg::unique_packet>
-    TryGetPacket(StreamHandle handle, int stream_index);
-
 private:
-    void IoLoop(std::stop_token stop);
+    void IOLoop(std::stop_token stop);
+    void IOFlushStream(vortex::ffmpeg::ManagedStream& stream);
+    bool IOProcessStream(vortex::ffmpeg::ManagedStream& stream);
 
+    vortex::LogView _log;
     std::vector<std::jthread> _io_threads;
 
     // Control for unpdating streams

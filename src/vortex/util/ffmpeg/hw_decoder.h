@@ -37,6 +37,8 @@ public:
     {
         return GetInternal().hw_device_ctx.get();
     }
+    std::expected<vortex::ffmpeg::unique_buffer, std::error_code>
+    CreateHWFramesContext(int width, int height, AVPixelFormat format) const noexcept;
 };
 
 inline std::expected<DX12VADecodeContext, std::error_code>
@@ -44,7 +46,6 @@ DX12CreateDecodeContext(const wis::DX12Device& device) noexcept
 {
     DX12VADecodeContext ctx;
     auto& internal = ctx.GetMutableInternal();
-
     internal.hw_device_ctx.reset(av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D12VA));
     if (!internal.hw_device_ctx) {
         return std::unexpected(make_ffmpeg_error(AVERROR(ENOMEM)));
@@ -60,33 +61,29 @@ DX12CreateDecodeContext(const wis::DX12Device& device) noexcept
         return std::unexpected(make_ffmpeg_error(ret));
     }
     return std::move(ctx);
+}
+inline std::expected<vortex::ffmpeg::unique_buffer, std::error_code>
+DX12VADecodeContext::CreateHWFramesContext(int width, int height, AVPixelFormat format) const noexcept
+{
+    vortex::ffmpeg::unique_buffer hw_frames_ctx{ av_hwframe_ctx_alloc(GetHWDeviceContext()) };
+    if (!hw_frames_ctx) {
+        return std::unexpected(make_ffmpeg_error(AVERROR(ENOMEM)));
+    }
+    AVHWFramesContext* frames_ctx_data = std::launder(reinterpret_cast<AVHWFramesContext*>(hw_frames_ctx->data));
+    AVD3D12VAFramesContext* d3d12va_frames_ctx = std::launder(reinterpret_cast<AVD3D12VAFramesContext*>(frames_ctx_data->hwctx));
 
-    // const AVCodec* codec = avcodec_find_decoder(codec_par->codec_id);
-    // if (!codec) {
-    //     return std::unexpected(make_ffmpeg_error(AVERROR_DECODER_NOT_FOUND));
-    // }
+    frames_ctx_data->format = AV_PIX_FMT_D3D12;
+    frames_ctx_data->sw_format = format;
+    frames_ctx_data->width = width;
+    frames_ctx_data->height = height;
+    frames_ctx_data->initial_pool_size = 32; // Increased pool size
+    d3d12va_frames_ctx->flags = D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE; // No special flags
 
-    // internal.decoder_ctx.reset(avcodec_alloc_context3(codec));
-    // if (!internal.decoder_ctx) {
-    //     return std::unexpected(make_ffmpeg_error(AVERROR(ENOMEM)));
-    // }
+    if (int ret = av_hwframe_ctx_init(hw_frames_ctx.get()); ret < 0) {
+        return std::unexpected(make_ffmpeg_error(ret));
+    }
 
-    // if (int ret = avcodec_parameters_to_context(internal.decoder_ctx.get(), codec_par); ret < 0) {
-    //     return std::unexpected(make_ffmpeg_error(ret));
-    // }
-
-    // internal.decoder_ctx->hw_device_ctx = av_buffer_ref(internal.hw_device_ctx.get());
-    // internal.decoder_ctx->get_format = [](AVCodecContext* ctx, const AVPixelFormat* pix_fmts) {
-    //     for (const AVPixelFormat* p = pix_fmts; *p != AV_PIX_FMT_NONE; p++) {
-    //         if (*p == AV_PIX_FMT_D3D12) {
-    //             return *p;
-    //         }
-    //     }
-    //     return AV_PIX_FMT_NONE;
-    // };
-    // if (int ret = avcodec_open2(internal.decoder_ctx.get(), codec, nullptr); ret < 0) {
-    //     return std::unexpected(make_ffmpeg_error(ret));
-    // }
+    return std::move(hw_frames_ctx);
 }
 } // namespace vortex::ffmpeg
 #endif
@@ -113,6 +110,8 @@ public:
     {
         return GetInternal().hw_device_ctx.get();
     }
+    std::expected<vortex::ffmpeg::unique_buffer, std::error_code>
+    CreateHWFramesContext(int width, int height, AVPixelFormat format)const noexcept;
 };
 inline std::expected<VKVADecodeContext, std::error_code>
 VKCreateDecodeContext(const wis::VKDevice& device) noexcept
@@ -167,32 +166,27 @@ VKCreateDecodeContext(const wis::VKDevice& device) noexcept
         return std::unexpected(make_ffmpeg_error(ret));
     }
     return std::move(ctx);
+}
 
-    // const AVCodec* codec = avcodec_find_decoder(codec_par->codec_id);
-    // if (!codec) {
-    //     return std::unexpected(make_ffmpeg_error(AVERROR_DECODER_NOT_FOUND));
-    // }
-    // internal.decoder_ctx.reset(avcodec_alloc_context3(codec));
-    // if (!internal.decoder_ctx) {
-    //     return std::unexpected(make_ffmpeg_error(AVERROR(ENOMEM)));
-    // }
-    // if (int ret = avcodec_parameters_to_context(internal.decoder_ctx.get(), codec_par); ret < 0) {
-    //     return std::unexpected(make_ffmpeg_error(ret));
-    // }
-    // internal.decoder_ctx->hw_device_ctx = av_buffer_ref(internal.hw_device_ctx.get());
-    // internal.decoder_ctx->get_format = [](AVCodecContext* ctx, const AVPixelFormat* pix_fmts) {
-    //     for (const AVPixelFormat* p = pix_fmts; *p != AV_PIX_FMT_NONE; p++) {
-    //         if (*p == AV_PIX_FMT_VULKAN) {
-    //             return *p;
-    //         }
-    //     }
-    //     return AV_PIX_FMT_NONE;
-    // };
-    // if (int ret = avcodec_open2(internal.decoder_ctx.get(), codec, nullptr); ret < 0) {
-    //     return std::unexpected(make_ffmpeg_error(ret));
-    // }
-
-    // return std::move(ctx);
+inline std::expected<vortex::ffmpeg::unique_buffer, std::error_code> 
+VKVADecodeContext::CreateHWFramesContext(int width, int height, AVPixelFormat format) const noexcept
+{
+    vortex::ffmpeg::unique_buffer hw_frames_ctx{ av_hwframe_ctx_alloc(GetHWDeviceContext()) };
+    if (!hw_frames_ctx) {
+        return std::unexpected(make_ffmpeg_error(AVERROR(ENOMEM)));
+    }
+    AVHWFramesContext* frames_ctx_data = std::launder(reinterpret_cast<AVHWFramesContext*>(hw_frames_ctx->data));
+    AVVulkanFramesContext* vulkan_frames_ctx = std::launder(reinterpret_cast<AVVulkanFramesContext*>(frames_ctx_data->hwctx));
+    frames_ctx_data->format = AV_PIX_FMT_VULKAN;
+    frames_ctx_data->sw_format = format;
+    frames_ctx_data->width = width;
+    frames_ctx_data->height = height;
+    frames_ctx_data->initial_pool_size = 32; // Increased pool size
+    vulkan_frames_ctx->flags = AV_VK_FRAME_FLAG_NONE; // No special flags
+    if (int ret = av_hwframe_ctx_init(hw_frames_ctx.get()); ret < 0) {
+        return std::unexpected(make_ffmpeg_error(ret));
+    }
+    return std::move(hw_frames_ctx);
 }
 } // namespace vortex::ffmpeg
 #endif

@@ -96,6 +96,7 @@ public:
 
         auto current_texture_index = _swapchain.GetCurrentIndex();
         probe._command_list = &_command_lists[current_texture_index];
+        probe.output_framerate = GetFramerate();
 
         // Pass to the sink nodes for post-order processing
         RenderPassForwardDesc desc{

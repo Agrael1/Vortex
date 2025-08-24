@@ -52,20 +52,9 @@ public:
 
         _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
 
-        constexpr std::pair<std::string_view, std::string_view> ndi_values[]{
-            std::pair{ "name", "Vortex AEE Output" },
-            std::pair{ "window_size", "[1000,1000]" }
-        };
-        constexpr std::pair<std::string_view, std::string_view> output_values[]{
-            std::pair{ "name", "Vortex Mega Output" },
-            std::pair{ "window_size", "[1080,1920]" }
-        };
         constexpr std::pair<std::string_view, std::string_view> output_values2[]{
             std::pair{ "name", "Vortex Mega Output" },
             std::pair{ "window_size", "[1920,1080]" }
-        };
-        constexpr std::pair<std::string_view, std::string_view> image_values[]{
-            std::pair{ "image_path", "ui/HDR.jpg" },
         };
         
         constexpr std::pair<std::string_view, std::string_view> stream_values[]{
@@ -73,17 +62,11 @@ public:
         };
 
         // Test setup of the model
-        auto i0 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values); // Create a default node for testing
         auto i1 = _model.CreateNode(_gfx, "StreamInput", external_observer, stream_values); // Create a default node for testing
-        auto b0 = _model.CreateNode(_gfx, "Blend", external_observer); // Create a blend node for testing
-        auto o1 = _model.CreateNode(_gfx, "WindowOutput", external_observer, ndi_values); // Create a default output for testing
+        auto o1 = _model.CreateNode(_gfx, "NDIOutput", external_observer, output_values2); // Create a default output for testing
 
-        _model.SetNodeInfo(i0, "Image 0"); // Set some info for the node
         _model.SetNodeInfo(i1, "Image 1"); // Set some info for the node
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
-        _model.SetNodeInfo(b0, "Blend Node"); // Set some info for the blend node
-
-        _model.SetNodeProperty(b0, 0, "0"); // Set a property for the blend node
 
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
     }

@@ -14,7 +14,9 @@ public:
     wis::RenderTargetView _current_rt_view;
     const wis::Texture* _current_rt_texture;
     wis::Size2D _output_size; // Useful for different render targets
-    uint32_t frame = 0;
+    uint64_t frame_number = 0;
+
+    vortex::ratio32_t output_framerate = { 60, 1 }; // Default 60 FPS
 };
 
 struct RenderPassForwardDesc {

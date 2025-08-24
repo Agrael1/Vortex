@@ -47,13 +47,9 @@ public:
     void Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe) override;
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info = nullptr) override;
 
+
     vortex::graph::NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {
-        // Validate that the texture was loaded successfully
-        if (!_texture || stream_size.x == 0 || stream_size.y == 0) {
-            return vortex::graph::NodeExecution::Skip; // Skip rendering if texture is not valid
-        }
-
         return vortex::graph::NodeExecution::Render; // Proceed with rendering
     }
 
@@ -69,10 +65,15 @@ private:
     void DecodeStreamFrames(const vortex::Graphics& gfx);
     void TrimOldFrames();
 
+
+    ffmpeg::unique_frame* SelectFrameForCurrentTime(const vortex::RenderProbe& probe);
+    int64_t CalculateTargetVideoPTS(const vortex::RenderProbe& probe) const;
+    int64_t CalculateTargetAudioPTS(const vortex::RenderProbe& probe) const;
+    void ExtractStreamTiming();
+
 private:
     [[no_unique_address]] lazy_ptr<StreamInputLazy> _lazy_data; // Lazy data for static resources
-    vortex::Texture2D _texture; // Texture loaded from the image file
-    wis::ShaderResource _texture_resource; // Shader resource for the texture
+    wis::ShaderResource _shader_resources[vortex::max_frames_in_flight]; // Shader resource for the texture
 
     // Stream related data
     codec::StreamChannels _stream_collection; // Collection of streams
@@ -81,6 +82,25 @@ private:
     std::map<int64_t, ffmpeg::unique_frame> _audio_frames; // Map of audio frames by pts
 
     unique_stream _stream_handle; // Handle to the stream managed by StreamManager
+
+    std::chrono::steady_clock::time_point _start_time;
+
+    // Stream timing information extracted from actual stream data
+    struct StreamTimingInfo {
+        // Video timing
+        AVRational video_timebase = { 0, 0 }; // Video stream timebase
+        AVRational video_framerate = { 0, 0 }; // Video stream framerate
+        int64_t first_video_pts = AV_NOPTS_VALUE;
+
+        // Audio timing
+        AVRational audio_timebase = { 0, 0 }; // Audio stream timebase
+        int audio_sample_rate = 0; // Audio sample rate (Hz)
+        int64_t first_audio_pts = AV_NOPTS_VALUE;
+
+        std::chrono::steady_clock::time_point start_time;
+        bool video_initialized = false;
+        bool audio_initialized = false;
+    } _stream_timing;
 
     bool url_changed = true; // Flag to check if the node has been initialized
 };

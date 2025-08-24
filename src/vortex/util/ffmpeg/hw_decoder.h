@@ -85,6 +85,22 @@ DX12VADecodeContext::CreateHWFramesContext(int width, int height, AVPixelFormat 
 
     return std::move(hw_frames_ctx);
 }
+
+inline std::expected<wis::DX12Texture, std::error_code>
+GetTextureFromFrame(const AVFrame& frame) noexcept
+{
+    if (frame.format != AV_PIX_FMT_D3D12) {
+        return std::unexpected(make_ffmpeg_error(AVERROR(EINVAL)));
+    }
+    auto* d3d12_surface = reinterpret_cast<ID3D12Resource*>(frame.data[0]);
+    if (!d3d12_surface) {
+        return std::unexpected(make_ffmpeg_error(AVERROR(EINVAL)));
+    }
+    wis::DX12Texture texture;
+    auto& internal = texture.GetMutableInternal();
+    internal.resource = wis::com_ptr(d3d12_surface);
+    return std::move(texture);
+}
 } // namespace vortex::ffmpeg
 #endif
 

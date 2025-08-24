@@ -136,7 +136,7 @@ void vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPro
         DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
         DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
     };
-    probe._descriptor_buffer.BindOffsets(gfx, cmd_list, _lazy_data.uget()._root_signature, probe.frame, offsets);
+    probe._descriptor_buffer.BindOffsets(gfx, cmd_list, _lazy_data.uget()._root_signature, probe.frame_number % vortex::max_frames_in_flight, offsets);
     // Draw a quad that covers the viewport
     cmd_list.DrawInstanced(3, 1, 0, 0);
 

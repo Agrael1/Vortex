@@ -201,7 +201,7 @@ bool vortex::ffmpeg::StreamManager::InitVideoDecoder(vortex::ffmpeg::ManagedStre
     decoder->flags2 |= AV_CODEC_FLAG2_FAST; // Prioritize speed over quality
 
     decoder->error_concealment = FF_EC_GUESS_MVS | FF_EC_DEBLOCK;
-    decoder->err_recognition = AV_EF_CRCCHECK | AV_EF_BITSTREAM;
+    decoder->err_recognition = AV_EF_CAREFUL | AV_EF_COMPLIANT | AV_EF_AGGRESSIVE;
     decoder->skip_frame = AVDISCARD_DEFAULT;
     decoder->skip_idct = AVDISCARD_DEFAULT;
     decoder->skip_loop_filter = AVDISCARD_DEFAULT;

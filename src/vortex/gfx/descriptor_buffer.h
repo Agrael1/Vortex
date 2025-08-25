@@ -35,6 +35,15 @@ public:
     void BindBuffers(const vortex::Graphics& gfx, wis::CommandList& cmd_list) const noexcept;
     void BindOffsets(const vortex::Graphics& gfx, wis::CommandList& cmd_list, wis::RootSignatureView root, uint32_t frame, std::span<const DescriptorTableOffset> offsets) const noexcept;
 
+    void WriteTexture(uint64_t frame_index, uint64_t aligned_table_offset, uint32_t index, wis::ShaderResourceView resource) noexcept
+    {
+        _current_desc->WriteTexture(aligned_table_offset + (frame_index * _current_desc_table_size), index, std::move(resource));
+    }
+    void WriteSampler(uint64_t frame_index, uint64_t aligned_table_offset, uint32_t index, wis::SamplerView sampler) noexcept
+    {
+        _sampler_buffer.WriteSampler(aligned_table_offset + (frame_index * _sampler_table_size), index, std::move(sampler));
+    }
+
     void Increase(); // Won't do until necessary
 
 private:

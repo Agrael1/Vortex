@@ -15,8 +15,8 @@ include(${GET_CPM_FILE})
 # Wisdom
 CPMAddPackage(
   NAME Wisdom
-  URL https://github.com/Agrael1/Wisdom/releases/download/0.6.11/Wisdom-0.6.11-win64.zip
-  VERSION 0.6.11
+  URL https://github.com/Agrael1/Wisdom/releases/download/0.6.12/Wisdom-0.6.12-win64.zip
+  VERSION 0.6.12
 
   OPTIONS
   "WISDOM_BUILD_TESTS OFF"
@@ -27,7 +27,7 @@ CPMAddPackage(
 set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${Wisdom_SOURCE_DIR}/lib/cmake/wisdom)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 set(WISDOM_EXPERIMENTAL_CPP_MODULES ON CACHE BOOL "Enable experimental C++ modules support" FORCE)
-find_package(Wisdom 0.6.10 REQUIRED)
+find_package(Wisdom 0.6.12 REQUIRED)
 
 # spdlog
 CPMAddPackage(

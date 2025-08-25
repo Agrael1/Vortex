@@ -5,9 +5,8 @@ namespace vortex {
 class Graphics;
 class DescriptorBuffer;
 
-class RenderProbe
+struct RenderProbe
 {
-public:
     vortex::DescriptorBuffer& _descriptor_buffer;
     wis::CommandList* _command_list = nullptr; // Command list for recording commands
 

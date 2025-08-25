@@ -47,7 +47,6 @@ public:
     void Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe) override;
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info = nullptr) override;
 
-
     vortex::graph::NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {
         return vortex::graph::NodeExecution::Render; // Proceed with rendering
@@ -65,7 +64,6 @@ private:
     void DecodeStreamFrames(const vortex::Graphics& gfx);
     void TrimOldFrames();
 
-
     ffmpeg::unique_frame* SelectFrameForCurrentTime(const vortex::RenderProbe& probe);
     int64_t CalculateTargetVideoPTS(const vortex::RenderProbe& probe) const;
     int64_t CalculateTargetAudioPTS(const vortex::RenderProbe& probe) const;
@@ -73,13 +71,16 @@ private:
 
 private:
     [[no_unique_address]] lazy_ptr<StreamInputLazy> _lazy_data; // Lazy data for static resources
-    wis::ShaderResource _shader_resources[vortex::max_frames_in_flight]; // Shader resource for the texture
+    std::array<wis::ShaderResource, 2> _shader_resources[vortex::max_frames_in_flight]; // Shader resource for the texture
+    wis::Texture _textures[vortex::max_frames_in_flight]; // Textures for each frame in flight
+    wis::Fence _fences[vortex::max_frames_in_flight]; // Fences for each frame in flight
 
     // Stream related data
     codec::StreamChannels _stream_collection; // Collection of streams
 
     std::map<int64_t, ffmpeg::unique_frame> _video_frames; // Map of video frames by pts
     std::map<int64_t, ffmpeg::unique_frame> _audio_frames; // Map of audio frames by pts
+    std::array<int64_t, 2> _stream_indices{}; // Last rendered video PTS for each frame in flight
 
     unique_stream _stream_handle; // Handle to the stream managed by StreamManager
 

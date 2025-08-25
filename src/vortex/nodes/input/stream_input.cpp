@@ -3,6 +3,55 @@
 #include <vortex/util/ffmpeg/error.h>
 #include <vortex/util/ffmpeg/hw_decoder.h>
 
+static std::array<wis::DX12ShaderResource, 2>
+DX12CreateSRVNV12(wis::Result& result, const wis::DX12Device& device, wis::DX12TextureView texture, std::span<const wis::ShaderResourceDesc> desc) noexcept
+{
+    std::array<wis::DX12ShaderResource, 2> out_resource;
+    auto& internal_0 = out_resource[0].GetMutableInternal();
+    auto& internal_1 = out_resource[1].GetMutableInternal();
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc[2];
+    for (size_t i = 0; i < 2; i++) {
+        srv_desc[i] = {
+            .Format = convert_dx(desc[i].format),
+            .ViewDimension = convert_dx(desc[i].view_type),
+            .Shader4ComponentMapping = UINT(D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
+                    convert_dx(desc[i].component_mapping.r),
+                    convert_dx(desc[i].component_mapping.g),
+                    convert_dx(desc[i].component_mapping.b),
+                    convert_dx(desc[i].component_mapping.a))),
+        };
+        switch (desc[i].view_type) {
+        case wis::TextureViewType::Texture2D:
+            srv_desc[i].Texture2D = {
+                .MostDetailedMip = desc[i].subresource_range.base_mip_level,
+                .MipLevels = desc[i].subresource_range.level_count,
+                .PlaneSlice = UINT(i), // Plane 0 for Y, Plane 1 for UV
+                .ResourceMinLODClamp = 0.0f,
+            };
+            break;
+        default:
+            result = wis::make_result<wis::Func<wis::FuncD()>(), "Unsupported view type for NV12 texture">(E_INVALIDARG);
+            return {};
+        }
+    }
+
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc{
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .NumDescriptors = 1,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE
+    };
+
+    auto& device_x = device.GetInternal().device;
+
+    auto x = device_x->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    device_x->CreateDescriptorHeap(&heap_desc, internal_0.heap.iid(), internal_0.heap.put_void());
+    device_x->CreateDescriptorHeap(&heap_desc, internal_1.heap.iid(), internal_1.heap.put_void());
+    device_x->CreateShaderResourceView(std::get<0>(texture), &srv_desc[0], internal_0.heap->GetCPUDescriptorHandleForHeapStart());
+    device_x->CreateShaderResourceView(std::get<0>(texture), &srv_desc[1], internal_1.heap->GetCPUDescriptorHandleForHeapStart());
+    return out_resource;
+}
+
 vortex::StreamInputLazy::StreamInputLazy(const vortex::Graphics& gfx)
     : _manager(gfx)
 {
@@ -10,11 +59,12 @@ vortex::StreamInputLazy::StreamInputLazy(const vortex::Graphics& gfx)
 
     wis::DescriptorTableEntry entries[] = {
         { .type = wis::DescriptorType::Texture, .bind_register = 0, .binding = 0, .count = 1 },
+        { .type = wis::DescriptorType::Texture, .bind_register = 1, .binding = 0, .count = 1 },
         { .type = wis::DescriptorType::Sampler, .bind_register = 0, .binding = 0, .count = 1 },
     };
     wis::DescriptorTable tables[] = {
-        { .type = wis::DescriptorHeapType::Descriptor, .entries = entries, .entry_count = 1, .stage = wis::ShaderStages::Pixel },
-        { .type = wis::DescriptorHeapType::Sampler, .entries = entries + 1, .entry_count = 1, .stage = wis::ShaderStages::Pixel },
+        { .type = wis::DescriptorHeapType::Descriptor, .entries = entries, .entry_count = 2, .stage = wis::ShaderStages::Pixel },
+        { .type = wis::DescriptorHeapType::Sampler, .entries = entries + 2, .entry_count = 1, .stage = wis::ShaderStages::Pixel },
     };
     _root_signature = gfx.GetDescriptorBufferExtension().CreateRootSignature(result, nullptr, 0, nullptr, 0, tables, std::size(tables));
     if (!vortex::success(result)) {
@@ -24,7 +74,7 @@ vortex::StreamInputLazy::StreamInputLazy(const vortex::Graphics& gfx)
 
     // Load shaders for the image input node
     auto vertex_shader = gfx.LoadShader("shaders/basic.vs");
-    auto pixel_shader = gfx.LoadShader("shaders/image.ps");
+    auto pixel_shader = gfx.LoadShader("shaders/video.ps");
 
     // Create a pipeline state for the image input node
     wis::GraphicsPipelineDesc pipeline_desc{
@@ -81,20 +131,27 @@ void vortex::StreamInput::InitializeStream()
         return;
     }
 
-    // Set a timeout to make av_read_frame non-blocking.
-    // The value is in microseconds.
+    // Optimized settings for low latency and reduced buffering
     ffmpeg::unique_dictionary options;
-    av_dict_set(options.address_of(), "timeout", "5000000", 0); // 1ms timeout
-    av_dict_set(options.address_of(), "max_delay", "5000000", 0);
+    av_dict_set(options.address_of(), "timeout", "5000000", 0); // 5 second timeout
+    av_dict_set(options.address_of(), "max_delay", "500000", 0); // 0.5s max delay (reduced)
     av_dict_set(options.address_of(), "rtsp_transport", "tcp", 0);
-    av_dict_set(options.address_of(), "buffer_size", "2097152", 0); // 2MB buffer size
+    av_dict_set(options.address_of(), "buffer_size", "1048576", 0); // 1MB buffer (reduced from 4MB)
     av_dict_set(options.address_of(), "rtsp_flags", "prefer_tcp", 0);
 
-    // Add these options for better error handling
-    av_dict_set(options.address_of(), "fflags", "+genpts+discardcorrupt", 0);
+    // Low latency and aggressive flushing
+    av_dict_set(options.address_of(), "fflags", "+genpts+discardcorrupt+flush_packets+nobuffer", 0);
     av_dict_set(options.address_of(), "flags", "+low_delay", 0);
-    av_dict_set(options.address_of(), "analyzeduration", "0", 0);
+    
+    // Critical: Add error concealment options for missing reference frames
+    av_dict_set(options.address_of(), "ec", "guess_mvs+deblock", 0);    
+    av_dict_set(options.address_of(), "err_detect", "ignore_err", 0);   
+    av_dict_set(options.address_of(), "skip_frame", "noref", 0);        
 
+    // NEW: Additional low-latency options
+    av_dict_set(options.address_of(), "reorder_queue_size", "0", 0);    // Disable frame reordering
+    av_dict_set(options.address_of(), "thread_queue_size", "4", 0);     // Small thread queue
+    av_dict_set(options.address_of(), "avoid_negative_ts", "make_zero", 0); // Handle timing issues
 
     auto context_result = codec::CodecFFmpeg::ConnectToStream(stream_url, std::move(options));
     if (!context_result) {
@@ -109,9 +166,13 @@ void vortex::StreamInput::InitializeStream()
     }
 
     _stream_collection = std::move(channels_result.value());
+    _stream_indices[0] = _stream_collection.video_channels[0]->index; 
+    _stream_indices[1] = _stream_collection.audio_channels[0]->index; 
 
-    std::array<int, 1> active_indices = { -1 }; // -1 means activate all streams
+    std::array<int, 1> active_indices = { -1 }; 
     _stream_handle = MakeUniqueStream(std::move(context), active_indices);
+    
+    ExtractStreamTiming();
 }
 void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
 {
@@ -120,24 +181,35 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
     }
 
     // TODO: make this less ugly
-    auto& stream = *std::bit_cast<ffmpeg::ManagedStream*>(_stream_handle.get());
-    auto& video_channel = stream.channels.at(0);
-    auto& audio_channel = stream.channels.at(1);
+    auto& stream = *std::bit_cast<ffmpeg::ManagedStream*>(_stream_handle.get());    
+    auto& video_channel = stream.channels.at(_stream_indices[0]);
+    auto& audio_channel = stream.channels.at(_stream_indices[1]);
 
-    // Decode video frames
+    // Decode video frames with better error handling
     video_channel.decoder_sem.acquire();
     while (true) {
         ffmpeg::unique_frame frame{ av_frame_alloc() };
         int ret = avcodec_receive_frame(video_channel.decoder_ctx.get(), frame.get());
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            video_channel.sent_packets.store(0, std::memory_order::relaxed); // Reset sent packets count on EAGAIN or EOF
+            video_channel.sent_packets.store(0, std::memory_order::relaxed);
             frame.reset();
             break;
         } else if (ret < 0) {
-            vortex::error("Error receiving video frame: {}", ffmpeg::ffmpeg_error_string(ret));
-            video_channel.sent_packets.store(0, std::memory_order::relaxed); // Reset sent packets count on EAGAIN or EOF
+            // Log specific error types for debugging
+            if (ret == AVERROR_INVALIDDATA) {
+                vortex::debug("StreamInput: Invalid video data received, continuing...");
+            } else {
+                vortex::debug("StreamInput: Video decode error: {}", ffmpeg::ffmpeg_error_string(ret));
+            }
+            video_channel.sent_packets.store(0, std::memory_order::relaxed);
             frame.reset();
             break;
+        }
+
+        // Validate frame before processing
+        if (frame->width <= 0 || frame->height <= 0) {
+            vortex::debug("StreamInput: Received invalid frame dimensions: {}x{}", frame->width, frame->height);
+            continue;
         }
 
         // Track the first PTS to use as baseline
@@ -147,7 +219,11 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
             _stream_timing.video_initialized = true;
             vortex::info("StreamInput: First video frame PTS: {}", _stream_timing.first_video_pts);
         }
-        _video_frames[frame->pts] = std::move(frame);
+        
+        // Only store frames with valid PTS
+        if (frame->pts != AV_NOPTS_VALUE) {
+            _video_frames[frame->pts] = std::move(frame);
+        }
     }
     video_channel.decoder_sem.release();
 
@@ -157,12 +233,14 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
         ffmpeg::unique_frame frame{ av_frame_alloc() };
         int ret = avcodec_receive_frame(audio_channel.decoder_ctx.get(), frame.get());
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            audio_channel.sent_packets.store(0, std::memory_order::relaxed); // Reset sent packets count on EAGAIN or EOF
+            audio_channel.sent_packets.store(0, std::memory_order::relaxed);
             frame.reset();
             break;
         } else if (ret < 0) {
-            vortex::error("Error receiving audio frame: {}", ffmpeg::ffmpeg_error_string(ret));
-            audio_channel.sent_packets.store(0, std::memory_order::relaxed); // Reset sent packets count on EAGAIN or EOF
+            if (ret != AVERROR_INVALIDDATA) { // Don't spam logs for common corruption
+                vortex::debug("StreamInput: Audio decode error: {}", ffmpeg::ffmpeg_error_string(ret));
+            }
+            audio_channel.sent_packets.store(0, std::memory_order::relaxed);
             frame.reset();
             break;
         }
@@ -176,7 +254,9 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
             vortex::info("StreamInput: First audio frame PTS: {}", _stream_timing.first_audio_pts);
         }
 
-        _audio_frames[frame->pts] = std::move(frame);
+        if (frame->pts != AV_NOPTS_VALUE) {
+            _audio_frames[frame->pts] = std::move(frame);
+        }
     }
     audio_channel.decoder_sem.release();
     TrimOldFrames();
@@ -184,7 +264,7 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
 
 void vortex::StreamInput::TrimOldFrames()
 {
-    static constexpr std::size_t max_cached_frames = 16; // Max number of frames to cache
+    static constexpr std::size_t max_cached_frames = 32; // Max number of frames to cache
     // Trim video frames
     while (_video_frames.size() > max_cached_frames) {
         _video_frames.erase(_video_frames.begin());
@@ -210,25 +290,48 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
     }
 
     // Get D3D12 texture from the frame
-    auto result = ffmpeg::GetTextureFromFrame(*selected_frame->get());
-    if (!result) {
-        vortex::warn("StreamInput: Failed to get texture from frame: {}", result.error().message());
+    auto result_texture = ffmpeg::GetTextureFromFrame(*selected_frame->get());
+    if (!result_texture) {
+        vortex::warn("StreamInput: Failed to get texture from frame: {}", result_texture.error().message());
         return;
     }
-    
-    auto& texture = result.value();
+    auto& texture = _textures[probe.frame_number % vortex::max_frames_in_flight] = std::move(result_texture.value());
+
+    auto result_fence = ffmpeg::GetFenceFromFrame(*selected_frame->get());
+    if (!result_fence) {
+        vortex::warn("StreamInput: Failed to get fence from frame: {}", result_fence.error().message());
+        return;
+    }
+    auto& fence = _fences[probe.frame_number % vortex::max_frames_in_flight] = std::move(result_fence.value());
+
+    auto fence_value = ffmpeg::GetFenceValueFromFrame(*selected_frame->get());
+    if (!fence_value) {
+        vortex::warn("StreamInput: Failed to get fence value from frame: {}", fence_value.error().message());
+        return;
+    }
+    uint64_t value = fence_value.value();
+
+    auto desc_hw = texture.GetMutableInternal().resource->GetDesc();
+
     // Create shader resource
     auto& device = gfx.GetDevice();
     wis::Result res = wis::success;
-    wis::ShaderResourceDesc desc{
-        
-    };
-    _shader_resources[probe.frame_number % vortex::max_frames_in_flight] = device.CreateShaderResource(res, texture, desc);
+    wis::ShaderResourceDesc descs[2]{ { .format = wis::DataFormat::R8Unorm, // Y plane
+                                        .view_type = wis::TextureViewType::Texture2D,
+                                        .subresource_range = { 0, 1, 0, 1 } },
+                                      { .format = wis::DataFormat(DXGI_FORMAT::DXGI_FORMAT_R8G8_UNORM), // UV plane
+                                        .view_type = wis::TextureViewType::Texture2D,
+                                        .subresource_range = { 0, 1, 0, 1 } } };
+
+    _shader_resources[probe.frame_number % vortex::max_frames_in_flight] =
+            DX12CreateSRVNV12(res, device, texture, descs);
+
+    gfx.GetMainQueue().WaitQueue(fence, value); // Wait for the frame to be ready
 
     // Bind the texture and sampler to the command list
-    probe._descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _shader_resources[probe.frame_number % vortex::max_frames_in_flight]);
-    probe._descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _lazy_data.uget()._sampler);
-
+    probe._descriptor_buffer.WriteTexture(probe.frame_number % vortex::max_frames_in_flight, 0, 0, _shader_resources[probe.frame_number % vortex::max_frames_in_flight][0]);
+    probe._descriptor_buffer.WriteTexture(probe.frame_number % vortex::max_frames_in_flight, 0, 1, _shader_resources[probe.frame_number % vortex::max_frames_in_flight][1]);
+    probe._descriptor_buffer.WriteSampler(probe.frame_number % vortex::max_frames_in_flight, 0, 0, _lazy_data.uget()._sampler);
 
     wis::RenderPassRenderTargetDesc target_desc{
         .target = output_info->_current_rt_view,

@@ -26,6 +26,12 @@ vortex::DescriptorBuffer::DescriptorBuffer(const vortex::Graphics& gfx)
         return;
     }
 
+    _desc_buffer[1] = desc_ext.CreateDescriptorBuffer(result, wis::DescriptorHeapType::Descriptor, wis::DescriptorMemory::ShaderVisible, desc_buffer_size);
+    if (!vortex::success(result)) {
+        vortex::error("DescriptorBuffer: Failed to create descriptor buffer: {}", result.error);
+        return;
+    }
+
     _sampler_buffer = desc_ext.CreateDescriptorBuffer(result, wis::DescriptorHeapType::Sampler, wis::DescriptorMemory::ShaderVisible, sampler_buffer_size);
     if (!vortex::success(result)) {
         vortex::error("DescriptorBuffer: Failed to create sampler buffer: {}", result.error);

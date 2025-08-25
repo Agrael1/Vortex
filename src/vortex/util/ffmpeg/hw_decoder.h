@@ -92,14 +92,42 @@ GetTextureFromFrame(const AVFrame& frame) noexcept
     if (frame.format != AV_PIX_FMT_D3D12) {
         return std::unexpected(make_ffmpeg_error(AVERROR(EINVAL)));
     }
-    auto* d3d12_surface = reinterpret_cast<ID3D12Resource*>(frame.data[0]);
+    auto* d3d12_surface = std::launder(reinterpret_cast<AVD3D12VAFrame*>(frame.data[0]));
     if (!d3d12_surface) {
         return std::unexpected(make_ffmpeg_error(AVERROR(EINVAL)));
     }
     wis::DX12Texture texture;
     auto& internal = texture.GetMutableInternal();
-    internal.resource = wis::com_ptr(d3d12_surface);
+    internal.resource = wis::com_ptr(d3d12_surface->texture);
     return std::move(texture);
+}
+inline std::expected<wis::DX12Fence, std::error_code>
+GetFenceFromFrame(const AVFrame& frame) noexcept
+{
+    if (frame.format != AV_PIX_FMT_D3D12) {
+        return std::unexpected(make_ffmpeg_error(AVERROR(EINVAL)));
+    }
+    auto* d3d12_surface = std::launder(reinterpret_cast<AVD3D12VAFrame*>(frame.data[0]));
+    if (!d3d12_surface) {
+        return std::unexpected(make_ffmpeg_error(AVERROR(EINVAL)));
+    }
+    wis::DX12Fence fence;
+    auto& internal = fence.GetMutableInternal();
+    internal.fence = wis::com_ptr(d3d12_surface->sync_ctx.fence).as<ID3D12Fence1>().ptr;
+    internal.fence_event = nullptr; // Not used here
+    return std::move(fence);
+}
+inline std::expected<uint64_t, std::error_code>
+GetFenceValueFromFrame(const AVFrame& frame) noexcept
+{
+    if (frame.format != AV_PIX_FMT_D3D12) {
+        return std::unexpected(make_ffmpeg_error(AVERROR(EINVAL)));
+    }
+    auto* d3d12_surface = std::launder(reinterpret_cast<AVD3D12VAFrame*>(frame.data[0]));
+    if (!d3d12_surface) {
+        return std::unexpected(make_ffmpeg_error(AVERROR(EINVAL)));
+    }
+    return d3d12_surface->sync_ctx.fence_value;
 }
 } // namespace vortex::ffmpeg
 #endif
@@ -127,7 +155,7 @@ public:
         return GetInternal().hw_device_ctx.get();
     }
     std::expected<vortex::ffmpeg::unique_buffer, std::error_code>
-    CreateHWFramesContext(int width, int height, AVPixelFormat format)const noexcept;
+    CreateHWFramesContext(int width, int height, AVPixelFormat format) const noexcept;
 };
 inline std::expected<VKVADecodeContext, std::error_code>
 VKCreateDecodeContext(const wis::VKDevice& device) noexcept
@@ -184,7 +212,7 @@ VKCreateDecodeContext(const wis::VKDevice& device) noexcept
     return std::move(ctx);
 }
 
-inline std::expected<vortex::ffmpeg::unique_buffer, std::error_code> 
+inline std::expected<vortex::ffmpeg::unique_buffer, std::error_code>
 VKVADecodeContext::CreateHWFramesContext(int width, int height, AVPixelFormat format) const noexcept
 {
     vortex::ffmpeg::unique_buffer hw_frames_ctx{ av_hwframe_ctx_alloc(GetHWDeviceContext()) };

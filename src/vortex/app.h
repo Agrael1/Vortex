@@ -63,7 +63,7 @@ public:
 
         // Test setup of the model
         auto i1 = _model.CreateNode(_gfx, "StreamInput", external_observer, stream_values); // Create a default node for testing
-        auto o1 = _model.CreateNode(_gfx, "NDIOutput", external_observer, output_values2); // Create a default output for testing
+        auto o1 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values2); // Create a default output for testing
 
         _model.SetNodeInfo(i1, "Image 1"); // Set some info for the node
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
@@ -84,13 +84,9 @@ public:
 
             // Process the model and render the nodes
             vortex::RenderProbe probe{
-                _descriptor_buffer,
-                &_command_list[frame_index],
-                {},
-                nullptr,
-
-                1,
-                uint32_t(frame_index)
+                ._descriptor_buffer = _descriptor_buffer,
+                ._command_list = &_command_list[frame_index],
+                .frame_number = frame_number
             };
             _model.TraverseNodes(_gfx, probe); // Traverse the nodes in the model
 
@@ -98,6 +94,7 @@ public:
 
             frame_index = (frame_index + 1) % max_frames_in_flight;
             std::ignore = fence.Wait(fence_values[frame_index]);
+            frame_number++;
 
             fence_values[frame_index] = ++fence_value;
         }
@@ -257,6 +254,7 @@ private:
     wis::Fence fence;
     uint64_t fence_value = 1;
     uint64_t frame_index = 0;
+    uint64_t frame_number = 0;
     std::array<uint64_t, max_frames_in_flight> fence_values{ 1, 0 };
 
     // CEF client for UI

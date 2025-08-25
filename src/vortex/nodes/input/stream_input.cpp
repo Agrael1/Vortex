@@ -2,6 +2,7 @@
 #include <vortex/graphics.h>
 #include <vortex/util/ffmpeg/error.h>
 #include <vortex/util/ffmpeg/hw_decoder.h>
+#include <vortex/ui/sdl.h>
 
 static std::array<wis::DX12ShaderResource, 2>
 DX12CreateSRVNV12(wis::Result& result, const wis::DX12Device& device, wis::DX12TextureView texture, std::span<const wis::ShaderResourceDesc> desc) noexcept
@@ -363,6 +364,17 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
 
     // End the render pass
     cmd_list.EndRenderPass();
+
+// At the end of StreamInput::Evaluate method:
+    if (probe.audio_stream && !_audio_frames.empty()) {
+        auto audio_data = GetAudioForPlayback(probe);
+        if (!audio_data.empty()) {
+            // Uncomment and use SDL3 audio queueing:
+            if (!SDL_PutAudioStreamData(probe.audio_stream, audio_data.data(), static_cast<int>(audio_data.size()))) {
+                vortex::warn("Failed to put audio data to stream: {}", SDL_GetError());
+            }
+        }
+    }
 }
 
 void vortex::StreamInput::ExtractStreamTiming()
@@ -483,4 +495,57 @@ vortex::ffmpeg::unique_frame* vortex::StreamInput::SelectFrameForCurrentTime(con
     int64_t prev_diff = std::abs(target_pts - prev_it->first);
 
     return (prev_diff <= curr_diff) ? &prev_it->second : &it->second;
+}
+
+std::vector<uint8_t> vortex::StreamInput::GetAudioForPlayback(const vortex::RenderProbe& probe)
+{
+    if (_audio_frames.empty() || !_stream_timing.audio_initialized) {
+        return {};
+    }
+
+    int64_t target_pts = CalculateTargetAudioPTS(probe);
+
+    // Collect multiple frames for better buffering (e.g., 3-5 frames)
+    std::vector<uint8_t> combined_buffer;
+    auto it = _audio_frames.lower_bound(target_pts);
+
+    // Process up to 3 frames at once for better latency
+    for (int frame_count = 0; frame_count < 4 && it != _audio_frames.end(); ++frame_count, ++it) {
+        auto& frame = it->second;
+
+        // Setup resampler if needed (same as before)
+        if (!_swr_context) {
+            _swr_context.reset(swr_alloc());
+            AVChannelLayout out_ch_layout = AV_CHANNEL_LAYOUT_STEREO;
+            swr_alloc_set_opts2(_swr_context.address_of(),
+                                &out_ch_layout, AV_SAMPLE_FMT_FLT, probe.audio_sample_rate,
+                                &frame->ch_layout, (AVSampleFormat)frame->format, frame->sample_rate,
+                                0, nullptr);
+            swr_init(_swr_context.get());
+        }
+
+        // Resample this frame
+        uint8_t* resampled_data = nullptr;
+        int out_samples = swr_get_out_samples(_swr_context.get(), frame->nb_samples);
+        av_samples_alloc(&resampled_data, nullptr, 2, out_samples, AV_SAMPLE_FMT_FLT, 0);
+
+        int converted_samples = swr_convert(_swr_context.get(), &resampled_data, out_samples,
+                                            (const uint8_t**)frame->data, frame->nb_samples);
+
+        if (converted_samples > 0) {
+            int buffer_size = av_samples_get_buffer_size(nullptr, 2, converted_samples, AV_SAMPLE_FMT_FLT, 0);
+
+            // Append to combined buffer
+            size_t current_size = combined_buffer.size();
+            combined_buffer.resize(current_size + buffer_size);
+            std::memcpy(combined_buffer.data() + current_size, resampled_data, buffer_size);
+        }
+
+        av_freep(&resampled_data);
+    }
+
+    // Remove processed frames
+    _audio_frames.erase(_audio_frames.begin(), it);
+
+    return combined_buffer;
 }

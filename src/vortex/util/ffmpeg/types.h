@@ -5,6 +5,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
 }
 
 namespace vortex::ffmpeg {
@@ -13,6 +14,7 @@ using unique_context = vortex::unique_any<AVFormatContext*, avformat_close_input
 using unique_codec_context = vortex::unique_any<AVCodecContext*, avcodec_free_context>;
 using unique_frame = vortex::unique_any<AVFrame*, av_frame_free>;
 using unique_swscontext = vortex::unique_any<SwsContext*, sws_freeContext>;
+using unique_swrcontext = vortex::unique_any<SwrContext*, swr_free>;
 using unique_dictionary = vortex::unique_any<AVDictionary*, av_dict_free>;
 
 using unique_buffer = vortex::unique_any<AVBufferRef*, av_buffer_unref>;

@@ -58,6 +58,7 @@ public:
         StreamInputProperties::SetStreamUrl(value, notify);
         url_changed = true;
     }
+    std::vector<uint8_t> GetAudioForPlayback(const vortex::RenderProbe& probe);
 
 private:
     void InitializeStream();
@@ -103,6 +104,8 @@ private:
         bool audio_initialized = false;
     } _stream_timing;
 
+    ffmpeg::unique_swscontext _sws_context;
+    ffmpeg::unique_swrcontext _swr_context;
     bool url_changed = true; // Flag to check if the node has been initialized
 };
 } // namespace vortex

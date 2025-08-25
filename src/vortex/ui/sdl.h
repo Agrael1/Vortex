@@ -14,7 +14,7 @@ class SDLLibrary
 public:
     SDLLibrary()
     {
-        SDL_Init(SDL_INIT_VIDEO);
+        SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
     }
     ~SDLLibrary()
     {

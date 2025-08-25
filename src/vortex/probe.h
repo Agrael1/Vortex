@@ -1,6 +1,8 @@
 #pragma once
 #include <unordered_map>
 
+struct SDL_AudioStream;
+
 namespace vortex {
 class Graphics;
 class DescriptorBuffer;
@@ -16,6 +18,9 @@ struct RenderProbe
     uint64_t frame_number = 0;
 
     vortex::ratio32_t output_framerate = { 60, 1 }; // Default 60 FPS
+    SDL_AudioStream* audio_stream = nullptr;
+    uint32_t audio_sample_rate = 48000; // Default 48 kHz
+    uint32_t audio_channels = 2; // Default stereo
 };
 
 struct RenderPassForwardDesc {

@@ -1,11 +1,11 @@
 #pragma once
 #include <vortex/ui/sdl.h>
 #include <wisdom/wisdom.hpp>
-#include <wisdom/wisdom_platform.hpp>
 #include <vortex/graph/interfaces.h>
 #include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/probe.h>
 #include <vortex/properties/props.hpp>
+#include <vortex/util/lazy.h>
 
 namespace vortex {
 // Debug output is a window with a swapchain for rendering contents directly to the screen
@@ -68,7 +68,7 @@ public:
         _audio_sample_rate = actual_spec.freq;
         _audio_channels = actual_spec.channels;
 
-            // Create audio stream
+        // Create audio stream
         _audio_stream = SDL_OpenAudioDeviceStream(_audio_device_id, &actual_spec, nullptr, nullptr);
         if (!_audio_stream) {
             vortex::error("Failed to create SDL3 audio stream: {}", SDL_GetError());
@@ -144,20 +144,6 @@ public:
     }
 
 public:
-    virtual bool IsReady() const noexcept override
-    {
-        // Check if the swapchain is ready for rendering
-        auto result = _fence.Wait(_fence_values[_frame_index] - 1, 0);
-        if (result.status == wis::Status::Timeout) {
-            // If the fence is not ready, return false
-            return false;
-        } else if (!vortex::success(result)) {
-            vortex::error("Failed to wait for fence in WindowOutput: {}", result.error);
-            return false;
-        }
-
-        return true;
-    }
     virtual vortex::ratio32_t GetOutputFPS() const noexcept
     {
         return GetFramerate();
@@ -168,11 +154,6 @@ public:
     }
     void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
-        if (!IsReady()) {
-            // vortex::info("WindowOutput is not ready for rendering");
-            return;
-        }
-
         if (_resized) {
             // Resize the swapchain if the window has been resized
             auto [width, height] = _window.PixelSize();
@@ -265,13 +246,12 @@ public:
     wis::RenderTarget _render_targets[2]; ///< Render target for the swapchain
     std::span<const wis::Texture> _textures; ///< Textures for the swapchain
 
-    uint32_t _frame_index = 0; ///< Current frame index for synchronization
+    uint32_t _frame_index = 0; ///< Current frame index for double buffering
 
     wis::Fence _fence; ///< Fence for synchronization
     uint64_t _fence_value = 1; ///< Current fence value for synchronization
     uint64_t _fence_values[vortex::max_frames_in_flight] = { 1, 0 }; ///< Current fence value for synchronization
     bool _resized = false; ///< Flag to indicate if the window has been resized
-
 
     SDL_AudioDeviceID _audio_device_id = 0;
     SDL_AudioStream* _audio_stream = nullptr;

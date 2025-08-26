@@ -43,9 +43,7 @@ public:
 
         // Execute outputs in sorted order
         for (auto* output : _outputs) {
-            if (output && output->IsReady()) {
-                output->Evaluate(gfx, probe);
-            }
+            output->Evaluate(gfx, probe);
         }
 
         ++frame;
@@ -75,10 +73,6 @@ public:
         std::vector<std::vector<IOutput*>> compatibility_groups;
 
         for (auto* output : _outputs) {
-            if (!output || !output->IsReady()) {
-                continue;
-            }
-
             // Find compatible group or create new one
             bool found_group = false;
             for (auto& group : compatibility_groups) {
@@ -123,7 +117,7 @@ public:
             vortex::trace("GraphModel: Sorted {} outputs into {} compatibility groups",
                           _outputs.size(), compatibility_groups.size());
             for (size_t i = 0; i < _outputs.size(); ++i) {
-                if (_outputs[i] && _outputs[i]->IsReady()) {
+                if (_outputs[i]) {
                     auto size = _outputs[i]->GetOutputSize();
                     vortex::trace("  Output {}: {:x} ({} pixels)", i, size,
                                   static_cast<uint64_t>(size.width) * size.height);

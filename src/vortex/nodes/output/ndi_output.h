@@ -7,7 +7,7 @@ namespace vortex {
 struct RenderProbe;
 struct RenderPassForwardDesc;
 
-class NDIOutput : public vortex::graph::OutputImpl<NDIOutput, NDIOutputProperties>
+class NDIOutput : public vortex::graph::OutputImpl<NDIOutput, NDIOutputProperties, 2>
 {
     static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for render targets
 public:

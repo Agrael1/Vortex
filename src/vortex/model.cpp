@@ -2,6 +2,13 @@
 
 using namespace vortex::graph;
 
+static bool CompatiblePorts(const Source& source, const Sink& sink) noexcept
+{
+    // Check if the source and sink types are compatible
+    return (source.type == SourceType::RenderTexture && sink.type == SinkType::RenderTexture) ||
+            (source.type == SourceType::Audio && sink.type == SinkType::Audio);
+}
+
 auto vortex::graph::GraphModel::CreateNode(
         const vortex::Graphics& gfx,
         std::string_view node_name,
@@ -126,6 +133,13 @@ void vortex::graph::GraphModel::ConnectNodes(
     if (input_index < 0 || input_index >= static_cast<int32_t>(to_sinks.size())) {
         vortex::error("Invalid input index {} for node {}", input_index, to_node->GetInfo());
         return; // Invalid input index
+    }
+    // Check port compatibility
+    if (!CompatiblePorts(from_sources[output_index], to_sinks[input_index])) {
+        vortex::error("Incompatible port types: {} (output {}) -> {} (input {})",
+                      from_node->GetInfo(), output_index,
+                      to_node->GetInfo(), input_index);
+        return; // Incompatible port types, cannot connect
     }
     vortex::info("Connecting nodes: {} (output {}) -> {} (input {})",
                  from_node->GetInfo(), output_index,

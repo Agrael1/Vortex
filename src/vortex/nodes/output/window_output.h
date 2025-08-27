@@ -11,8 +11,8 @@ namespace vortex {
 // Debug output is a window with a swapchain for rendering contents directly to the screen
 class WindowOutput : public vortex::graph::OutputImpl<WindowOutput, WindowOutputProperties>
 {
-    std::chrono::time_point<std::chrono::steady_clock> _last_frame_time;
     static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for render targets
+    static constexpr size_t max_swapchain_images = 2; // Maximum number of swapchain images
 public:
     WindowOutput(const vortex::Graphics& gfx, SerializedProperties props)
         : ImplClass(props), _window(name.data(), int(window_size.x), int(window_size.y), false)
@@ -22,7 +22,7 @@ public:
         wis::SwapchainDesc desc{
             .size = { uint32_t(gfx_width), uint32_t(gfx_height) },
             .format = format, // RGBA8Unorm is the most common format for desktop applications TODO: make this configurable + HDR
-            .buffer_count = 2, // double buffering, TODO: make this configurable + query for supported buffer counts
+            .buffer_count = max_swapchain_images, // double buffering, TODO: make this configurable + query for supported buffer counts
             .stereo = false,
             .vsync = true,
             .tearing = false,
@@ -50,8 +50,8 @@ public:
             }
         }
         _fence = gfx.GetDevice().CreateFence(result);
-        _last_frame_time = std::chrono::steady_clock::now();
 
+        // TODO: Move to audio
         _audio_device_id = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
         if (_audio_device_id == 0) {
             vortex::error("Failed to open audio device: {}", SDL_GetError());
@@ -225,25 +225,15 @@ public:
         gfx.ExecuteCommandLists({ cmd_list });
 
         Present(gfx); // Present the swapchain after rendering
-
-        // Get the current time for frame
-        auto now = std::chrono::steady_clock::now();
-        auto frame_duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - _last_frame_time).count();
-
-        // Change the window title to include the fps
-        std::string title = std::format("{} - FPS: {:.2f}", name, 1000.0 / frame_duration);
-
-        _last_frame_time = now;
-        _window.SetTitle(title.c_str());
     }
 
 private:
     vortex::ui::SDLWindow _window;
 
 public:
-    wis::CommandList _command_lists[2]; ///< Command list for rendering
     wis::SwapChain _swapchain;
-    wis::RenderTarget _render_targets[2]; ///< Render target for the swapchain
+    wis::CommandList _command_lists[vortex::max_frames_in_flight]; ///< Command list for rendering
+    wis::RenderTarget _render_targets[max_swapchain_images]; ///< Render target for the swapchain
     std::span<const wis::Texture> _textures; ///< Textures for the swapchain
 
     uint32_t _frame_index = 0; ///< Current frame index for double buffering

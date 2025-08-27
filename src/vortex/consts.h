@@ -7,3 +7,9 @@ inline constexpr uint32_t descriptor_batch_size = 1024u; // Maximum number of de
 inline constexpr uint32_t sampler_batch_size = 64u; // Maximum number of samplers in a single batch for all output channels
 inline constexpr uint32_t max_outputs = 64u; // Maximum number of outputs in the application
 }
+
+#if defined(WISDOM_DX12) && !defined(WISDOM_FORCE_VULKAN)
+#define VORTEX_DX12
+#else
+#define VORTEX_VULKAN
+#endif

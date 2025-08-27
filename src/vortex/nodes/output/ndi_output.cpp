@@ -39,6 +39,9 @@ vortex::NDIOutput::NDIOutput(const vortex::Graphics& gfx, SerializedProperties p
         vortex::error("Failed to create fence for NDIOutput: {}", result.error);
         return;
     }
+
+    // Initialize sinks
+    _sinks.sinks[1].type = graph::SinkType::Audio; // Audio sink
 }
 vortex::NDIOutput::~NDIOutput()
 {
@@ -77,6 +80,8 @@ void vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProb
     probe._command_list = &_command_lists[frame_index];
     probe.output_framerate = GetFramerate();
 
+    auto sinks = _sinks.GetSinks();
+
     // Pass to the sink nodes for post-order processing
     RenderPassForwardDesc desc{
         ._current_rt_view = current_render_target,
@@ -86,48 +91,53 @@ void vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProb
 
     // Barrier to ensure the render target is ready for rendering
     auto& cmd_list = *probe._command_list;
-    std::ignore = cmd_list.Reset();
-    probe._descriptor_buffer.BindBuffers(gfx, cmd_list);
 
-    cmd_list.TextureBarrier({
-                                    .sync_before = wis::BarrierSync::Copy,
-                                    .sync_after = wis::BarrierSync::RenderTarget,
-                                    .access_before = wis::ResourceAccess::CopySource,
-                                    .access_after = wis::ResourceAccess::RenderTarget,
-                                    .state_before = wis::TextureState::CopySource,
-                                    .state_after = wis::TextureState::RenderTarget,
-                            },
-                            current_texture);
+    // Video sink
+    if (sinks[0]) {
+        std::ignore = cmd_list.Reset();
+        probe._descriptor_buffer.BindBuffers(gfx, cmd_list);
+        cmd_list.TextureBarrier({
+                                        .sync_before = wis::BarrierSync::Copy,
+                                        .sync_after = wis::BarrierSync::RenderTarget,
+                                        .access_before = wis::ResourceAccess::CopySource,
+                                        .access_after = wis::ResourceAccess::RenderTarget,
+                                        .state_before = wis::TextureState::CopySource,
+                                        .state_after = wis::TextureState::RenderTarget,
+                                },
+                                current_texture);
 
-    // Pass to the next nodes in the graph
-    for (auto& sink : _sinks.GetSinks() | std::views::filter([](auto& sink) { return sink; })) {
-        sink.source_node->Evaluate(gfx, probe, &desc);
+        sinks[0].source_node->Evaluate(gfx, probe, &desc);
+
+        // Close the render target
+        cmd_list.TextureBarrier({
+                                        .sync_before = wis::BarrierSync::RenderTarget,
+                                        .sync_after = wis::BarrierSync::Copy,
+                                        .access_before = wis::ResourceAccess::RenderTarget,
+                                        .access_after = wis::ResourceAccess::CopySource,
+                                        .state_before = wis::TextureState::RenderTarget,
+                                        .state_after = wis::TextureState::CopySource,
+                                },
+                                current_texture);
+
+        _swapchain.Present(_command_lists[current_texture_index]);
+
+        // End the command list
+        if (!cmd_list.Close()) {
+            vortex::error("Failed to close command list for WindowOutput");
+            return;
+        }
+
+        auto& queue = gfx.GetMainQueue();
+        wis::CommandListView views[]{ cmd_list };
+        queue.ExecuteCommandLists(views, std::size(views));
+        std::ignore = queue.SignalQueue(_fence, _fence_values[frame_index]);
+
+        ++_fence_value;
+        _fence_values[_fence_value % vortex::max_frames_in_flight] = _fence_value;
     }
 
-    // Close the render target
-    cmd_list.TextureBarrier({
-                                    .sync_before = wis::BarrierSync::RenderTarget,
-                                    .sync_after = wis::BarrierSync::Copy,
-                                    .access_before = wis::ResourceAccess::RenderTarget,
-                                    .access_after = wis::ResourceAccess::CopySource,
-                                    .state_before = wis::TextureState::RenderTarget,
-                                    .state_after = wis::TextureState::CopySource,
-                            },
-                            current_texture);
-
-    _swapchain.Present(_command_lists[current_texture_index]);
-
-    // End the command list
-    if (!cmd_list.Close()) {
-        vortex::error("Failed to close command list for WindowOutput");
-        return;
+    // Audio sink
+    if (sinks[1] && sinks[1].source_node != sinks[0].source_node) {
+        sinks[1].source_node->Evaluate(gfx, probe, &desc);
     }
-
-    auto& queue = gfx.GetMainQueue();
-    wis::CommandListView views[]{ cmd_list };
-    queue.ExecuteCommandLists(views, std::size(views));
-    std::ignore = queue.SignalQueue(_fence, _fence_values[frame_index]);
-
-    ++_fence_value;
-    _fence_values[_fence_value % vortex::max_frames_in_flight] = _fence_value;
 }

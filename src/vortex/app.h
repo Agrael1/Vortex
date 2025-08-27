@@ -69,6 +69,7 @@ public:
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
 
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
+        _model.ConnectNodes(i1, 1, o1, 1); // Connect the audio outputs
     }
 
 public:

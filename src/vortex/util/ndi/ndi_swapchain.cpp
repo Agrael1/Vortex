@@ -1,14 +1,14 @@
 #include <vortex/util/ndi/ndi_swapchain.h>
 #include <vortex/util/common.h>
 #include <vortex/graphics.h>
+#include <vortex/consts.h>
 
 vortex::NDISwapchain::NDISwapchain(const vortex::Graphics& gfx, const NDISwapchainDesc& desc)
     : _video_frame(
               int32_t(desc.width),
               int32_t(desc.height),
               GetNDIFormat(desc.format),
-              desc.framerate.num(), desc.framerate.denom()
-        )
+              desc.framerate.num(), desc.framerate.denom())
     , _format(desc.format)
     , _send_instance(desc.name)
 {
@@ -16,7 +16,7 @@ vortex::NDISwapchain::NDISwapchain(const vortex::Graphics& gfx, const NDISwapcha
         vortex::error("Failed to create NDI send instance");
         return;
     }
-    
+
     wis::Result result = wis::success;
     _command_list_aux = gfx.GetDevice().CreateCommandList(result, wis::QueueType::Graphics);
     if (!vortex::success(result)) {
@@ -48,10 +48,16 @@ auto vortex::NDISwapchain::CreateBuffers(const vortex::Graphics& gfx, uint32_t w
     // Recreate the texture with the new size
     for (size_t i = 0; i < max_swapchain_images; ++i) {
         _textures[i] = allocator.CreateTexture(result, desc);
+
         if (!vortex::success(result)) {
             vortex::error("Failed to create NDI swapchain texture: {}", result.error);
             return result;
         }
+
+#ifdef VORTEX_DX12
+        auto& tex_int = _textures[i].GetInternal().resource;
+        tex_int->SetName(std::format(L"Vortex NDI Swapchain Texture {}", i).c_str());
+#endif // VORTEX_DX12
     }
 
     // Initialize the staging buffers
@@ -82,12 +88,13 @@ auto vortex::NDISwapchain::CreateBuffers(const vortex::Graphics& gfx, uint32_t w
             .texture = _textures[i],
         };
     }
-    _command_list_aux.Reset();
+    std::ignore = _command_list_aux.Reset();
     _command_list_aux.TextureBarriers(barriers, NDISwapchain::max_swapchain_images);
     _command_list_aux.Close();
 
     gfx.ExecuteCommandLists({ _command_list_aux });
     gfx.WaitForGPU();
+    return wis::success;
 }
 bool vortex::NDISwapchain::Resize(const vortex::Graphics& gfx, uint32_t width, uint32_t height)
 {

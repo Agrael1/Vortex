@@ -11,7 +11,11 @@ class INode; // Forward declaration of INode
 
 enum class SinkType {
     RenderTexture, // Render texture sink
-    RenderTarget, // Render target sink
+    Audio, // Audio sink
+};
+enum class SourceType {
+    RenderTexture, // Render texture source
+    Audio, // Audio source
 };
 
 enum class RenderStrategy {
@@ -101,6 +105,7 @@ struct Source {
     static constexpr std::size_t dynamic_index = std::numeric_limits<std::size_t>::max(); // Invalid index for sink
     std::unordered_set<SourceTarget, SourceTarget::Hash> targets; // Set of sink descriptions for this source
     std::bitset<max_outputs> rendered_outputs; // Bitset of rendered outputs (come from optimization)
+    SourceType type = SourceType::RenderTexture; // Default source type
 };
 
 template<std::size_t N>

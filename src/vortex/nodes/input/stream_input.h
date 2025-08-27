@@ -24,7 +24,7 @@ public:
 };
 
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
-class StreamInput : public vortex::graph::NodeImpl<StreamInput, StreamInputProperties, 0, 1>
+class StreamInput : public vortex::graph::NodeImpl<StreamInput, StreamInputProperties, 0, 2>
 {
 private:
     static void UnregisterStream(ffmpeg::StreamManager::StreamHandle handle) noexcept
@@ -41,6 +41,7 @@ public:
     StreamInput(const vortex::Graphics& gfx, SerializedProperties props)
         : ImplClass(props), _lazy_data(gfx)
     {
+        _sources.sources[1].type = graph::SourceType::Audio; // Second source is audio
     }
 
 public:

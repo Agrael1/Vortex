@@ -81,7 +81,7 @@ void vortex::ffmpeg::StreamManager::IOFlushStream(vortex::ffmpeg::ManagedStream&
 
         // Send all the queued packets first
         while (!channel.packets.empty()) {
-            avcodec_send_packet(channel.decoder_ctx.get(), channel.packets.front().address_of());
+            avcodec_send_packet(channel.decoder_ctx.get(), channel.packets.front().get());
             channel.packets.pop();
         }
 
@@ -111,8 +111,8 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
 
     // This is the core of the non-blocking read. av_read_frame will return
     // after a timeout (set in StreamInput::initialize_stream) or when a packet arrives.
-    ffmpeg::unique_packet packet;
-    int ret = av_read_frame(stream.context.get(), packet.put<clear_strategy::none>());
+    ffmpeg::unique_packet packet{ av_packet_alloc() };
+    int ret = av_read_frame(stream.context.get(), packet.get());
     if (ret < 0) {
         if (ret == AVERROR(EAGAIN)) {
             return false; // No data available right now
@@ -145,13 +145,13 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
         // If there are queued packets, send them first
         while (!channel.packets.empty()) {
             auto& queued_packet = channel.packets.front();
-            avcodec_send_packet(channel.decoder_ctx.get(), queued_packet.address_of());
+            avcodec_send_packet(channel.decoder_ctx.get(), queued_packet.get());
             channel.packets.pop();
         }
     }
 
     // Now send the current packet
-    avcodec_send_packet(channel.decoder_ctx.get(), packet.address_of());
+    avcodec_send_packet(channel.decoder_ctx.get(), packet.get());
     channel.sent_packets.fetch_add(1, std::memory_order::relaxed);
     channel.decoder_sem.release();
     return true;

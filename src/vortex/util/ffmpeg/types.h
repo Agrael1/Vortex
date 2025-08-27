@@ -16,10 +16,8 @@ using unique_frame = vortex::unique_any<AVFrame*, av_frame_free>;
 using unique_swscontext = vortex::unique_any<SwsContext*, sws_freeContext>;
 using unique_swrcontext = vortex::unique_any<SwrContext*, swr_free>;
 using unique_dictionary = vortex::unique_any<AVDictionary*, av_dict_free>;
-
 using unique_buffer = vortex::unique_any<AVBufferRef*, av_buffer_unref>;
-
-using unique_packet = vortex::unique_any<AVPacket, av_packet_unref>;
+using unique_packet = vortex::unique_any<AVPacket*, av_packet_free>;
 } // namespace vortex::ffmpeg
 
 namespace std {

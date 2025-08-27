@@ -92,17 +92,19 @@ vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesyst
     }
 
     // Read and decode frames
-    unique_packet packet;
-    while (av_read_frame(format_context.get(), packet.put<clear_strategy::none>()) >= 0) {
+    unique_packet packet{ av_packet_alloc() };
+    while (av_read_frame(format_context.get(), packet.get()) >= 0) {
         if (packet->stream_index < 0 || packet->stream_index >= format_context->nb_streams) {
+            av_packet_unref(packet.get());
             continue; // Skip invalid stream index
         }
 
         // Decode the packet
-        ret = avcodec_send_packet(codec_context.get(), &packet.get());
+        ret = avcodec_send_packet(codec_context.get(), packet.get());
         if (ret < 0) {
             auto ec = make_ffmpeg_error(ret);
             vortex::error("CodecFFmpeg::LoadTextureModern: Error sending packet for decoding: {}", ec.message());
+            av_packet_unref(packet.get());
             continue; // Try next packet
         }
 
@@ -116,10 +118,11 @@ vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesyst
         ret = avcodec_receive_frame(codec_context.get(), frame.get());
         if (ret < 0) {
             if (ret == AVERROR(EAGAIN)) {
+                av_packet_unref(packet.get());
                 continue; // Need more input
             }
-            auto ec = make_ffmpeg_error(ret);
-            vortex::error("CodecFFmpeg::LoadTextureModern: Error receiving frame from decoder: {}", ec.message());
+            vortex::error("CodecFFmpeg::LoadTextureModern: Error receiving frame from decoder: {}",  ffmpeg_error_string(ret));
+            av_packet_unref(packet.get());
             continue; // Try next packet
         }
 

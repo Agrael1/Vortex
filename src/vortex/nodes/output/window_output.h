@@ -175,7 +175,6 @@ public:
 
         auto current_texture_index = _swapchain.GetCurrentIndex();
         probe._command_list = &_command_lists[_frame_index];
-        probe.audio_stream = _audio_stream;
         probe.audio_sample_rate = _audio_sample_rate;
         probe.audio_channels = _audio_channels;
 

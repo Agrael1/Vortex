@@ -7,7 +7,7 @@ add_executable(${PROJECT_NAME})
 target_sources(${PROJECT_NAME}
   PRIVATE
 	"test_model.cpp"
- "mock_output.h" "test_graph.cpp" "mock_model.h")
+ "mock_output.h" "test_graph.cpp" "test_byte_ring.cpp" "mock_model.h")
 WIS_INSTALL_DEPS(${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} PRIVATE VortexLib Catch2::Catch2WithMain)
 set_target_properties(${PROJECT_NAME} PROPERTIES

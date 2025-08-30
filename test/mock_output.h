@@ -22,7 +22,7 @@ public:
     }
 
 public:
-    virtual bool IsReady() const noexcept override
+    virtual bool IsReady() const noexcept
     {
         // Check if the swapchain is ready for rendering
         return true;

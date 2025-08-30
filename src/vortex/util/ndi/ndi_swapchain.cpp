@@ -2,6 +2,7 @@
 #include <vortex/util/common.h>
 #include <vortex/graphics.h>
 #include <vortex/consts.h>
+#include <numbers>
 
 vortex::NDISwapchain::NDISwapchain(const vortex::Graphics& gfx, const NDISwapchainDesc& desc)
     : _video_frame(
@@ -113,6 +114,24 @@ bool vortex::NDISwapchain::Resize(const vortex::Graphics& gfx, uint32_t width, u
     DestroyBuffers();
     CreateBuffers(gfx, width, height);
     return true;
+}
+
+static int it = 10;
+void vortex::NDISwapchain::SendAudio(std::span<const float> samples)
+{
+    if (!_send_instance) {
+        return;
+    }
+
+    NDIlib_audio_frame_v3_t audio_frame = {};
+    audio_frame.sample_rate = 48000;
+    audio_frame.no_channels = 2;
+    audio_frame.no_samples = samples.size() / 2;
+    audio_frame.timecode = NDIlib_send_timecode_synthesize;
+    audio_frame.FourCC = NDIlib_FourCC_audio_type_FLTP;
+    audio_frame.p_data = (uint8_t*)samples.data();
+    audio_frame.channel_stride_in_bytes = audio_frame.no_samples * sizeof(float);
+    NDIlib_send_send_audio_v3(_send_instance, &audio_frame);
 }
 void vortex::NDISwapchain::DestroyBuffers() noexcept
 {

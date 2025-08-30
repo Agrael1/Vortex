@@ -54,7 +54,7 @@ try {
 
     if (!CefInitialize(cef_args, cef_settings, cef_app, nullptr)) {
         vortex::critical("CefInitialize failed");
-        return 3; // Initialization failed
+        return CefGetExitCode(); // Initialization failed
     }
 
     // Initialize Node Library

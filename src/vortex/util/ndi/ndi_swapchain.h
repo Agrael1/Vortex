@@ -49,6 +49,7 @@ public:
         _send_instance.Recreate(name);
     }
     bool Resize(const vortex::Graphics& gfx, uint32_t width, uint32_t height);
+    void SendAudio(std::span<const float> samples);
 
 private:
     void CopyToStagingBuffer(wis::CommandList& cmd_list, uint32_t index)

@@ -129,6 +129,54 @@ GetFenceValueFromFrame(const AVFrame& frame) noexcept
     }
     return d3d12_surface->sync_ctx.fence_value;
 }
+inline std::array<wis::DX12ShaderResource, 2>
+DX12CreateSRVNV12(wis::Result& result, const wis::DX12Device& device, wis::DX12TextureView texture, std::span<const wis::ShaderResourceDesc> desc) noexcept
+{
+    std::array<wis::DX12ShaderResource, 2> out_resource;
+    auto& internal_0 = out_resource[0].GetMutableInternal();
+    auto& internal_1 = out_resource[1].GetMutableInternal();
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc[2];
+    for (size_t i = 0; i < 2; i++) {
+        srv_desc[i] = {
+            .Format = convert_dx(desc[i].format),
+            .ViewDimension = convert_dx(desc[i].view_type),
+            .Shader4ComponentMapping = UINT(D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
+                    convert_dx(desc[i].component_mapping.r),
+                    convert_dx(desc[i].component_mapping.g),
+                    convert_dx(desc[i].component_mapping.b),
+                    convert_dx(desc[i].component_mapping.a))),
+        };
+        switch (desc[i].view_type) {
+        case wis::TextureViewType::Texture2D:
+            srv_desc[i].Texture2D = {
+                .MostDetailedMip = desc[i].subresource_range.base_mip_level,
+                .MipLevels = desc[i].subresource_range.level_count,
+                .PlaneSlice = UINT(i), // Plane 0 for Y, Plane 1 for UV
+                .ResourceMinLODClamp = 0.0f,
+            };
+            break;
+        default:
+            result = wis::make_result<wis::Func<wis::FuncD()>(), "Unsupported view type for NV12 texture">(E_INVALIDARG);
+            return {};
+        }
+    }
+
+    D3D12_DESCRIPTOR_HEAP_DESC heap_desc{
+        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        .NumDescriptors = 1,
+        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE
+    };
+
+    auto& device_x = device.GetInternal().device;
+
+    auto x = device_x->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    device_x->CreateDescriptorHeap(&heap_desc, internal_0.heap.iid(), internal_0.heap.put_void());
+    device_x->CreateDescriptorHeap(&heap_desc, internal_1.heap.iid(), internal_1.heap.put_void());
+    device_x->CreateShaderResourceView(std::get<0>(texture), &srv_desc[0], internal_0.heap->GetCPUDescriptorHandleForHeapStart());
+    device_x->CreateShaderResourceView(std::get<0>(texture), &srv_desc[1], internal_1.heap->GetCPUDescriptorHandleForHeapStart());
+    return out_resource;
+}
 } // namespace vortex::ffmpeg
 #endif
 

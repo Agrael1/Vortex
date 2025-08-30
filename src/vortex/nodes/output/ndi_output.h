@@ -2,6 +2,7 @@
 #include <vortex/graph/interfaces.h>
 #include <vortex/properties/props.hpp>
 #include <vortex/util/ndi/ndi_swapchain.h>
+#include <vortex/audio/audio_buffer.h>
 
 namespace vortex {
 struct RenderProbe;
@@ -63,6 +64,8 @@ private:
     uint64_t _fence_value = 1; ///< Current fence value for synchronization
     uint64_t _fence_values[vortex::max_frames_in_flight] = { 1, 0 }; ///< Current fence value for synchronization
 
+    vortex::AudioBuffer _audio_buffer; ///< Audio buffer for storing audio samples (planar float)
+    std::vector<float> _audio_samples;
     bool _resized = false; ///< Flag to indicate if the output has been resized
 };
 } // namespace vortex

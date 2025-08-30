@@ -4,55 +4,6 @@
 #include <vortex/util/ffmpeg/hw_decoder.h>
 #include <vortex/ui/sdl.h>
 
-static std::array<wis::DX12ShaderResource, 2>
-DX12CreateSRVNV12(wis::Result& result, const wis::DX12Device& device, wis::DX12TextureView texture, std::span<const wis::ShaderResourceDesc> desc) noexcept
-{
-    std::array<wis::DX12ShaderResource, 2> out_resource;
-    auto& internal_0 = out_resource[0].GetMutableInternal();
-    auto& internal_1 = out_resource[1].GetMutableInternal();
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc[2];
-    for (size_t i = 0; i < 2; i++) {
-        srv_desc[i] = {
-            .Format = convert_dx(desc[i].format),
-            .ViewDimension = convert_dx(desc[i].view_type),
-            .Shader4ComponentMapping = UINT(D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
-                    convert_dx(desc[i].component_mapping.r),
-                    convert_dx(desc[i].component_mapping.g),
-                    convert_dx(desc[i].component_mapping.b),
-                    convert_dx(desc[i].component_mapping.a))),
-        };
-        switch (desc[i].view_type) {
-        case wis::TextureViewType::Texture2D:
-            srv_desc[i].Texture2D = {
-                .MostDetailedMip = desc[i].subresource_range.base_mip_level,
-                .MipLevels = desc[i].subresource_range.level_count,
-                .PlaneSlice = UINT(i), // Plane 0 for Y, Plane 1 for UV
-                .ResourceMinLODClamp = 0.0f,
-            };
-            break;
-        default:
-            result = wis::make_result<wis::Func<wis::FuncD()>(), "Unsupported view type for NV12 texture">(E_INVALIDARG);
-            return {};
-        }
-    }
-
-    D3D12_DESCRIPTOR_HEAP_DESC heap_desc{
-        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = 1,
-        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE
-    };
-
-    auto& device_x = device.GetInternal().device;
-
-    auto x = device_x->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    device_x->CreateDescriptorHeap(&heap_desc, internal_0.heap.iid(), internal_0.heap.put_void());
-    device_x->CreateDescriptorHeap(&heap_desc, internal_1.heap.iid(), internal_1.heap.put_void());
-    device_x->CreateShaderResourceView(std::get<0>(texture), &srv_desc[0], internal_0.heap->GetCPUDescriptorHandleForHeapStart());
-    device_x->CreateShaderResourceView(std::get<0>(texture), &srv_desc[1], internal_1.heap->GetCPUDescriptorHandleForHeapStart());
-    return out_resource;
-}
-
 vortex::StreamInputLazy::StreamInputLazy(const vortex::Graphics& gfx)
     : _manager(gfx)
 {
@@ -143,15 +94,15 @@ void vortex::StreamInput::InitializeStream()
     // Low latency and aggressive flushing
     av_dict_set(options.address_of(), "fflags", "+genpts+discardcorrupt+flush_packets+nobuffer", 0);
     av_dict_set(options.address_of(), "flags", "+low_delay", 0);
-    
+
     // Critical: Add error concealment options for missing reference frames
-    av_dict_set(options.address_of(), "ec", "guess_mvs+deblock", 0);    
-    av_dict_set(options.address_of(), "err_detect", "ignore_err", 0);   
-    av_dict_set(options.address_of(), "skip_frame", "noref", 0);        
+    av_dict_set(options.address_of(), "ec", "guess_mvs+deblock", 0);
+    av_dict_set(options.address_of(), "err_detect", "ignore_err", 0);
+    av_dict_set(options.address_of(), "skip_frame", "noref", 0);
 
     // NEW: Additional low-latency options
-    av_dict_set(options.address_of(), "reorder_queue_size", "0", 0);    // Disable frame reordering
-    av_dict_set(options.address_of(), "thread_queue_size", "4", 0);     // Small thread queue
+    av_dict_set(options.address_of(), "reorder_queue_size", "0", 0); // Disable frame reordering
+    av_dict_set(options.address_of(), "thread_queue_size", "4", 0); // Small thread queue
     av_dict_set(options.address_of(), "avoid_negative_ts", "make_zero", 0); // Handle timing issues
 
     auto context_result = codec::CodecFFmpeg::ConnectToStream(stream_url, std::move(options));
@@ -167,12 +118,12 @@ void vortex::StreamInput::InitializeStream()
     }
 
     _stream_collection = std::move(channels_result.value());
-    _stream_indices[0] = _stream_collection.video_channels[0]->index; 
-    _stream_indices[1] = _stream_collection.audio_channels[0]->index; 
+    _stream_indices[0] = _stream_collection.video_channels[0]->index;
+    _stream_indices[1] = _stream_collection.audio_channels[0]->index;
 
-    std::array<int, 1> active_indices = { -1 }; 
+    std::array<int, 1> active_indices = { -1 };
     _stream_handle = MakeUniqueStream(std::move(context), active_indices);
-    
+
     ExtractStreamTiming();
 }
 void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
@@ -182,7 +133,7 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
     }
 
     // TODO: make this less ugly
-    auto& stream = *std::bit_cast<ffmpeg::ManagedStream*>(_stream_handle.get());    
+    auto& stream = *std::bit_cast<ffmpeg::ManagedStream*>(_stream_handle.get());
     auto& video_channel = stream.channels.at(_stream_indices[0]);
     auto& audio_channel = stream.channels.at(_stream_indices[1]);
 
@@ -220,7 +171,7 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
             _stream_timing.video_initialized = true;
             vortex::info("StreamInput: First video frame PTS: {}", _stream_timing.first_video_pts);
         }
-        
+
         // Only store frames with valid PTS
         if (frame->pts != AV_NOPTS_VALUE) {
             _video_frames[frame->pts] = std::move(frame);
@@ -325,7 +276,7 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
                                         .subresource_range = { 0, 1, 0, 1 } } };
 
     _shader_resources[probe.frame_number % vortex::max_frames_in_flight] =
-            DX12CreateSRVNV12(res, device, texture, descs);
+            ffmpeg::DX12CreateSRVNV12(res, device, texture, descs);
 
     gfx.GetMainQueue().WaitQueue(fence, value); // Wait for the frame to be ready
 
@@ -365,14 +316,11 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
     // End the render pass
     cmd_list.EndRenderPass();
 
-// At the end of StreamInput::Evaluate method:
-    if (probe.audio_stream && !_audio_frames.empty()) {
+    // At the end of StreamInput::Evaluate method:
+    if (!_audio_frames.empty()) {
         auto audio_data = GetAudioForPlayback(probe);
         if (!audio_data.empty()) {
-            // Uncomment and use SDL3 audio queueing:
-            if (!SDL_PutAudioStreamData(probe.audio_stream, audio_data.data(), static_cast<int>(audio_data.size()))) {
-                vortex::warn("Failed to put audio data to stream: {}", SDL_GetError());
-            }
+            probe.AssignAudio<uint8_t>(audio_data);
         }
     }
 }
@@ -506,11 +454,11 @@ std::vector<uint8_t> vortex::StreamInput::GetAudioForPlayback(const vortex::Rend
     int64_t target_pts = CalculateTargetAudioPTS(probe);
 
     // Collect multiple frames for better buffering (e.g., 3-5 frames)
-    std::vector<uint8_t> combined_buffer;
+    std::vector<uint8_t> combined_buffer[2];
     auto it = _audio_frames.lower_bound(target_pts);
 
     // Process up to 3 frames at once for better latency
-    for (int frame_count = 0; frame_count < 4 && it != _audio_frames.end(); ++frame_count, ++it) {
+    for (int frame_count = 0; it != _audio_frames.end(); ++frame_count, ++it) {
         auto& frame = it->second;
 
         // Setup resampler if needed (same as before)
@@ -518,34 +466,36 @@ std::vector<uint8_t> vortex::StreamInput::GetAudioForPlayback(const vortex::Rend
             _swr_context.reset(swr_alloc());
             AVChannelLayout out_ch_layout = AV_CHANNEL_LAYOUT_STEREO;
             swr_alloc_set_opts2(_swr_context.address_of(),
-                                &out_ch_layout, AV_SAMPLE_FMT_FLT, probe.audio_sample_rate,
+                                &out_ch_layout, AV_SAMPLE_FMT_FLTP, probe.audio_sample_rate,
                                 &frame->ch_layout, (AVSampleFormat)frame->format, frame->sample_rate,
                                 0, nullptr);
             swr_init(_swr_context.get());
         }
 
         // Resample this frame
-        uint8_t* resampled_data = nullptr;
+        uint8_t* resampled_data[2]{};
         int out_samples = swr_get_out_samples(_swr_context.get(), frame->nb_samples);
-        av_samples_alloc(&resampled_data, nullptr, 2, out_samples, AV_SAMPLE_FMT_FLT, 0);
+        av_samples_alloc(resampled_data, nullptr, 2, out_samples, AV_SAMPLE_FMT_FLTP, 0);
 
-        int converted_samples = swr_convert(_swr_context.get(), &resampled_data, out_samples,
+        int converted_samples = swr_convert(_swr_context.get(), resampled_data, out_samples,
                                             (const uint8_t**)frame->data, frame->nb_samples);
 
         if (converted_samples > 0) {
-            int buffer_size = av_samples_get_buffer_size(nullptr, 2, converted_samples, AV_SAMPLE_FMT_FLT, 0);
+            int buffer_size = av_samples_get_buffer_size(nullptr, 2, converted_samples, AV_SAMPLE_FMT_FLTP, 0);
 
-            // Append to combined buffer
-            size_t current_size = combined_buffer.size();
-            combined_buffer.resize(current_size + buffer_size);
-            std::memcpy(combined_buffer.data() + current_size, resampled_data, buffer_size);
+            for (int ch = 0; ch < 2; ++ch) {
+                size_t current_size = combined_buffer[ch].size();
+                combined_buffer[ch].resize(current_size + buffer_size / 2); // Divide by 2 for stereo
+                std::memcpy(combined_buffer[ch].data() + current_size, resampled_data[ch], buffer_size / 2);
+            }
         }
 
-        av_freep(&resampled_data);
+        //for (int ch = 0; ch < 2; ++ch) {
+        //    av_freep(&resampled_data[ch]);
+        //}
     }
-
-    // Remove processed frames
-    _audio_frames.erase(_audio_frames.begin(), it);
-
-    return combined_buffer;
+    std::vector<uint8_t> final_buffer;
+    final_buffer.insert(final_buffer.end(), combined_buffer[0].begin(), combined_buffer[0].end());
+    final_buffer.insert(final_buffer.end(), combined_buffer[1].begin(), combined_buffer[1].end());
+    return final_buffer;
 }

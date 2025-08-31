@@ -18,7 +18,7 @@ public: // Model API
     void RemoveNode(uintptr_t node_ptr);
     void SetNodeProperty(uintptr_t node_ptr, uint32_t index, std::string_view value, bool notify_ui = false);
     auto GetNodeProperties(uintptr_t node_ptr) const -> std::string;
-    void ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
+    bool ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
     void DisconnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
     void SetNodeInfo(uintptr_t node_ptr, std::string info);
 

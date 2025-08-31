@@ -111,7 +111,7 @@ auto vortex::graph::GraphModel::GetNodeProperties(uintptr_t node_ptr) const -> s
     return "{}"; // Return empty string if node not found
 }
 
-void vortex::graph::GraphModel::ConnectNodes(
+bool vortex::graph::GraphModel::ConnectNodes(
         uintptr_t node_ptr_from,
         int32_t output_index,
         uintptr_t node_ptr_to,
@@ -121,25 +121,25 @@ void vortex::graph::GraphModel::ConnectNodes(
     auto* to_node = GetNode(node_ptr_to);
     if (!from_node || !to_node) {
         vortex::error("Failed to connect nodes: one or both nodes not found.");
-        return; // One or both nodes not found, cannot connect
+        return false; // One or both nodes not found, cannot connect
     }
 
     auto to_sinks = to_node->GetSinks();
     auto from_sources = from_node->GetSources();
     if (output_index < 0 || output_index >= static_cast<int32_t>(from_sources.size())) {
         vortex::error("Invalid output index {} for node {}", output_index, from_node->GetInfo());
-        return; // Invalid output index
+        return false; // Invalid output index
     }
     if (input_index < 0 || input_index >= static_cast<int32_t>(to_sinks.size())) {
         vortex::error("Invalid input index {} for node {}", input_index, to_node->GetInfo());
-        return; // Invalid input index
+        return false; // Invalid input index
     }
     // Check port compatibility
     if (!CompatiblePorts(from_sources[output_index], to_sinks[input_index])) {
         vortex::error("Incompatible port types: {} (output {}) -> {} (input {})",
                       from_node->GetInfo(), output_index,
                       to_node->GetInfo(), input_index);
-        return; // Incompatible port types, cannot connect
+        return false; // Incompatible port types, cannot connect
     }
     vortex::info("Connecting nodes: {} (output {}) -> {} (input {})",
                  from_node->GetInfo(), output_index,
@@ -151,7 +151,7 @@ void vortex::graph::GraphModel::ConnectNodes(
         vortex::warn("Connection already exists: {} -> {} ({} -> {})",
                      from_node->GetInfo(), to_node->GetInfo(),
                      output_index, input_index);
-        return; // Connection already exists
+        return false; // Connection already exists
     }
 
     // remove any existing connection at the same input index
@@ -177,6 +177,7 @@ void vortex::graph::GraphModel::ConnectNodes(
     _optimize_probe.MarkNodeDirty(from_node);
     _optimize_probe.MarkNodeDirty(to_node);
     _optimization_dirty = true;
+    return true; // Connection successful
 }
 
 void vortex::graph::GraphModel::DisconnectNodes(

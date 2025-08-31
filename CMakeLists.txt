@@ -77,7 +77,7 @@ PUBLIC
   "src/vortex/model.h" 
   "src/vortex/model.cpp" 
    
-  "src/vortex/util/lazy.h"  "src/vortex/util/ffmpeg/types.h" "src/vortex/util/ffmpeg/error.h" "src/vortex/util/interprocess_lock.h" "src/vortex/util/interprocess_lock.cpp" "src/vortex/util/ffmpeg/stream_manager.h" "src/vortex/util/ffmpeg/stream_manager.cpp" "src/vortex/util/ffmpeg/hw_decoder.h" "src/vortex/nodes/output/ndi_output.cpp" "src/vortex/audio/audio_buffer.h" "src/vortex/util/byte_ring.h"  "src/vortex/audio/audio_resampler.h")
+  "src/vortex/util/lazy.h"  "src/vortex/util/ffmpeg/types.h" "src/vortex/util/ffmpeg/error.h" "src/vortex/util/interprocess_lock.h" "src/vortex/util/interprocess_lock.cpp" "src/vortex/util/ffmpeg/stream_manager.h" "src/vortex/util/ffmpeg/stream_manager.cpp" "src/vortex/util/ffmpeg/hw_decoder.h" "src/vortex/nodes/output/ndi_output.cpp" "src/vortex/audio/audio_buffer.h" "src/vortex/util/byte_ring.h"  "src/vortex/audio/audio_resampler.h" "src/vortex/ui/message_dispatch.h")
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
   CXX_STANDARD 23

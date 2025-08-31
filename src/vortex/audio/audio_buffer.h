@@ -36,7 +36,10 @@ public:
         // for planar format allocate buffer for each channel
         _buffers = std::make_unique_for_overwrite<vortex::byte_ring[]>(format.channels);
         for (uint16_t ch = 0; ch < format.channels; ++ch) {
-            _buffers[ch].reserve(buffer_length_samples); // 1 second buffer
+            auto err = _buffers[ch].reserve(buffer_length_samples); // 1 second buffer
+            if (err != std::errc{}) {
+                vortex::error("AudioBuffer: Failed to reserve buffer for channel {}: {}", ch, static_cast<int>(err));
+            }
         }
     }
 

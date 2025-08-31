@@ -1,5 +1,6 @@
 #pragma once
 #include <vortex/util/byte_ring.h>
+#include <vortex/util/log.h>
 
 namespace vortex {
 enum AudioDataRate : uint16_t {
@@ -60,7 +61,8 @@ public:
         }
         return _buffers[channel].write(data);
     }
-    std::size_t Read(std::span<std::byte> buffer, uint16_t channel, size_t max_samples = std::numeric_limits<size_t>::max()) noexcept
+    template<typename T = std::byte, std::size_t Extent = std::dynamic_extent>
+    std::size_t Read(std::span<T, Extent> buffer, uint16_t channel, size_t max_samples = std::numeric_limits<size_t>::max()) noexcept
     {
         if (channel >= _format.channels) {
             return 0;
@@ -74,7 +76,41 @@ public:
         if (max_bytes > buffer.size()) {
             max_bytes = buffer.size() - (buffer.size() % bytes_per_sample); // Align to sample size
         }
-        return _buffers[channel].read(buffer.subspan(0, max_bytes));
+        return _buffers[channel].read_as<T>(buffer.subspan(0, max_bytes));
+    }
+
+    // Read planar data into single buffer
+    template<typename T = std::byte, std::size_t Extent = std::dynamic_extent>
+    std::size_t ReadPlanar(std::span<T, Extent> output)
+    {
+        std::size_t samples_per_channel = output.size() / _format.channels;
+        assert(samples_per_channel > 0);
+        assert(output.size() % _format.channels == 0);
+
+        std::size_t result = 0;
+        for (uint16_t ch = 0; ch < _format.channels; ++ch) {
+            std::size_t local = Read<T>(output.subspan(ch * samples_per_channel, samples_per_channel), ch);
+            if (local < samples_per_channel) {
+                vortex::warn("AudioBuffer: Channel {} underflow: requested {} samples, got {}", ch, samples_per_channel, local);
+                // Zero out the rest of the buffer
+                std::memset(output.data() + (ch * samples_per_channel + local), 0, (samples_per_channel - local) * sizeof(T));
+            }
+        }
+        return result; // All requested samples read
+    }
+    template<typename T = std::byte, std::size_t Extent = std::dynamic_extent>
+    void WritePlanar(std::span<T, Extent> input)
+    {
+        std::size_t samples_per_channel = input.size() / _format.channels;
+        assert(samples_per_channel > 0);
+        assert(input.size() % _format.channels == 0);
+        for (uint16_t ch = 0; ch < _format.channels; ++ch) {
+            // Write is really sensitive
+            auto err = Write(std::as_bytes(input.subspan(ch * samples_per_channel, samples_per_channel)), ch);
+            if (err != std::errc{}) {
+                vortex::error("AudioBuffer: Failed to write to channel {}: {}", ch, reflect::enum_name(err));
+            }
+        }
     }
 
 public:

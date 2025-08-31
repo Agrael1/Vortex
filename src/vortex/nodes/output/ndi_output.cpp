@@ -8,11 +8,11 @@ vortex::NDIOutput::NDIOutput(const vortex::Graphics& gfx, SerializedProperties p
     : ImplClass(props)
     , _swapchain(gfx, NDISwapchainDesc{ .width = window_size.x, .height = window_size.y, .format = format, .framerate = framerate, .name = name })
     , _audio_buffer(
-        vortex::AudioFormat{ 
-            .data_format = vortex::Float32Planar, 
-            .sample_rate = 48000, 
-            .channels = 2 }, 
-            std::chrono::seconds(1))
+              vortex::AudioFormat{
+                      .data_format = vortex::Float32Planar,
+                      .sample_rate = 48000,
+                      .channels = 2 },
+              std::chrono::seconds(1))
 {
     wis::Result result = wis::success;
 
@@ -48,8 +48,8 @@ vortex::NDIOutput::NDIOutput(const vortex::Graphics& gfx, SerializedProperties p
 
     // Initialize sinks
     _sinks.sinks[1].type = graph::SinkType::Audio; // Audio sink
-
-    _audio_samples.resize(800 * 2); // Reserve space for 1 second of stereo float samples at 48kHz
+    std::size_t samples_per_frame = (framerate.denominator == 0 || framerate.numerator == 0) ? 0 : (48000 * framerate.denominator) / framerate.numerator;
+    _audio_samples.resize(samples_per_frame * 2); // Reserve space for 1 second of stereo float samples at 48kHz
 }
 vortex::NDIOutput::~NDIOutput()
 {
@@ -149,54 +149,11 @@ void vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProb
         sinks[1].source_node->Evaluate(gfx, probe, &desc);
     }
 
-    // Check the output audio buffer and send it via NDI if available
-    //auto& audio_data = probe.audio_data;
-    //if (audio_data.size() > 0) {
-    //    // NDI expects planar float data interleaved as L, R, L, R, ...
-    //    const float* audio_ptr = reinterpret_cast<const float*>(audio_data.data());
-    //    std::size_t total_samples = audio_data.size() / sizeof(float);
-
-    //    // Move the audio data to the internal audio buffer
-    //    std::size_t samples_per_channel = total_samples / probe.audio_channels;
-    //    std::span audio_span{ audio_data };
-    //    for (uint32_t ch = 0; ch < probe.audio_channels; ++ch) {
-    //        _audio_buffer.Write(audio_span.subspan(samples_per_channel * ch, samples_per_channel), ch);
-    //    }
-    //}
-
-    // Write a sinusoidal test signal if no audio data is present
-    static std::size_t it = 0;
-    // if (audio_data.size() == 0) {
-    float frequency = 440.0f; // A4 note
-    float sample_rate = 48000.0f;
-    std::size_t samples_per_channel = _audio_samples.size() / probe.audio_channels;
-    for (std::size_t i = 0; i < samples_per_channel; ++i) {
-        float sample = std::sin(2.0f * 3.14159265f * frequency * (i + it) / sample_rate) * 0.1f; // Reduced amplitude to avoid clipping
-        for (uint32_t ch = 0; ch < probe.audio_channels; ++ch) {
-            _audio_samples[i + ch * samples_per_channel] = sample;
-        }
-    }
-    it += samples_per_channel;
-    //}
-
-    // Test write audio data to the internal audio buffer and send it via NDI
-    std::size_t bytes_per_channel = _audio_samples.size() / probe.audio_channels * sizeof(float);
-    std::span channel_span_read = std::as_bytes(std::span{ _audio_samples });
-
-    for (uint32_t ch = 0; ch < probe.audio_channels; ++ch) {
-        _audio_buffer.Write(channel_span_read.subspan(ch * bytes_per_channel, bytes_per_channel), ch);
+    if (!probe.audio_data.empty()) {
+        _audio_buffer.WritePlanar(std::span{ probe.audio_data });
     }
 
-    std::vector<std::byte> empty_buffer(_audio_samples.size() * sizeof(float), std::byte{ 0 });
-    std::span channel_span = std::as_writable_bytes(std::span{ empty_buffer });
-
-    for (uint32_t ch = 0; ch < probe.audio_channels; ++ch) {
-        std::span channel_subspan = channel_span.subspan(bytes_per_channel * ch, bytes_per_channel);
-        _audio_buffer.Read(channel_subspan, ch, bytes_per_channel);
-    }
-
-    // assert(std::memcmp(empty_buffer.data(), _audio_samples.data(), empty_buffer.size()) == 0 && "Audio buffer read/write mismatch");
-
+    // Read audio samples and send to NDI
+    _audio_buffer.ReadPlanar(std::span{ _audio_samples });
     _swapchain.SendAudio(_audio_samples);
-    
 }

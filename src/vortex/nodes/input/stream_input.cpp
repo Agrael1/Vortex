@@ -316,13 +316,15 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
     // End the render pass
     cmd_list.EndRenderPass();
 
-    // At the end of StreamInput::Evaluate method:
-    if (!_audio_frames.empty()) {
-        auto audio_data = GetAudioForPlayback(probe);
-        if (!audio_data.empty()) {
-            probe.AssignAudio<uint8_t>(audio_data);
-        }
-    }
+    //// At the end of StreamInput::Evaluate method:
+    // if (!_audio_frames.empty()) {
+    //     auto audio_data = GetAudioForPlayback(probe);
+    //     if (!audio_data.empty()) {
+    //         probe.AssignAudio<uint8_t>(audio_data);
+    //     }
+    // }
+
+    //}
 }
 
 void vortex::StreamInput::ExtractStreamTiming()
@@ -490,9 +492,9 @@ std::vector<uint8_t> vortex::StreamInput::GetAudioForPlayback(const vortex::Rend
             }
         }
 
-        //for (int ch = 0; ch < 2; ++ch) {
-        //    av_freep(&resampled_data[ch]);
-        //}
+        // for (int ch = 0; ch < 2; ++ch) {
+        //     av_freep(&resampled_data[ch]);
+        // }
     }
     std::vector<uint8_t> final_buffer;
     final_buffer.insert(final_buffer.end(), combined_buffer[0].begin(), combined_buffer[0].end());

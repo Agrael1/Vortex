@@ -121,7 +121,7 @@ public:
         return peek(std::as_writable_bytes(data), offset_bytes);
     }
     template<typename T, size_t extent>
-    [[nodiscard]] std::errc write_as(std::span<const T, extent> data) noexcept
+    [[nodiscard]] std::errc write_as(std::span<T, extent> data) noexcept
     {
         return write(std::as_bytes(data));
     }

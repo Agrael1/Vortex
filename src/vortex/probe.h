@@ -29,7 +29,7 @@ struct RenderProbe
         std::memcpy(audio_data.data(), data.data(), data.size_bytes());
     }
 
-    std::vector<std::byte> audio_data; // Audio data for this frame
+    std::vector<float> audio_data; // Audio data for this frame
     uint32_t audio_sample_rate = 48000; // Default 48 kHz
     uint32_t audio_channels = 2; // Default stereo
 };

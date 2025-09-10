@@ -77,7 +77,7 @@ DX12VADecodeContext::CreateHWFramesContext(int width, int height, AVPixelFormat 
     frames_ctx_data->width = width;
     frames_ctx_data->height = height;
     frames_ctx_data->initial_pool_size = 32; // Increased pool size
-    d3d12va_frames_ctx->flags = D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE; // No special flags
+    d3d12va_frames_ctx->flags = AV_D3D12VA_FRAME_FLAG_NONE; // No special flags
 
     if (int ret = av_hwframe_ctx_init(hw_frames_ctx.get()); ret < 0) {
         return std::unexpected(make_ffmpeg_error(ret));

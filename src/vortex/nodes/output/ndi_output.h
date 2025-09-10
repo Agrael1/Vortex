@@ -54,6 +54,7 @@ private:
     {
         std::ignore = _fence.Wait(_fence_value);
     }
+    void EvaluateAudio();
 
 private:
     NDISwapchain _swapchain;
@@ -65,6 +66,8 @@ private:
     uint64_t _fence_values[vortex::max_frames_in_flight] = { 1, 0 }; ///< Current fence value for synchronization
 
     vortex::AudioBuffer _audio_buffer; ///< Audio buffer for storing audio samples (planar float)
+    uint64_t _last_audio_pts = 0; ///< Last audio PTS sent to NDI
+
     std::vector<float> _audio_samples;
     bool _resized = false; ///< Flag to indicate if the output has been resized
 };

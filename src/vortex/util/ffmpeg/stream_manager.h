@@ -21,6 +21,34 @@ struct PacketStorage {
     vortex::ffmpeg::unique_codec_context decoder_ctx;
     std::binary_semaphore decoder_sem{ 1 }; // Semaphore to signal availability of packets for decoding
     std::atomic<std::size_t> sent_packets{ 0 }; // Number of packets sent to the decoder
+
+    std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc> Decode()
+    {
+        ffmpeg::unique_frame frame{ av_frame_alloc() };
+        AVCodecContext* ctx = decoder_ctx.get();
+        AVFrame* raw_frame = frame.get();
+        int ret = 0;
+
+        ret = avcodec_receive_frame(ctx, raw_frame);
+        if (ret == AVERROR(EAGAIN)) {
+            return std::unexpected{ ffmpeg_errc::not_enough_data };
+        }
+        if (ret == AVERROR_EOF) {
+            return std::unexpected{ ffmpeg_errc::end_of_file };
+        }
+        if (ret < 0) {
+            vortex::error("Error during decoding video frame: {}", ffmpeg::ffmpeg_error_string(ret));
+            return std::unexpected{ ffmpeg::ffmpeg_errc(ret) };
+        }
+        return std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc>(std::move(frame)); // Successfully received a frame
+    }
+    std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc> DecodeSync()
+    {
+        decoder_sem.acquire();
+        auto frame = Decode();
+        decoder_sem.release();
+        return frame; // Successfully received a frame
+    }
 };
 
 // Represents a stream being read by the StreamManager
@@ -64,6 +92,8 @@ private:
     void IOLoop(std::stop_token stop);
     void IOFlushStream(vortex::ffmpeg::ManagedStream& stream);
     bool IOProcessStream(vortex::ffmpeg::ManagedStream& stream);
+
+    static void AvLogCallbackThunk(void* ptr, int level, const char* fmt, va_list vargs);
 
     vortex::LogView _log;
     std::vector<std::jthread> _io_threads;

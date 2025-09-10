@@ -2,10 +2,57 @@
 #include <vortex/util/ffmpeg/error.h>
 #include <vortex/graphics.h>
 
+void vortex::ffmpeg::StreamManager::AvLogCallbackThunk(void* ptr, int level, const char* fmt, va_list vargs)
+{
+    static auto log = vortex::GetLog(vortex::stream_log_name); // Static to avoid repeated lookups
+
+    // Get only above info level
+    if (level >= AV_LOG_INFO) {
+        return;
+    }
+
+    char message[1024];
+    vsnprintf(message, sizeof(message), fmt, vargs);
+
+    // Remove trailing newlines
+    size_t len = strlen(message);
+    while (len > 0 && (message[len - 1] == '\n' || message[len - 1] == '\r')) {
+        message[--len] = '\0';
+    }
+
+    switch (level) {
+    case AV_LOG_QUIET:
+        return; // No logging
+    case AV_LOG_PANIC:
+    case AV_LOG_FATAL:
+        log.critical("[FFmpeg] {}", message);
+        break;
+    case AV_LOG_ERROR:
+        log.error("[FFmpeg] {}", message);
+        break;
+    case AV_LOG_WARNING:
+        log.warn("[FFmpeg] {}", message);
+        break;
+    case AV_LOG_INFO:
+        log.info("[FFmpeg] {}", message);
+        break;
+    case AV_LOG_VERBOSE:
+    case AV_LOG_DEBUG:
+        log.debug("[FFmpeg] {}", message);
+        break;
+    default:
+        log.info("[FFmpeg] {}", message);
+        break;
+    }
+}
+
 vortex::ffmpeg::StreamManager::StreamManager(const vortex::Graphics& gfx)
     : _log(vortex::GetLog(vortex::stream_log_name))
-    , _va_decode_context(ffmpeg::CreateDecodeContext(gfx.GetDevice()).value())
 {
+    // Set FFmpeg log callback
+    av_log_set_callback(AvLogCallbackThunk);
+
+    _va_decode_context = ffmpeg::CreateDecodeContext(gfx.GetDevice()).value();
     // Start the IO loop thread
     _io_threads.emplace_back([this](std::stop_token stop) { IOLoop(stop); });
 }

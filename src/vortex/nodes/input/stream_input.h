@@ -1,10 +1,8 @@
 #pragma once
 #include <vortex/graph/interfaces.h>
 #include <vortex/probe.h>
-#include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/codec/codec_ffmpeg.h>
 #include <vortex/util/reflection.h>
-#include <DirectXMath.h>
 
 #include <vortex/properties/props.hpp>
 #include <vortex/util/lazy.h>
@@ -59,17 +57,14 @@ public:
         StreamInputProperties::SetStreamUrl(value, notify);
         url_changed = true;
     }
-    std::vector<uint8_t> GetAudioForPlayback(const vortex::RenderProbe& probe);
 
 private:
     void InitializeStream();
     void DecodeStreamFrames(const vortex::Graphics& gfx);
-    void TrimOldFrames();
+    void EvaluateAudio(vortex::AudioProbe& probe) override;
 
-    ffmpeg::unique_frame* SelectFrameForCurrentTime(const vortex::RenderProbe& probe);
-    int64_t CalculateTargetVideoPTS(const vortex::RenderProbe& probe) const;
-    int64_t CalculateTargetAudioPTS(const vortex::RenderProbe& probe) const;
-    void ExtractStreamTiming();
+    void DecodeVideoFrames(vortex::ffmpeg::PacketStorage& video_channel);
+    void DecodeAudioFrames(vortex::ffmpeg::PacketStorage& audio_channel);
 
 private:
     [[no_unique_address]] lazy_ptr<StreamInputLazy> _lazy_data; // Lazy data for static resources
@@ -85,28 +80,15 @@ private:
     std::array<int64_t, 2> _stream_indices{}; // Last rendered video PTS for each frame in flight
 
     unique_stream _stream_handle; // Handle to the stream managed by StreamManager
-
-    std::chrono::steady_clock::time_point _start_time;
-
-    // Stream timing information extracted from actual stream data
-    struct StreamTimingInfo {
-        // Video timing
-        AVRational video_timebase = { 0, 0 }; // Video stream timebase
-        AVRational video_framerate = { 0, 0 }; // Video stream framerate
-        int64_t first_video_pts = AV_NOPTS_VALUE;
-
-        // Audio timing
-        AVRational audio_timebase = { 0, 0 }; // Audio stream timebase
-        int audio_sample_rate = 0; // Audio sample rate (Hz)
-        int64_t first_audio_pts = AV_NOPTS_VALUE;
-
-        std::chrono::steady_clock::time_point start_time;
-        bool video_initialized = false;
-        bool audio_initialized = false;
-    } _stream_timing;
-
     ffmpeg::unique_swscontext _sws_context;
     ffmpeg::unique_swrcontext _swr_context;
     bool url_changed = true; // Flag to check if the node has been initialized
+
+private: // Stream synchronization
+    int64_t _first_video_pts{ AV_NOPTS_VALUE }; // First video PTS for synchronization
+    int64_t _first_audio_pts{ AV_NOPTS_VALUE }; // First audio PTS for synchronization
+    std::chrono::steady_clock::time_point _start_time_video;
+    std::chrono::steady_clock::time_point _start_time_audio;
+    bool _started{ false }; // Flag to indicate if playback has started
 };
 } // namespace vortex

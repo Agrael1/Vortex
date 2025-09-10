@@ -144,16 +144,52 @@ void vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProb
         _fence_values[_fence_value % vortex::max_frames_in_flight] = _fence_value;
     }
 
-    // Audio sink
-    if (sinks[1] && sinks[1].source_node != sinks[0].source_node) {
-        sinks[1].source_node->Evaluate(gfx, probe, &desc);
+    EvaluateAudio();
+}
+
+void vortex::NDIOutput::EvaluateAudio()
+{
+    auto sinks = _sinks.GetSinks();
+    if (!sinks[1]) {
+        return; // No audio sink connected
     }
 
-    if (!probe.audio_data.empty()) {
-        _audio_buffer.WritePlanar(std::span{ probe.audio_data });
+    static constexpr std::size_t sample_rate = 48000; // NDI expects 48 kHz audio
+    // Check if we have enough samples to read for the current framerate
+    if (_audio_buffer.CanReadForFramerate(framerate)) {
+        _audio_buffer.ReadPlanar(std::span{ _audio_samples });
+        _swapchain.SendAudio(_audio_samples);
+        return;
     }
 
-    // Read audio samples and send to NDI
-    _audio_buffer.ReadPlanar(std::span{ _audio_samples });
-    _swapchain.SendAudio(_audio_samples);
+    // Not enough samples, need to read from the input
+    AudioProbe audio_probe;
+    audio_probe.audio_channels = 2; // Stereo
+    audio_probe.audio_sample_rate = sample_rate; // 48 kHz (Used to determine if input is needed)
+    audio_probe.last_audio_pts = _last_audio_pts; // Start from the last PTS
+    sinks[1].source_node->EvaluateAudio(audio_probe);
+
+    //if (!audio_probe.audio_data.empty()) {
+    //    // If audio data has PTS that is not continuous, reset the buffer
+    //    std::size_t tolerance = (framerate.denominator == 0 || framerate.numerator == 0)
+    //            ? 0
+    //            : (sample_rate * framerate.denominator) / framerate.numerator; // Tolerance of 1 frame
+
+    //    if (_last_audio_pts != 0 && audio_probe.first_audio_pts > _last_audio_pts + tolerance) {
+    //        vortex::warn("NDIOutput: Audio PTS discontinuity detected (last: {}, current: {}), resetting audio buffer", _last_audio_pts, audio_probe.first_audio_pts);
+    //        _audio_buffer.Reset();
+    //    }
+
+    //    // Here is a good place to resample if needed in the future
+    //    _audio_buffer.WritePlanar(std::span{ audio_probe.audio_data }); // Write the audio data to the buffer
+    //    _last_audio_pts = audio_probe.last_audio_pts;
+    //}
+
+    //std::size_t read_samples = _audio_buffer.ReadPlanar(std::span{ _audio_samples });
+    //if (read_samples < _audio_buffer.SamplesForFramerate(framerate)) {
+    //    vortex::warn("NDIOutput: Not enough audio samples to send to NDI (needed {}, got {})", _audio_buffer.SamplesForFramerate(framerate), read_samples);
+    //    return; // No samples to send
+    //}
+
+    //_swapchain.SendAudio(_audio_samples);
 }

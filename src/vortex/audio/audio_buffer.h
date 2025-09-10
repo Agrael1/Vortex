@@ -1,5 +1,6 @@
 #pragma once
 #include <vortex/util/byte_ring.h>
+#include <vortex/util/rational.h>
 #include <vortex/util/log.h>
 
 namespace vortex {
@@ -110,6 +111,45 @@ public:
             if (err != std::errc{}) {
                 vortex::error("AudioBuffer: Failed to write to channel {}: {}", ch, reflect::enum_name(err));
             }
+        }
+    }
+
+    std::size_t AvailableSamples(uint16_t channel) const noexcept
+    {
+        if (channel >= _format.channels) {
+            return 0;
+        }
+        size_t bytes_per_sample = _format.data_format.bytes_per_sample;
+        return _buffers[channel].size() / bytes_per_sample;
+    }
+    std::size_t GetFullSamples() const noexcept
+    {
+        // Get min samples across all the channels
+        std::size_t total_samples = std::numeric_limits<std::size_t>::max();
+        for (uint16_t ch = 0; ch < _format.channels; ++ch) {
+            size_t samples = AvailableSamples(ch);
+            if (samples < total_samples) {
+                total_samples = samples;
+            }
+        }
+        return total_samples;
+    }
+    std::size_t SamplesForFramerate(vortex::ratio32_t framerate) const noexcept
+    {
+        if (framerate.denominator == 0 || framerate.numerator == 0) {
+            return 0;
+        }
+        return (uint32_t(_format.sample_rate) * framerate.denominator) / framerate.numerator;
+    }
+    bool CanReadForFramerate(vortex::ratio32_t framerate) const noexcept
+    {
+        auto needed = SamplesForFramerate(framerate);
+        return GetFullSamples() >= needed;
+    }
+    void Reset() noexcept
+    {
+        for (uint16_t ch = 0; ch < _format.channels; ++ch) {
+            _buffers[ch].clear();
         }
     }
 

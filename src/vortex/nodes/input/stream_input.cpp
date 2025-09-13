@@ -153,37 +153,30 @@ void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
 
     uint64_t elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - _start_time_audio).count();
     uint64_t current_audio_pts = _first_audio_pts + TimeToPts(_stream_collection.audio_channels[0]->time_base, elapsed_ms);
-    // Slightly adjust current_audio_pts to account for processing delays
-    current_audio_pts = current_audio_pts > 0 ? current_audio_pts - 6000 : current_audio_pts;
 
-    if (current_audio_pts < _first_audio_pts) {
-        return; // Not enough time has passed to play audio
+    // adjust for some latency
+    current_audio_pts = std::max<int64_t>(_first_audio_pts, current_audio_pts - 4000);
+
+    // Get all audio frames that are ready to be played
+    auto it = _audio_frames.lower_bound(current_audio_pts);
+    if (it == _audio_frames.end()) {
+        return; // No frames ready to be played
     }
 
-    std::size_t samples = 0;
-    std::size_t frames_used = 0;
-    std::vector<int64_t> consumed_frames_pts;
-    for (const auto& [pts, frame] : _audio_frames) {
-        if (pts < current_audio_pts) {
-            samples += frame->nb_samples;
-            frames_used++;
-            consumed_frames_pts.push_back(pts);
-        }
-        samples += frame->nb_samples;
-        frames_used++;
+    AVFrame* frame = it->second.get();
+    probe.first_audio_pts = it->first;
+
+    auto& data = probe.audio_data;
+    data.resize(frame->ch_layout.nb_channels * frame->nb_samples);
+
+    // MOCK: assume the audio is already in float format and has stereo planar layout
+    if (frame->format == AV_SAMPLE_FMT_FLTP && frame->ch_layout.nb_channels == 2) {
+        std::memcpy(data.data(), frame->data[0], frame->nb_samples * sizeof(float)); // Left channel
+        std::memcpy(data.data() + frame->nb_samples, frame->data[1], frame->nb_samples * sizeof(float)); // Right channel
+    } else {
+        vortex::warn("StreamInput: Unsupported audio format or channel count. Expected float planar stereo.");
     }
-    samples_available += samples;
-
-    for (auto pts : consumed_frames_pts) {
-        //vortex::info("Consuming audio frame with PTS: {}", pts);
-
-        _audio_frames.erase(pts);
-    }
-
-
-    samples_available -= 800; // 60 frames at 48kHz
-    vortex::info("Available audio frames: {}, that have {} samples. Remaining samples {} | {}", frames_used, samples, samples_available, _audio_frames.size());
-    _audio_frames.clear();
+    probe.last_audio_pts = it->first + frame->duration;
 }
 
 void vortex::StreamInput::DecodeVideoFrames(vortex::ffmpeg::ChannelStorage& video_channel)
@@ -199,7 +192,7 @@ void vortex::StreamInput::DecodeVideoFrames(vortex::ffmpeg::ChannelStorage& vide
         }
 
         AVFrame* raw_frame = frame->get();
-        //vortex::info("Drained audio frame with PTS: {}, nb_samples: {}, dpts: {}", raw_frame->pts, raw_frame->nb_samples, raw_frame->pts - last_pts);
+        // vortex::info("Drained audio frame with PTS: {}, nb_samples: {}, dpts: {}", raw_frame->pts, raw_frame->nb_samples, raw_frame->pts - last_pts);
         last_pts = raw_frame->pts;
 
         _video_frames[raw_frame->pts] = std::move(frame.value());
@@ -210,8 +203,7 @@ void vortex::StreamInput::DecodeAudioFrames(vortex::ffmpeg::ChannelStorage& audi
     static int64_t last_pts = AV_NOPTS_VALUE;
 
     // try read frames from atomic queue
-    while (auto frame = audio_channel.GetDecodedFrame())
-    {
+    while (auto frame = audio_channel.GetDecodedFrame()) {
         // if first audio frame, set the first audio pts
         if (_first_audio_pts == AV_NOPTS_VALUE) {
             _start_time_audio = std::chrono::steady_clock::now();
@@ -219,7 +211,7 @@ void vortex::StreamInput::DecodeAudioFrames(vortex::ffmpeg::ChannelStorage& audi
         }
 
         AVFrame* raw_frame = frame->get();
-        //vortex::info("Drained audio frame with PTS: {}, nb_samples: {}, dpts: {}", raw_frame->pts, raw_frame->nb_samples, raw_frame->pts - last_pts);
+        // vortex::info("Drained audio frame with PTS: {}, nb_samples: {}, dpts: {}", raw_frame->pts, raw_frame->nb_samples, raw_frame->pts - last_pts);
         last_pts = raw_frame->pts;
 
         _audio_frames[raw_frame->pts] = std::move(frame.value());

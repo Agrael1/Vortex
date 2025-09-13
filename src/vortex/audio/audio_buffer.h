@@ -88,7 +88,7 @@ public:
         assert(samples_per_channel > 0);
         assert(output.size() % _format.channels == 0);
 
-        std::size_t result = 0;
+        std::size_t result = std::numeric_limits<std::size_t>::max();
         for (uint16_t ch = 0; ch < _format.channels; ++ch) {
             std::size_t local = Read<T>(output.subspan(ch * samples_per_channel, samples_per_channel), ch);
             if (local < samples_per_channel) {
@@ -96,6 +96,7 @@ public:
                 // Zero out the rest of the buffer
                 std::memset(output.data() + (ch * samples_per_channel + local), 0, (samples_per_channel - local) * sizeof(T));
             }
+            result = std::min(result, local);
         }
         return result; // All requested samples read
     }

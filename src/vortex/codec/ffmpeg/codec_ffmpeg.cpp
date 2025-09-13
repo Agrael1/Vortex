@@ -1,8 +1,8 @@
-#include <vortex/codec/codec_ffmpeg.h>
+#include <vortex/codec/ffmpeg/codec_ffmpeg.h>
 #include <vortex/graphics.h>
 #include <vortex/util/common.h>
 #include <vortex/util/log.h>
-#include <vortex/util/ffmpeg/error.h>
+#include <vortex/codec/ffmpeg/error.h>
 
 int save_frame_as_ppm(AVFrame* frame, const char* filename)
 {

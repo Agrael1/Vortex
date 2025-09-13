@@ -1,5 +1,5 @@
 #pragma once
-#include <vortex/util/ffmpeg/hw_decoder.h>
+#include <vortex/codec/ffmpeg/hw_decoder.h>
 #include <vortex/util/lib/SPSC-Queue.h>
 
 #include <unordered_map>
@@ -112,6 +112,7 @@ public:
     void DeactivateChannels(StreamHandle handle, std::span<int> inactive_channel_indices);
 
 private:
+    void DemuxLoop(std::stop_token stop);
     void IOLoop(std::stop_token stop);
     void IOFlushStream(vortex::ffmpeg::ManagedStream& stream);
     bool IOProcessStream(vortex::ffmpeg::ManagedStream& stream);

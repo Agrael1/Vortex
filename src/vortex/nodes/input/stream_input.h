@@ -1,13 +1,13 @@
 #pragma once
 #include <vortex/graph/interfaces.h>
 #include <vortex/probe.h>
-#include <vortex/codec/codec_ffmpeg.h>
+#include <vortex/codec/ffmpeg/codec_ffmpeg.h>
 #include <vortex/util/reflection.h>
 
 #include <vortex/properties/props.hpp>
 #include <vortex/util/lazy.h>
-#include <vortex/util/ffmpeg/stream_manager.h>
-#include <vortex/util/ffmpeg/audio_resampler.h>
+#include <vortex/codec/ffmpeg/stream_manager.h>
+#include <vortex/codec/ffmpeg/audio_resampler.h>
 
 namespace vortex {
 // Will hold static data for the image input node

@@ -1,5 +1,5 @@
-#include <vortex/util/ffmpeg/stream_manager.h>
-#include <vortex/util/ffmpeg/error.h>
+#include <vortex/codec/ffmpeg/stream_manager.h>
+#include <vortex/codec/ffmpeg/error.h>
 #include <vortex/graphics.h>
 #include <system_error>
 
@@ -54,6 +54,10 @@ vortex::ffmpeg::StreamManager::StreamManager(const vortex::Graphics& gfx)
     av_log_set_callback(AvLogCallbackThunk);
 
     _va_decode_context = ffmpeg::CreateDecodeContext(gfx.GetDevice()).value();
+
+    // Start a single demuxer thread
+    //_io_threads.emplace_back([this](std::stop_token stop) { DemuxLoop(stop); });
+
     // Start the IO loop thread
     _io_threads.emplace_back([this](std::stop_token stop) { IOLoop(stop); });
 }
@@ -62,6 +66,19 @@ vortex::ffmpeg::StreamManager::~StreamManager()
     // Stop all IO threads
     for (auto& thread : _io_threads) {
         thread.request_stop();
+    }
+}
+
+void vortex::ffmpeg::StreamManager::DemuxLoop(std::stop_token stop)
+{
+    _log.info("Demux thread started.");
+
+    while (!stop.stop_requested()) {
+        // Currently, the demux loop does nothing as av_read_frame is non-blocking with a timeout.
+        // This loop can be used for future enhancements if needed.
+
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 

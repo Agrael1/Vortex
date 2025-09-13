@@ -4,7 +4,7 @@
 #include <system_error>
 #include <chrono>
 #include <vortex/gfx/texture.h>
-#include <vortex/util/ffmpeg/types.h>
+#include <vortex/codec/ffmpeg/types.h>
 #include <vortex/util/rational.h>
 #include <unordered_map>
 

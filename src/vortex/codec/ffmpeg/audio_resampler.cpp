@@ -1,4 +1,4 @@
-#include <vortex/util/ffmpeg/audio_resampler.h>
+#include <vortex/codec/ffmpeg/audio_resampler.h>
 
 std::error_code
 vortex::ffmpeg::AudioResampler::Reset(ResamplerDesc desc) noexcept

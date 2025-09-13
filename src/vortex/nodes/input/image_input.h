@@ -1,7 +1,7 @@
 #pragma once
 #include <vortex/graph/interfaces.h>
 #include <vortex/probe.h>
-#include <vortex/codec/codec_ffmpeg.h>
+#include <vortex/codec/ffmpeg/codec_ffmpeg.h>
 #include <vortex/util/reflection.h>
 #include <DirectXMath.h>
 

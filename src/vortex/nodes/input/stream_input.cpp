@@ -1,6 +1,6 @@
 #include "stream_input.h"
 #include <vortex/graphics.h>
-#include <vortex/util/ffmpeg/error.h>
+#include <vortex/codec/ffmpeg/error.h>
 #include <vortex/gfx/descriptor_buffer.h>
 
 
@@ -261,19 +261,29 @@ void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
         return; // No frames ready to be played
     }
 
+    std::size_t frames = std::distance(it, _audio_frames.end());
+    if (frames > 3) {
+        frames = 3; // Limit to 3 frames to avoid excessive latency
+    }
+
     AVFrame* frame = it->second.get();
     probe.first_audio_pts = it->first;
 
     auto& data = probe.audio_data;
-    data.resize(frame->ch_layout.nb_channels * frame->nb_samples);
+    data.resize(frame->ch_layout.nb_channels * frame->nb_samples * frames);
+    auto delta = frame->nb_samples * frames;
 
-    // MOCK: assume the audio is already in float format and has stereo planar layout
-    if (frame->format == AV_SAMPLE_FMT_FLTP && frame->ch_layout.nb_channels == 2) {
-        std::memcpy(data.data(), frame->data[0], frame->nb_samples * sizeof(float)); // Left channel
-        std::memcpy(data.data() + frame->nb_samples, frame->data[1], frame->nb_samples * sizeof(float)); // Right channel
-    } else {
-        vortex::warn("StreamInput: Unsupported audio format or channel count. Expected float planar stereo.");
+    for (std::size_t i = 0; i < frames; ++i, ++it) {
+        AVFrame* frame = it->second.get();
+        // MOCK: assume the audio is already in float format and has stereo planar layout
+        if (frame->format == AV_SAMPLE_FMT_FLTP && frame->ch_layout.nb_channels == 2) {
+            std::memcpy(data.data() + frame->nb_samples * i, frame->data[0], frame->nb_samples * sizeof(float)); // Left channel
+            std::memcpy(data.data() + delta + frame->nb_samples * i, frame->data[1], frame->nb_samples * sizeof(float)); // Right channel
+        } else {
+            vortex::warn("StreamInput: Unsupported audio format or channel count. Expected float planar stereo.");
+        }
     }
+
     probe.last_audio_pts = it->first + frame->duration;
 }
 

@@ -1,6 +1,5 @@
 #pragma once
-#include <wisdom/wisdom.hpp>
-#include <vector>
+#include <unordered_map>
 
 struct SDL_AudioStream;
 
@@ -19,31 +18,9 @@ struct RenderProbe
     uint64_t frame_number = 0;
 
     vortex::ratio32_t output_framerate = { 60, 1 }; // Default 60 FPS
-
-    // Audio playback
-    template<typename T>
-    void AssignAudio(std::span<const T> data)
-    {
-        static_assert(std::is_trivially_copyable_v<T>, "Audio data must be trivially copyable");
-        audio_data.resize(data.size_bytes());
-        std::memcpy(audio_data.data(), data.data(), data.size_bytes());
-    }
-
-    std::vector<float> audio_data; // Audio data for this frame
+    SDL_AudioStream* audio_stream = nullptr;
     uint32_t audio_sample_rate = 48000; // Default 48 kHz
     uint32_t audio_channels = 2; // Default stereo
-    uint64_t first_audio_pts = 0; // First audio PTS for synchronization
-    uint64_t last_audio_pts = 0; // Last audio PTS for synchronization
-};
-
-struct AudioProbe {
-    constexpr inline static uint64_t invalid_pts = 0x8000000000000000ull;
-
-    std::vector<float> audio_data; // Audio data for this frame
-    uint32_t audio_sample_rate = 48000; // Default 48 kHz
-    uint32_t audio_channels = 2; // Default stereo
-    uint64_t first_audio_pts = invalid_pts; // First audio PTS for synchronization
-    uint64_t last_audio_pts = invalid_pts; // Last audio PTS for synchronization
 };
 
 struct RenderPassForwardDesc {

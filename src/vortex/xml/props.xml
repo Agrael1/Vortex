@@ -47,9 +47,6 @@
     <property name="stream_size" type="size" ui_name="Stream Size" ui_desc="Size of the video stream in pixels."/>
     <property name="origin" type="point" ui_name="Origin" ui_desc="Origin (Anchor) point of the stream."/>
     <property name="rotation_2d" type="f32" default="0.0" ui_name="Rotation (2D)" ui_desc="Rotation of the stream in degrees."/>
-    
-    <!-- AV Settings -->
-    <property name="stream_buffering" type="i32" default="1000" ui_name="Buffering" ui_desc="Buffering time in milliseconds."/>
   </node>
 
   <!-- Output nodes -->

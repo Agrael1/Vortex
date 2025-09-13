@@ -67,12 +67,6 @@ enum class ffmpeg_errc {
     invalid_data = AVERROR_INVALIDDATA,
     stream_not_found = AVERROR_STREAM_NOT_FOUND,
     decoder_not_found = AVERROR_DECODER_NOT_FOUND,
-    encoder_not_found = AVERROR_ENCODER_NOT_FOUND,
-    invalid_argument = AVERROR(EINVAL),
-    no_such_file_or_directory = AVERROR(ENOENT),
-    permission_denied = AVERROR(EACCES),
-    io_error = AVERROR(EIO),
-    not_enough_data = AVERROR(EAGAIN),
     // Add more as needed
 };
 

@@ -16,10 +16,10 @@ using unique_frame = vortex::unique_any<AVFrame*, av_frame_free>;
 using unique_swscontext = vortex::unique_any<SwsContext*, sws_freeContext>;
 using unique_swrcontext = vortex::unique_any<SwrContext*, swr_free>;
 using unique_dictionary = vortex::unique_any<AVDictionary*, av_dict_free>;
-using unique_buffer = vortex::unique_any<AVBufferRef*, av_buffer_unref>;
-using unique_packet = vortex::unique_any<AVPacket*, av_packet_free>;
 
-using unique_channel_layout = vortex::unique_any<AVChannelLayout, av_channel_layout_uninit>;
+using unique_buffer = vortex::unique_any<AVBufferRef*, av_buffer_unref>;
+
+using unique_packet = vortex::unique_any<AVPacket, av_packet_unref>;
 } // namespace vortex::ffmpeg
 
 namespace std {
@@ -37,7 +37,7 @@ struct formatter<AVCodecParameters> {
         return std::format_to(ctx.out(),
                               "AVCodecParameters(codec_type={}, codec_id={}, width={}, height={})",
                               reflect::enum_name(codecpar.codec_type),
-                              avcodec_get_name(codecpar.codec_id),
+                              reflect::enum_name(codecpar.codec_id),
                               codecpar.width,
                               codecpar.height);
     }

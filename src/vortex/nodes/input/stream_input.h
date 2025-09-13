@@ -1,13 +1,14 @@
 #pragma once
 #include <vortex/graph/interfaces.h>
 #include <vortex/probe.h>
+#include <vortex/gfx/descriptor_buffer.h>
 #include <vortex/codec/codec_ffmpeg.h>
 #include <vortex/util/reflection.h>
+#include <DirectXMath.h>
 
 #include <vortex/properties/props.hpp>
 #include <vortex/util/lazy.h>
 #include <vortex/util/ffmpeg/stream_manager.h>
-#include <vortex/util/ffmpeg/audio_resampler.h>
 
 namespace vortex {
 // Will hold static data for the image input node
@@ -23,7 +24,7 @@ public:
 };
 
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
-class StreamInput : public vortex::graph::NodeImpl<StreamInput, StreamInputProperties, 0, 2>
+class StreamInput : public vortex::graph::NodeImpl<StreamInput, StreamInputProperties, 0, 1>
 {
 private:
     static void UnregisterStream(ffmpeg::StreamManager::StreamHandle handle) noexcept
@@ -40,7 +41,6 @@ public:
     StreamInput(const vortex::Graphics& gfx, SerializedProperties props)
         : ImplClass(props), _lazy_data(gfx)
     {
-        _sources.sources[1].type = graph::SourceType::Audio; // Second source is audio
     }
 
 public:
@@ -58,14 +58,17 @@ public:
         StreamInputProperties::SetStreamUrl(value, notify);
         url_changed = true;
     }
+    std::vector<uint8_t> GetAudioForPlayback(const vortex::RenderProbe& probe);
 
 private:
     void InitializeStream();
     void DecodeStreamFrames(const vortex::Graphics& gfx);
-    void EvaluateAudio(vortex::AudioProbe& probe) override;
+    void TrimOldFrames();
 
-    void DecodeVideoFrames(vortex::ffmpeg::ChannelStorage& video_channel);
-    void DecodeAudioFrames(vortex::ffmpeg::ChannelStorage& audio_channel);
+    ffmpeg::unique_frame* SelectFrameForCurrentTime(const vortex::RenderProbe& probe);
+    int64_t CalculateTargetVideoPTS(const vortex::RenderProbe& probe) const;
+    int64_t CalculateTargetAudioPTS(const vortex::RenderProbe& probe) const;
+    void ExtractStreamTiming();
 
 private:
     [[no_unique_address]] lazy_ptr<StreamInputLazy> _lazy_data; // Lazy data for static resources
@@ -81,19 +84,28 @@ private:
     std::array<int64_t, 2> _stream_indices{}; // Last rendered video PTS for each frame in flight
 
     unique_stream _stream_handle; // Handle to the stream managed by StreamManager
+
+    std::chrono::steady_clock::time_point _start_time;
+
+    // Stream timing information extracted from actual stream data
+    struct StreamTimingInfo {
+        // Video timing
+        AVRational video_timebase = { 0, 0 }; // Video stream timebase
+        AVRational video_framerate = { 0, 0 }; // Video stream framerate
+        int64_t first_video_pts = AV_NOPTS_VALUE;
+
+        // Audio timing
+        AVRational audio_timebase = { 0, 0 }; // Audio stream timebase
+        int audio_sample_rate = 0; // Audio sample rate (Hz)
+        int64_t first_audio_pts = AV_NOPTS_VALUE;
+
+        std::chrono::steady_clock::time_point start_time;
+        bool video_initialized = false;
+        bool audio_initialized = false;
+    } _stream_timing;
+
     ffmpeg::unique_swscontext _sws_context;
     ffmpeg::unique_swrcontext _swr_context;
     bool url_changed = true; // Flag to check if the node has been initialized
-
-private: // Stream synchronization
-    int64_t _first_video_pts{ AV_NOPTS_VALUE }; // First video PTS for synchronization
-    int64_t _first_audio_pts{ AV_NOPTS_VALUE }; // First audio PTS for synchronization
-    std::chrono::steady_clock::time_point _start_time_video;
-    std::chrono::steady_clock::time_point _start_time_audio;
-    bool _started{ false }; // Flag to indicate if playback has started
-
-
-    ffmpeg::AudioResampler _audio_resampler; // Resampler for audio frames
-
 };
 } // namespace vortex

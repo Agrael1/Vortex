@@ -21,15 +21,8 @@ template<typename T>
 struct value_traits {
     static void add_value(CefListValue& list, size_t index, T&& value)
     {
-        static_assert(false, "Unsupported type for CefListValue");
         vortex::warn("Unsupported type for CefListValue: {}", typeid(T).name());
         list.SetNull(index);
-    }
-    static void extract_value(T& out, CefListValue& list, size_t index)
-    {
-        static_assert(false, "Unsupported type for CefListValue extraction");
-        vortex::warn("Unsupported type for CefListValue extraction: {}", typeid(T).name());
-        out = T{};
     }
 };
 
@@ -40,15 +33,6 @@ struct value_traits<bool> {
     {
         list.SetBool(index, value);
     }
-    static bool extract_value(bool& out, CefListValue& list, size_t index)
-    {
-        if (list.GetType(index) != VTYPE_BOOL) {
-            return false;
-        }
-
-        out = list.GetBool(index);
-        return true;
-    }
 };
 
 template<>
@@ -56,14 +40,6 @@ struct value_traits<int> {
     static void add_value(CefListValue& list, size_t index, int value)
     {
         list.SetInt(index, value);
-    }
-    static bool extract_value(int& out, CefListValue& list, size_t index)
-    {
-        if (list.GetType(index) != VTYPE_INT) {
-            return false;
-        }
-        out = list.GetInt(index);
-        return true;
     }
 };
 
@@ -73,30 +49,6 @@ struct value_traits<double> {
     {
         list.SetDouble(index, value);
     }
-    static bool extract_value(double& out, CefListValue& list, size_t index)
-    {
-        if (list.GetType(index) != VTYPE_DOUBLE) {
-            return false;
-        }
-        out = list.GetDouble(index);
-        return true;
-    }
-};
-
-template<>
-struct value_traits<uintptr_t> {
-    static void add_value(CefListValue& list, size_t index, uintptr_t value)
-    {
-        list.SetDouble(index, std::bit_cast<double>(value));
-    }
-    static bool extract_value(uintptr_t& out, CefListValue& list, size_t index)
-    {
-        if (list.GetType(index) != VTYPE_DOUBLE) {
-            return false;
-        }
-        out = std::bit_cast<double>(list.GetDouble(index));
-        return true;
-    }
 };
 
 template<>
@@ -104,15 +56,6 @@ struct value_traits<std::u16string_view> {
     static void add_value(CefListValue& list, size_t index, std::u16string_view value)
     {
         list.SetString(index, CefString(value.data(), value.size(), false));
-    }
-    static bool extract_value(std::u16string_view& out, CefListValue& list, size_t index)
-    {
-        if (list.GetType(index) != VTYPE_STRING) {
-            return false;
-        }
-        auto str = list.GetString(index);
-        out = std::u16string_view(str.c_str(), str.length());
-        return true;
     }
 };
 
@@ -122,15 +65,6 @@ struct value_traits<S> {
     {
         list.SetString(index, CefString(value.data(), value.size()));
     }
-    static bool extract_value(std::string& out, CefListValue& list, size_t index)
-    {
-        if (list.GetType(index) != VTYPE_STRING) {
-            return false;
-        }
-        auto str = list.GetString(index);
-        out = str.ToString();
-        return true;
-    }
 };
 
 template<>
@@ -139,14 +73,6 @@ struct value_traits<CefRefPtr<CefValue>> {
     {
         list.SetValue(index, value);
     }
-    static bool extract_value(CefRefPtr<CefValue>& out, CefListValue& list, size_t index)
-    {
-        if (list.GetType(index) == VTYPE_INVALID) {
-            return false;
-        }
-        out = list.GetValue(index);
-        return true;
-    }
 };
 
 template<>
@@ -154,14 +80,6 @@ struct value_traits<CefRefPtr<CefDictionaryValue>> {
     static void add_value(CefListValue& list, size_t index, CefRefPtr<CefDictionaryValue> value)
     {
         list.SetDictionary(index, value);
-    }
-    static bool extract_value(CefRefPtr<CefDictionaryValue>& out, CefListValue& list, size_t index)
-    {
-        if (list.GetType(index) != VTYPE_DICTIONARY) {
-            return false;
-        }
-        out = list.GetDictionary(index);
-        return true;
     }
 };
 
@@ -262,20 +180,4 @@ struct v8_value_traits<CefValueType::VTYPE_LIST> {
         return arr;
     }
 };
-
-template<typename... Args>
-inline auto extract_arguments(CefListValue& list, bool& success)
-{
-    std::tuple<Args...> result;
-    size_t index = 0;
-
-    // C++23: Enhanced fold expressions with index sequence
-    success = [&]<std::size_t... I>(std::index_sequence<I...>) {
-        return ([&] {
-            return value_traits<Args>::extract_value(std::get<I>(result), list, index++);
-        }() && ...);
-    }(std::index_sequence_for<Args...>{});
-
-    return result;
-}
 } // namespace vortex::ui

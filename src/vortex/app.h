@@ -2,11 +2,11 @@
 #include <vortex/graphics.h>
 #include <vortex/nodes/node_registry.h>
 #include <vortex/gfx/descriptor_buffer.h>
+#include <vortex/gfx/texture_pool.h>
 
 #include <vortex/ui/ui_app.h>
 #include <vortex/model.h>
 #include <vortex/util/lib/SPSC-Queue.h>
-#include <vortex/ui/message_dispatch.h>
 
 namespace vortex {
 struct AppExitControl {
@@ -31,7 +31,6 @@ struct AppExitControl {
 class App
 {
     using MessageHandler = void (App::*)(CefListValue&);
-    using MessaheHanlderDispatch = void (*)(App&, CefListValue&);
 
 public:
     App()
@@ -50,26 +49,26 @@ public:
             .observer = this,
             .callback = &App::OnNodeUpdateThunk
         };
+
         _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
 
         constexpr std::pair<std::string_view, std::string_view> output_values2[]{
             std::pair{ "name", "Vortex Mega Output" },
             std::pair{ "window_size", "[1920,1080]" }
         };
-
+        
         constexpr std::pair<std::string_view, std::string_view> stream_values[]{
             std::pair{ "stream_url", "rtp://127.0.0.1:6000" },
         };
 
         // Test setup of the model
         auto i1 = _model.CreateNode(_gfx, "StreamInput", external_observer, stream_values); // Create a default node for testing
-        auto o1 = _model.CreateNode(_gfx, "NDIOutput", external_observer, output_values2); // Create a default output for testing
+        auto o1 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values2); // Create a default output for testing
 
         _model.SetNodeInfo(i1, "Image 1"); // Set some info for the node
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
 
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
-        _model.ConnectNodes(i1, 1, o1, 1); // Connect the audio outputs
     }
 
 public:
@@ -114,7 +113,7 @@ private:
             if (!_message_queue.try_pop(message)) {
                 break; // No more messages to process
             }
-            std::invoke(_message_handlers_disp[message->GetName().c_str()], *this, *message->GetArgumentList()); // Call the appropriate handler
+            std::invoke(_message_handlers[message->GetName().c_str()], this, *message->GetArgumentList()); // Call the appropriate handler
         }
     }
     bool UIMessageHandler(CefRefPtr<CefProcessMessage> message) noexcept
@@ -123,7 +122,7 @@ private:
             return false; // Invalid message
         }
         auto message_name = message->GetName();
-        if (auto it = _message_handlers_disp.find(message_name.c_str()); it != _message_handlers_disp.end()) {
+        if (auto it = _message_handlers.find(message_name.c_str()); it != _message_handlers.end()) {
             _message_queue.emplace(std::move(message)); // Add message to the queue
             return true; // Message handled
         }
@@ -132,7 +131,7 @@ private:
     }
 
     // Message handlers for specific messages
-    void GetNodeTypes()
+    void GetNodeTypes([[maybe_unused]] CefListValue& args)
     {
         const auto& node_types = vortex::graph::NodeFactory::GetNodesInfo();
         CefRefPtr<CefDictionaryValue> return_dictionary = CefDictionaryValue::Create();
@@ -142,33 +141,87 @@ private:
         }
         _ui_app.SendUIReturn(std::move(return_dictionary)); // Send the node types to the UI
     }
-    auto GetNodeProperties(uintptr_t node_ptr) -> std::string
+
+    void GetNodeProperties(CefListValue& args)
     {
-        return _model.GetNodeProperties(node_ptr); // Send the properties to the UI
+        if (args.GetSize() > 0 && args.GetType(0) == VTYPE_DOUBLE) {
+            uintptr_t node_ptr = std::bit_cast<uintptr_t>(args.GetDouble(0));
+            _ui_app.SendUIReturn(_model.GetNodeProperties(node_ptr)); // Send the properties to the UI
+        }
     }
-    void SetNodeProperty(uintptr_t node_ptr, int index, std::string value)
+
+    void SetNodeProperty(CefListValue& args)
     {
-        _model.SetNodeProperty(node_ptr, uint32_t(index), value); // Set the property in the model
+        if (args.GetSize() < 3 || args.GetType(0) != VTYPE_DOUBLE || args.GetType(1) != VTYPE_INT || args.GetType(2) != VTYPE_STRING) {
+            vortex::error("SetNodeProperty: Invalid arguments provided.");
+            return; // Invalid arguments, cannot set property
+        }
+        uintptr_t node_ptr = std::bit_cast<uintptr_t>(args.GetDouble(0));
+        uint32_t index = static_cast<uint32_t>(args.GetInt(1));
+        std::string_view value = args.GetString(2).ToString();
+        _model.SetNodeProperty(node_ptr, index, value); // Set the property in the model
     }
-    auto CreateNode(std::string value) -> uintptr_t
+
+    void CreateNode(CefListValue& args)
     {
-        return _model.CreateNode(_gfx, value);
+        if (args.GetSize() > 0 && args.GetType(0) == VTYPE_STRING) {
+            std::string func_name = args.GetString(0).ToString();
+            // Call the corresponding function in the model or handle it
+            uintptr_t node_ptr = _model.CreateNode(_gfx, func_name);
+
+            // Send a message back to the UI to update the node list
+            _ui_app.SendUIReturn(std::bit_cast<double>(node_ptr));
+        }
     }
-    void RemoveNode(uintptr_t node_ptr)
+    void RemoveNode(CefListValue& args)
     {
-        _model.RemoveNode(node_ptr); // Delete the node with the specified ID
+        if (args.GetSize() > 0 && args.GetType(0) == VTYPE_DOUBLE) {
+            uintptr_t node_id = std::bit_cast<uintptr_t>(args.GetDouble(0));
+            _model.RemoveNode(node_id); // Delete the node with the specified ID
+        }
     }
-    bool ConnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
+    void ConnectNodes(CefListValue& args)
     {
-        return _model.ConnectNodes(node_ptr_left, output_index, node_ptr_right, input_index); // Connect the nodes in the model
+        if (args.GetSize() < 4 || args.GetType(0) != VTYPE_DOUBLE || args.GetType(1) != VTYPE_INT || args.GetType(2) != VTYPE_DOUBLE || args.GetType(3) != VTYPE_INT) {
+            vortex::error("ConnectNodes: Invalid arguments provided.");
+            _ui_app.SendUIReturn(false); // Send an error message back to the UI
+            return; // Invalid arguments, cannot connect nodes
+        }
+
+        // Extract the node pointers and indices from the arguments
+        uintptr_t node_ptr_left = std::bit_cast<uintptr_t>(args.GetDouble(0));
+        int32_t output_index = args.GetInt(1);
+        uintptr_t node_ptr_right = std::bit_cast<uintptr_t>(args.GetDouble(2));
+        int32_t input_index = args.GetInt(3);
+        _model.ConnectNodes(node_ptr_left, output_index, node_ptr_right, input_index); // Connect the nodes in the model
+
+        // Create a message to send back to the UI
+        _ui_app.SendUIReturn(true); // Indicate that the connection was successful
     }
-    void DisconnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
+    void DisconnectNodes(CefListValue& args)
     {
+        if (args.GetSize() < 4 || args.GetType(0) != VTYPE_DOUBLE || args.GetType(1) != VTYPE_INT || args.GetType(2) != VTYPE_DOUBLE || args.GetType(3) != VTYPE_INT) {
+            vortex::error("DisconnectNodes: Invalid arguments provided.");
+            _ui_app.SendUIReturn(false); // Send an error message back to the UI
+            return; // Invalid arguments, cannot disconnect nodes
+        }
+        // Extract the node pointers and indices from the arguments
+        uintptr_t node_ptr_left = std::bit_cast<uintptr_t>(args.GetDouble(0));
+        int32_t output_index = args.GetInt(1);
+        uintptr_t node_ptr_right = std::bit_cast<uintptr_t>(args.GetDouble(2));
+        int32_t input_index = args.GetInt(3);
         _model.DisconnectNodes(node_ptr_left, output_index, node_ptr_right, input_index); // Disconnect the nodes in the model
+        // Create a message to send back to the UI
+        _ui_app.SendUIReturn(true); // Indicate that the disconnection was successful
     }
-    void SetNodeInfo(uintptr_t node_ptr, std::string info)
+    void SetNodeInfo(CefListValue& args)
     {
-        _model.SetNodeInfo(node_ptr, info); // Set the node info in the model
+        if (args.GetSize() < 2 || args.GetType(0) != VTYPE_DOUBLE || args.GetType(1) != VTYPE_STRING) {
+            vortex::error("SetNodeInfo: Invalid arguments provided.");
+            return; // Invalid arguments, cannot set node info
+        }
+        uintptr_t node_ptr = std::bit_cast<uintptr_t>(args.GetDouble(0));
+        _model.SetNodeInfo(node_ptr, args.GetString(1).ToString()); // Set the node info in the model
     }
 
 private:
@@ -184,13 +237,6 @@ private:
         //_ui_app.SendUIMessage(u"node_update", std::bit_cast<double>(node), property_index, value);
     }
 
-public:
-    template<typename... Args>
-    void HandleUIReturn(Args&&... args)
-    {
-        _ui_app.SendUIReturn(std::forward<Args>(args)...);
-    }
-
 private:
     vortex::NDILibrary _ndi;
     vortex::ui::SDLLibrary _sdl;
@@ -198,6 +244,8 @@ private:
     vortex::Graphics _gfx;
     vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
     vortex::DescriptorBuffer _descriptor_buffer;
+    vortex::TexturePool _texture_pool[vortex::max_frames_in_flight]; ///< Texture storage for each frame in flight
+
     dro::SPSCQueue<CefRefPtr<CefProcessMessage>, 64> _message_queue; ///< Queue for messages from the UI
 
     wis::CommandList _command_list[max_frames_in_flight]; ///< Command list for recording commands
@@ -216,18 +264,18 @@ private:
     int32_t counter = 32; ///< Counter for async calls
 
     // used in hot code, so it should be fast
-    std::unordered_map<std::u16string_view, MessaheHanlderDispatch> _message_handlers_disp{
+    std::unordered_map<std::u16string_view, MessageHandler> _message_handlers{
         // Coroutines
-        { u"GetNodeTypesAsync", ui::MessageDispatch<&App::GetNodeTypes>::Dispatch },
-        { u"CreateNodeAsync", ui::MessageDispatch<&App::CreateNode>::Dispatch },
-        { u"GetNodePropertiesAsync", ui::MessageDispatch<&App::GetNodeProperties>::Dispatch },
+        { u"GetNodeTypesAsync", &App::GetNodeTypes },
+        { u"CreateNodeAsync", &App::CreateNode },
+        { u"GetNodePropertiesAsync", &App::GetNodeProperties },
 
         // Immediate calls (fire and forget)
-        { u"RemoveNode", ui::MessageDispatch<&App::RemoveNode>::Dispatch },
-        { u"ConnectNodes", ui::MessageDispatch<&App::ConnectNodes>::Dispatch },
-        { u"DisconnectNodes", ui::MessageDispatch<&App::DisconnectNodes>::Dispatch },
-        { u"SetNodeInfo", ui::MessageDispatch<&App::SetNodeInfo>::Dispatch },
-        { u"SetNodeProperty", ui::MessageDispatch<&App::SetNodeProperty>::Dispatch }
+        { u"RemoveNode", &App::RemoveNode },
+        { u"ConnectNodes", &App::ConnectNodes },
+        { u"DisconnectNodes", &App::DisconnectNodes },
+        { u"SetNodeInfo", &App::SetNodeInfo },
+        { u"SetNodeProperty", &App::SetNodeProperty }
     };
 
 private:

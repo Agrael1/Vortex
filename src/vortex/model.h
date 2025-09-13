@@ -18,7 +18,7 @@ public: // Model API
     void RemoveNode(uintptr_t node_ptr);
     void SetNodeProperty(uintptr_t node_ptr, uint32_t index, std::string_view value, bool notify_ui = false);
     auto GetNodeProperties(uintptr_t node_ptr) const -> std::string;
-    bool ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
+    void ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
     void DisconnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
     void SetNodeInfo(uintptr_t node_ptr, std::string info);
 
@@ -43,7 +43,9 @@ public:
 
         // Execute outputs in sorted order
         for (auto* output : _outputs) {
-            output->Evaluate(gfx, probe);
+            if (output && output->IsReady()) {
+                output->Evaluate(gfx, probe);
+            }
         }
 
         ++frame;
@@ -73,6 +75,10 @@ public:
         std::vector<std::vector<IOutput*>> compatibility_groups;
 
         for (auto* output : _outputs) {
+            if (!output || !output->IsReady()) {
+                continue;
+            }
+
             // Find compatible group or create new one
             bool found_group = false;
             for (auto& group : compatibility_groups) {
@@ -117,7 +123,7 @@ public:
             vortex::trace("GraphModel: Sorted {} outputs into {} compatibility groups",
                           _outputs.size(), compatibility_groups.size());
             for (size_t i = 0; i < _outputs.size(); ++i) {
-                if (_outputs[i]) {
+                if (_outputs[i] && _outputs[i]->IsReady()) {
                     auto size = _outputs[i]->GetOutputSize();
                     vortex::trace("  Output {}: {:x} ({} pixels)", i, size,
                                   static_cast<uint64_t>(size.width) * size.height);

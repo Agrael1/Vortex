@@ -348,13 +348,11 @@ public:
             { "stream_size", 1 },
             { "origin", 2 },
             { "rotation_2d", 3 },
-            { "stream_buffering", 4 },
     });
     std::string stream_url{}; //<UI attribute - Stream URL: URL of the video stream.
     DirectX::XMFLOAT2 stream_size{}; //<UI attribute - Stream Size: Size of the video stream in pixels.
     DirectX::XMFLOAT2 origin{}; //<UI attribute - Origin: Origin (Anchor) point of the stream.
     float rotation_2d{ 0.0 }; //<UI attribute - Rotation (2D): Rotation of the stream in degrees.
-    int32_t stream_buffering{ 1000 }; //<UI attribute - Buffering: Buffering time in milliseconds.
 
 public:
     void SetStreamUrl(std::string_view value, bool notify = false)
@@ -385,13 +383,6 @@ public:
             NotifyPropertyChange(3);
         }
     }
-    void SetStreamBuffering(int32_t value, bool notify = false)
-    {
-        stream_buffering = value;
-        if (notify) {
-            NotifyPropertyChange(4);
-        }
-    }
 
 public:
     template<typename Self>
@@ -414,11 +405,6 @@ public:
     {
         return self.rotation_2d;
     }
-    template<typename Self>
-    int32_t GetStreamBuffering(this Self&& self)
-    {
-        return self.stream_buffering;
-    }
 
 public:
     template<typename Self>
@@ -440,9 +426,6 @@ public:
             break;
         case 3:
             self.notifier(3, vortex::reflection_traits<float>::serialize(self.GetRotation2d()));
-            break;
-        case 4:
-            self.notifier(4, vortex::reflection_traits<int32_t>::serialize(self.GetStreamBuffering()));
             break;
         default:
             vortex::error("StreamInput: Invalid property index for notification: {}", index);
@@ -475,11 +458,6 @@ public:
                 self.SetRotation2d(out_value, notify);
             }
             break;
-        case 4:
-            if (int32_t out_value; vortex::reflection_traits<int32_t>::deserialize(&out_value, value)) {
-                self.SetStreamBuffering(out_value, notify);
-            }
-            break;
         default:
             vortex::error("StreamInput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -488,12 +466,11 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return std::format("{{ stream_url: {}, stream_size: {}, origin: {}, rotation_2d: {}, stream_buffering: {}}}",
+        return std::format("{{ stream_url: {}, stream_size: {}, origin: {}, rotation_2d: {}}}",
                            vortex::reflection_traits<decltype(self.GetStreamUrl())>::serialize(self.GetStreamUrl()),
                            vortex::reflection_traits<decltype(self.GetStreamSize())>::serialize(self.GetStreamSize()),
                            vortex::reflection_traits<decltype(self.GetOrigin())>::serialize(self.GetOrigin()),
-                           vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(self.GetRotation2d()),
-                           vortex::reflection_traits<decltype(self.GetStreamBuffering())>::serialize(self.GetStreamBuffering()));
+                           vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(self.GetRotation2d()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)

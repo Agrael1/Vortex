@@ -73,7 +73,7 @@ public:
             // Add arguments to the message
             if constexpr (size > 0) {
                 size_t i = 0;
-                (value_traits<std::remove_reference_t<std::remove_all_extents_t<Args>>>::add_value(*msg_args, i++, std::forward<Args>(args)), ...);
+                (value_traits<Args>::add_value(*msg_args, i++, std::forward<Args>(args)), ...);
             }
 
             // Send the message

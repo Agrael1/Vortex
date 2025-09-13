@@ -55,8 +55,8 @@ vortex::ffmpeg::StreamManager::StreamManager(const vortex::Graphics& gfx)
 
     _va_decode_context = ffmpeg::CreateDecodeContext(gfx.GetDevice()).value();
 
-    // Start a single demuxer thread
-    //_io_threads.emplace_back([this](std::stop_token stop) { DemuxLoop(stop); });
+    // Start a single packet reading thread
+    //_io_threads.emplace_back([this](std::stop_token stop) { PacketLoop(stop); });
 
     // Start the IO loop thread
     _io_threads.emplace_back([this](std::stop_token stop) { IOLoop(stop); });
@@ -69,17 +69,57 @@ vortex::ffmpeg::StreamManager::~StreamManager()
     }
 }
 
-void vortex::ffmpeg::StreamManager::DemuxLoop(std::stop_token stop)
+void vortex::ffmpeg::StreamManager::PacketLoop(std::stop_token stop)
 {
-    _log.info("Demux thread started.");
-
+    _log.info("Packet thread started.");
     while (!stop.stop_requested()) {
-        // Currently, the demux loop does nothing as av_read_frame is non-blocking with a timeout.
-        // This loop can be used for future enhancements if needed.
+        // In order to stabilize the input stream, we read packets from all streams in a round-robin fashion.
+        std::vector<std::shared_ptr<ManagedStream>> streams_to_read;
+        if (_update_pending.exchange(false, std::memory_order::relaxed)) {
+            std::shared_lock lock(_streams_mutex);
+            streams_to_read.clear();
+            for (const auto& pair : _streams) {
+                streams_to_read.push_back(pair.second);
+            }
+        }
+        if (streams_to_read.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+        bool work_done = false;
+        for (const auto& stream : streams_to_read) {
+            if (stop.stop_requested()) {
+                break;
+            }
 
+            // Handle pending updates (e.g., changing active sub-streams)
+            if (stream->update_pending.exchange(false)) {
+                std::unique_lock lock(_streams_mutex);
+                for (const auto& update : stream->updates) {
+                    if (update.active) {
+                        InitDecoder(*stream, update.stream_index);
+                    } else {
+                        stream->channels.erase(update.stream_index);
+                    }
+                }
+            }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            work_done = ReadStreamPackets(stop, *stream);
+        }
+
+        // If no stream had data, sleep briefly to prevent busy-waiting
+        if (!work_done) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
     }
+    _log.info("Packet thread stopped.");
+}
+
+bool vortex::ffmpeg::StreamManager::ReadStreamPackets(
+        std::stop_token stop,
+        vortex::ffmpeg::ManagedStream& stream)
+{
+    return false; // Not implemented in this version
 }
 
 void vortex::ffmpeg::StreamManager::IOLoop(std::stop_token stop)

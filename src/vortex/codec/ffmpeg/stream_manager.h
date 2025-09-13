@@ -112,7 +112,13 @@ public:
     void DeactivateChannels(StreamHandle handle, std::span<int> inactive_channel_indices);
 
 private:
-    void DemuxLoop(std::stop_token stop);
+    void PacketLoop(std::stop_token stop);
+    bool ReadStreamPackets(std::stop_token stop, vortex::ffmpeg::ManagedStream& stream);
+
+
+    void VideoDecodeLoop(std::stop_token stop);
+    void AudioDecodeLoop(std::stop_token stop);
+
     void IOLoop(std::stop_token stop);
     void IOFlushStream(vortex::ffmpeg::ManagedStream& stream);
     bool IOProcessStream(vortex::ffmpeg::ManagedStream& stream);

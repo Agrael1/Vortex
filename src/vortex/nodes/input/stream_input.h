@@ -64,8 +64,8 @@ private:
     void DecodeStreamFrames(const vortex::Graphics& gfx);
     void EvaluateAudio(vortex::AudioProbe& probe) override;
 
-    void DecodeVideoFrames(vortex::ffmpeg::PacketStorage& video_channel);
-    void DecodeAudioFrames(vortex::ffmpeg::PacketStorage& audio_channel);
+    void DecodeVideoFrames(vortex::ffmpeg::ChannelStorage& video_channel);
+    void DecodeAudioFrames(vortex::ffmpeg::ChannelStorage& audio_channel);
 
 private:
     [[no_unique_address]] lazy_ptr<StreamInputLazy> _lazy_data; // Lazy data for static resources

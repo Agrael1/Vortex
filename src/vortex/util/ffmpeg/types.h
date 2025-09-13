@@ -37,7 +37,7 @@ struct formatter<AVCodecParameters> {
         return std::format_to(ctx.out(),
                               "AVCodecParameters(codec_type={}, codec_id={}, width={}, height={})",
                               reflect::enum_name(codecpar.codec_type),
-                              reflect::enum_name(codecpar.codec_id),
+                              avcodec_get_name(codecpar.codec_id),
                               codecpar.width,
                               codecpar.height);
     }

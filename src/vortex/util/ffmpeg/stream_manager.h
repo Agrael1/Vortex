@@ -1,35 +1,77 @@
 #pragma once
 #include <vortex/util/ffmpeg/hw_decoder.h>
+#include <vortex/util/lib/SPSC-Queue.h>
+
 #include <unordered_map>
 #include <shared_mutex>
-#include <semaphore>
 #include <thread>
 #include <chrono>
-
-#include <map>
-#include <vortex/util/lib/SPSC-Queue.h>
+#include <queue>
 
 namespace vortex {
 class Graphics;
 }
 
 namespace vortex::ffmpeg {
-struct PacketStorage {
-    static constexpr std::size_t max_sent_packets = 512; // Max packets sent without receiving frames
+struct ChannelStorage {
+    static constexpr std::size_t max_packets = 32; // Max packets sent without receiving frames
     static constexpr std::size_t max_frames = 16; // Max packets to queue for decoding
 
-    std::map<int64_t, ffmpeg::unique_packet> packets; // This does not need to be thread-safe, only accessed from I/O thread
-    dro::SPSCQueue<ffmpeg::unique_frame, max_frames> frames; // Frames decoded and ready for consumption
+public:
+    ChannelStorage(vortex::ffmpeg::unique_codec_context decoder_ctx) noexcept
+        : _decoder_ctx(std::move(decoder_ctx))
+    {
+    }
 
-    // Accessed from both I/O and main thread
-    vortex::ffmpeg::unique_codec_context decoder_ctx;
-    std::binary_semaphore decoder_sem{ 1 }; // Semaphore to signal availability of packets for decoding
-    std::atomic<std::size_t> sent_packets{ 0 }; // Number of packets sent to the decoder
+public:
+    /// @brief Attempts to decode a frame and returns the result or an error code.
+    /// @return A std::expected containing a unique decoded frame on success, or an ffmpeg error code on failure.
+    auto Decode() noexcept -> std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc>;
 
-    auto Decode() -> std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc>;
-    auto DecodeSync() -> std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc>;
-    auto SendQueuedPackets(vortex::LogView log) -> bool;
-    auto SendPacket(ffmpeg::unique_packet packet, vortex::LogView log) -> bool;
+    /// @brief Attempts to send all packets currently queued for transmission.
+    /// @param log A LogView object used to record logging information during the operation.
+    /// @return true if all queued packets were sent successfully; false otherwise.
+    bool SendQueuedPackets(vortex::LogView log) noexcept;
+
+    /// @brief Sends or queues a packet using FFmpeg.
+    /// @param packet A unique FFmpeg packet to be sent.
+    /// @param log A logging view used to record information or errors during the send operation.
+    /// @return True if the packet was sent successfully; otherwise, false.
+    bool SendPacket(ffmpeg::unique_packet packet, vortex::LogView log) noexcept;
+
+    /// @brief Retrieves a decoded video frame, if available.
+    /// @return An optional containing a unique decoded frame if one is available; otherwise, an empty optional.
+    auto GetDecodedFrame() noexcept -> std::optional<ffmpeg::unique_frame>;
+
+    /// @brief Attempts to decode a frame and add it to the frame queue if possible.
+    /// @return true if a frame was successfully decoded and added to the queue; false otherwise (e.g., if the queue is full or decoding failed).
+    bool TryDecodeFrame() noexcept;
+
+    /// @brief Checks if the decoder context is valid and properly initialized.
+    /// @return true if the decoder context exists and has a valid codec; false otherwise.
+    auto IsValid() const noexcept -> bool
+    {
+        return _decoder_ctx && _decoder_ctx->codec;
+    }
+
+    /// @brief Checks if the packet queue has reached its maximum capacity.
+    /// @return true if the packet queue is full; false otherwise.
+    bool IsOverflown() const noexcept
+    {
+        return _packets.size() == max_packets;
+    }
+
+    /// @brief Checks if the frame queue has reached its maximum capacity.
+    /// @return true if the frame queue is full; false otherwise.
+    bool IsFrameQueueFull() const noexcept
+    {
+        return _frames.size() == max_frames;
+    }
+
+private:
+    std::queue<ffmpeg::unique_packet> _packets; // This does not need to be thread-safe, only accessed from I/O thread
+    dro::SPSCQueue<ffmpeg::unique_frame, max_frames> _frames; // Frames decoded and ready for consumption
+    vortex::ffmpeg::unique_codec_context _decoder_ctx;
 };
 
 // Represents a stream being read by the StreamManager
@@ -41,7 +83,7 @@ struct ManagedStream {
 
     // Only accessed from the I/O thread
     ffmpeg::unique_context context;
-    std::unordered_map<int, PacketStorage> channels;
+    std::unordered_map<int, ChannelStorage> channels;
 
     // Modifiable from outside the I/O thread
     std::atomic<bool> update_pending{ false };

@@ -43,6 +43,16 @@ public:
         : _storage{ std::forward<Args>(args)... }
     {
     }
+    constexpr unique_any() noexcept
+        requires std::is_default_constructible_v<value_type>
+        : _storage{}
+    {
+    }
+    constexpr unique_any(std::nullptr_t) noexcept
+        requires detail::is_handle_or_pointer_v<value_type>
+        : _storage{ nullptr }
+    {
+    }
     unique_any(const unique_any&) = delete;
     unique_any& operator=(const unique_any&) = delete;
     constexpr unique_any(unique_any&& other) noexcept

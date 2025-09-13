@@ -4,8 +4,10 @@
 #include <shared_mutex>
 #include <semaphore>
 #include <thread>
-#include <queue>
 #include <chrono>
+
+#include <map>
+#include <vortex/util/lib/SPSC-Queue.h>
 
 namespace vortex {
 class Graphics;
@@ -14,41 +16,20 @@ class Graphics;
 namespace vortex::ffmpeg {
 struct PacketStorage {
     static constexpr std::size_t max_sent_packets = 512; // Max packets sent without receiving frames
+    static constexpr std::size_t max_frames = 16; // Max packets to queue for decoding
 
-    std::queue<ffmpeg::unique_packet> packets; // This does not need to be thread-safe, only accessed from I/O thread
+    std::map<int64_t, ffmpeg::unique_packet> packets; // This does not need to be thread-safe, only accessed from I/O thread
+    dro::SPSCQueue<ffmpeg::unique_frame, max_frames> frames; // Frames decoded and ready for consumption
 
     // Accessed from both I/O and main thread
     vortex::ffmpeg::unique_codec_context decoder_ctx;
     std::binary_semaphore decoder_sem{ 1 }; // Semaphore to signal availability of packets for decoding
     std::atomic<std::size_t> sent_packets{ 0 }; // Number of packets sent to the decoder
 
-    std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc> Decode()
-    {
-        ffmpeg::unique_frame frame{ av_frame_alloc() };
-        AVCodecContext* ctx = decoder_ctx.get();
-        AVFrame* raw_frame = frame.get();
-        int ret = 0;
-
-        ret = avcodec_receive_frame(ctx, raw_frame);
-        if (ret == AVERROR(EAGAIN)) {
-            return std::unexpected{ ffmpeg_errc::not_enough_data };
-        }
-        if (ret == AVERROR_EOF) {
-            return std::unexpected{ ffmpeg_errc::end_of_file };
-        }
-        if (ret < 0) {
-            vortex::error("Error during decoding video frame: {}", ffmpeg::ffmpeg_error_string(ret));
-            return std::unexpected{ ffmpeg::ffmpeg_errc(ret) };
-        }
-        return std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc>(std::move(frame)); // Successfully received a frame
-    }
-    std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc> DecodeSync()
-    {
-        decoder_sem.acquire();
-        auto frame = Decode();
-        decoder_sem.release();
-        return frame; // Successfully received a frame
-    }
+    auto Decode() -> std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc>;
+    auto DecodeSync() -> std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc>;
+    auto SendQueuedPackets(vortex::LogView log) -> bool;
+    auto SendPacket(ffmpeg::unique_packet packet, vortex::LogView log) -> bool;
 };
 
 // Represents a stream being read by the StreamManager

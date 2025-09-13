@@ -7,6 +7,7 @@
 #include <vortex/properties/props.hpp>
 #include <vortex/util/lazy.h>
 #include <vortex/util/ffmpeg/stream_manager.h>
+#include <vortex/util/ffmpeg/audio_resampler.h>
 
 namespace vortex {
 // Will hold static data for the image input node
@@ -90,5 +91,9 @@ private: // Stream synchronization
     std::chrono::steady_clock::time_point _start_time_video;
     std::chrono::steady_clock::time_point _start_time_audio;
     bool _started{ false }; // Flag to indicate if playback has started
+
+
+    ffmpeg::AudioResampler _audio_resampler; // Resampler for audio frames
+
 };
 } // namespace vortex

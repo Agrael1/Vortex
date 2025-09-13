@@ -1,6 +1,7 @@
 #include <vortex/util/ffmpeg/stream_manager.h>
 #include <vortex/util/ffmpeg/error.h>
 #include <vortex/graphics.h>
+#include <system_error>
 
 void vortex::ffmpeg::StreamManager::AvLogCallbackThunk(void* ptr, int level, const char* fmt, va_list vargs)
 {
@@ -128,8 +129,8 @@ void vortex::ffmpeg::StreamManager::IOFlushStream(vortex::ffmpeg::ManagedStream&
 
         // Send all the queued packets first
         while (!channel.packets.empty()) {
-            avcodec_send_packet(channel.decoder_ctx.get(), channel.packets.front().get());
-            channel.packets.pop();
+            avcodec_send_packet(channel.decoder_ctx.get(), channel.packets.begin()->second.get());
+            channel.packets.erase(channel.packets.begin());
         }
 
         // Send a null packet to flush the decoder
@@ -160,10 +161,7 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
     // after a timeout (set in StreamInput::initialize_stream) or when a packet arrives.
     ffmpeg::unique_packet packet{ av_packet_alloc() };
     int ret = av_read_frame(stream.context.get(), packet.get());
-    if (ret < 0) {
-        if (ret == AVERROR(EAGAIN)) {
-            return false; // No data available right now
-        }
+    if (ret < 0 && ret != AVERROR(EAGAIN)) {
         if (ret == AVERROR_EOF) {
             // End of stream, send flush packets to all decoders
             IOFlushStream(stream);
@@ -171,6 +169,7 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
         _log.error("Error reading frame from stream: {}", ffmpeg::ffmpeg_error_string(ret));
         return false;
     }
+    bool packet_valid = ret >= 0;
 
     // Successfully read a packet, now dispatch it to the appropriate channel
     auto it = stream.channels.find(packet->stream_index);
@@ -182,24 +181,24 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
     // We have a packet for an active channel
     auto& channel = it->second;
     if (!channel.decoder_sem.try_acquire()) {
-        channel.packets.emplace(std::move(packet));
+        auto pts = packet->pts == AV_NOPTS_VALUE ? packet->dts : packet->pts;
+        channel.packets.emplace(pts, std::move(packet));
         return true;
     }
 
     // We have the semaphore, send the packet
-    if (!channel.packets.empty()) {
-        channel.sent_packets.fetch_add(channel.packets.size(), std::memory_order::relaxed);
-        // If there are queued packets, send them first
-        while (!channel.packets.empty()) {
-            auto& queued_packet = channel.packets.front();
-            avcodec_send_packet(channel.decoder_ctx.get(), queued_packet.get());
-            channel.packets.pop();
-        }
+    bool ok = channel.SendQueuedPackets(_log);
+    if (!ok) {
+        channel.decoder_sem.release();
+        return true; // If sending queued packets failed, skip sending the new packet
     }
 
-    // Now send the current packet
-    avcodec_send_packet(channel.decoder_ctx.get(), packet.get());
-    channel.sent_packets.fetch_add(1, std::memory_order::relaxed);
+    if (!packet_valid) {
+        channel.decoder_sem.release();
+        return true; // No valid packet to send
+    }
+
+    ok = channel.SendPacket(std::move(packet), _log);
     channel.decoder_sem.release();
     return true;
 }
@@ -380,5 +379,100 @@ void vortex::ffmpeg::StreamManager::DeactivateChannels(StreamHandle handle, std:
             stream->updates.emplace_back(index, 0);
         }
         stream->update_pending.store(true, std::memory_order::relaxed);
+    }
+}
+
+auto vortex::ffmpeg::PacketStorage::Decode() -> std::expected<vortex::ffmpeg::unique_frame, vortex::ffmpeg::ffmpeg_errc>
+{
+    ffmpeg::unique_frame frame{ av_frame_alloc() };
+    AVCodecContext* ctx = decoder_ctx.get();
+    AVFrame* raw_frame = frame.get();
+    int ret = 0;
+
+    ret = avcodec_receive_frame(ctx, raw_frame);
+    if (ret == AVERROR(EAGAIN)) {
+        return std::unexpected{ ffmpeg_errc::not_enough_data };
+    }
+    if (ret == AVERROR_EOF) {
+        return std::unexpected{ ffmpeg_errc::end_of_file };
+    }
+    if (ret < 0) {
+        vortex::error("Error during decoding video frame: {}", ffmpeg::ffmpeg_error_string(ret));
+        return std::unexpected{ ffmpeg::ffmpeg_errc(ret) };
+    }
+    return std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc>(std::move(frame)); // Successfully received a frame
+}
+auto vortex::ffmpeg::PacketStorage::DecodeSync() -> std::expected<vortex::ffmpeg::unique_frame, vortex::ffmpeg::ffmpeg_errc>
+{
+    decoder_sem.acquire();
+    auto frame = Decode();
+    decoder_sem.release();
+    return frame; // Successfully received a frame
+}
+
+auto vortex::ffmpeg::PacketStorage::SendQueuedPackets(vortex::LogView log) -> bool
+{
+    // We have the semaphore, send the packet
+    if (packets.empty()) {
+        return true; // Nothing to send
+    }
+
+    std::size_t sent_count = 0;
+    // If there are queued packets, send them first
+    while (!packets.empty()) {
+        auto& [pts, queued_packet] = *packets.begin();
+        int result = avcodec_send_packet(decoder_ctx.get(), queued_packet.get());
+        switch (result) {
+        case 0:
+            break; // Successfully sent
+        case AVERROR(EAGAIN): {
+            // We still have semaphore, try draining frames
+            auto frame = Decode();
+            if (frame) {
+                bool succ = frames.try_emplace(std::move(frame.value()));
+                if (!succ) {
+                    log.warn("Frame queue full, dropping decoded frame while draining.");
+                }
+            } else if (frame.error() != ffmpeg_errc::not_enough_data) {
+                log.error("Error decoding frame while draining: {}", ffmpeg::make_error_code(frame.error()).message());
+                sent_packets.fetch_add(sent_count, std::memory_order::relaxed);
+                return false; // Problem decoding frame. Stop processing.
+            }
+            return true; // Decoder not ready, try again later
+        }
+        case AVERROR_EOF:
+            packets.clear(); // Clear all packets
+            sent_packets.store(0, std::memory_order::relaxed);
+            log.info("Decoder flushed, clearing queued packets.");
+            return false; // Decoder flushed
+        default:
+            log.error("Error sending queued packet to decoder: {}", ffmpeg::ffmpeg_error_string(result));
+            sent_packets.fetch_add(sent_count, std::memory_order::relaxed);
+            return false; // Problem sending packet. Stop processing.
+        }
+        packets.erase(packets.begin());
+    }
+}
+auto vortex::ffmpeg::PacketStorage::SendPacket(ffmpeg::unique_packet packet, vortex::LogView log) -> bool
+{
+    // We have the semaphore, send the packet
+    int result = avcodec_send_packet(decoder_ctx.get(), packet.get());
+    auto pts = packet->pts;
+    switch (result) {
+    case 0:
+        sent_packets.fetch_add(1, std::memory_order::relaxed);
+        return true; // Successfully sent
+    case AVERROR(EAGAIN):
+        packets.emplace(pts, std::move(packet));
+        // log.info("Decoder not ready, packet queued. {} packets now queued.", packets.size());
+        return true; // Decoder not ready, try again later
+    case AVERROR_EOF:
+        packets.clear(); // Clear all packets
+        sent_packets.store(0, std::memory_order::relaxed);
+        log.info("Decoder flushed, clearing queued packets.");
+        return false; // Decoder flushed
+    default:
+        log.error("Error sending packet to decoder: {}", ffmpeg::ffmpeg_error_string(result));
+        return false; // Problem sending packet. Stop processing.
     }
 }

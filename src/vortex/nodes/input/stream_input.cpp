@@ -98,7 +98,7 @@ void vortex::StreamInput::InitializeStream()
     }
 
     _stream_collection = std::move(channels_result.value());
-    _stream_indices[0] = _stream_collection.video_channels[0]->index;
+    //_stream_indices[0] = _stream_collection.video_channels[0]->index;
     _stream_indices[1] = _stream_collection.audio_channels[0]->index;
 
     std::array<int, 1> active_indices = { -1 };
@@ -112,10 +112,10 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
 
     // TODO: make this less ugly
     auto& stream = *std::bit_cast<ffmpeg::ManagedStream*>(_stream_handle.get());
-    auto& video_channel = stream.channels.at(_stream_indices[0]);
+    //auto& video_channel = stream.channels.at(_stream_indices[0]);
     auto& audio_channel = stream.channels.at(_stream_indices[1]);
 
-    DecodeVideoFrames(video_channel);
+    //DecodeVideoFrames(video_channel);
     DecodeAudioFrames(audio_channel);
 
     // Remove old video frames (keep only the latest 100 frames)
@@ -160,20 +160,29 @@ void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
         return; // Not enough time has passed to play audio
     }
 
-
     std::size_t samples = 0;
     std::size_t frames_used = 0;
+    std::vector<int64_t> consumed_frames_pts;
     for (const auto& [pts, frame] : _audio_frames) {
         if (pts < current_audio_pts) {
-            continue; // Skip frames that are before the current audio PTS
+            samples += frame->nb_samples;
+            frames_used++;
+            consumed_frames_pts.push_back(pts);
         }
         samples += frame->nb_samples;
         frames_used++;
     }
     samples_available += samples;
 
+    for (auto pts : consumed_frames_pts) {
+        //vortex::info("Consuming audio frame with PTS: {}", pts);
+
+        _audio_frames.erase(pts);
+    }
+
+
     samples_available -= 800; // 60 frames at 48kHz
-    vortex::info("Available audio frames: {}, that have {} samples. Remaining samples {}", frames_used, samples, samples_available);
+    //vortex::info("Available audio frames: {}, that have {} samples. Remaining samples {} | {}", frames_used, samples, samples_available, _audio_frames.size());
     _audio_frames.clear();
 }
 
@@ -210,6 +219,27 @@ void vortex::StreamInput::DecodeAudioFrames(vortex::ffmpeg::PacketStorage& audio
     ffmpeg::ffmpeg_errc last_error = ffmpeg::ffmpeg_errc::success;
     uint32_t frames_decoded = 0;
 
+    static int64_t last_pts = AV_NOPTS_VALUE;
+
+    // try read frames from atomic queue
+
+    ffmpeg::unique_frame temp_frame;
+    while (audio_channel.frames.try_pop(temp_frame))
+    {
+        // if first audio frame, set the first audio pts
+        if (_first_audio_pts == AV_NOPTS_VALUE) {
+            _start_time_audio = std::chrono::steady_clock::now();
+            _first_audio_pts = _first_audio_pts == AV_NOPTS_VALUE ? temp_frame.get()->pts : _first_audio_pts;
+        }
+
+        AVFrame* raw_frame = temp_frame.get();
+        vortex::info("Drained audio frame with PTS: {}, nb_samples: {}, dpts: {}", raw_frame->pts, raw_frame->nb_samples, raw_frame->pts - last_pts);
+        last_pts = raw_frame->pts;
+
+        _audio_frames[raw_frame->pts] = std::move(temp_frame);
+        frames_decoded++;
+    }
+
     audio_channel.decoder_sem.acquire();
     do {
         auto frame = audio_channel.Decode();
@@ -219,8 +249,11 @@ void vortex::StreamInput::DecodeAudioFrames(vortex::ffmpeg::PacketStorage& audio
                 _start_time_audio = std::chrono::steady_clock::now();
                 _first_audio_pts = _first_audio_pts == AV_NOPTS_VALUE ? frame->get()->pts : _first_audio_pts;
             }
-
             AVFrame* raw_frame = frame->get();
+            vortex::info("Decoded audio frame with PTS: {}, nb_samples: {}, dpts: {}", raw_frame->pts, raw_frame->nb_samples, raw_frame->pts - last_pts);
+            last_pts = raw_frame->pts;
+
+
             _audio_frames[raw_frame->pts] = std::move(frame.value());
             frames_decoded++;
         } else {
@@ -235,8 +268,4 @@ void vortex::StreamInput::DecodeAudioFrames(vortex::ffmpeg::PacketStorage& audio
     } while (last_error == ffmpeg::ffmpeg_errc::success);
     audio_channel.sent_packets.store(0, std::memory_order_release); // Reset sent packets count after decoding
     audio_channel.decoder_sem.release();
-
-    //if (frames_decoded > 0) {
-    //    vortex::info("Decoded {} audio frames", frames_decoded);
-    //}
 }

@@ -1,10 +1,18 @@
 #pragma once
 #include <vortex/util/ndi/ndi_library.h>
+#include <vortex/util/rational.h>
 #include <wisdom/wisdom.hpp>
-
 
 namespace vortex {
 class Graphics;
+struct NDISwapchainDesc {
+    uint32_t width = 1280;
+    uint32_t height = 720;
+    wis::DataFormat format = wis::DataFormat::RGBA8Unorm;
+    vortex::ratio32_t framerate = { 60000, 1001 }; // 59.94 fps
+    std::string_view name = "Vortex NDI Output";
+};
+
 class NDISwapchain
 {
 public:
@@ -12,63 +20,46 @@ public:
 
 public:
     NDISwapchain() = default;
-    NDISwapchain(const vortex::Graphics& gfx, wis::Size2D size = { 1280, 720 }, wis::DataFormat format = wis::DataFormat::RGBA8Unorm, std::string_view name = "Vortex 1");
+    NDISwapchain(const vortex::Graphics& gfx, const NDISwapchainDesc& desc);
     ~NDISwapchain();
 
 public:
-    const wis::Texture& GetTexture() const noexcept
+    auto GetTextures() const noexcept -> std::span<const wis::Texture, max_swapchain_images>
     {
-        return _texture;
+        return _textures;
     }
     void Present(wis::CommandList& cmd_list)
     {
-        if (!_send_instance) {
-            vortex::error("NDI send instance is not initialized");
-            return;
-        }
-
         // Copy the current texture to the staging buffer
-        CopyToStagingBuffer(cmd_list);
+        CopyToStagingBuffer(cmd_list, _current_index);
         // Send the frame asynchronously
         SendFrame();
     }
-    uint32_t GetCurrentIndex() const noexcept
+    auto GetCurrentIndex() const noexcept -> uint32_t
     {
         return _current_index;
     }
-    bool Resize(const vortex::Graphics& gfx, uint32_t width, uint32_t height)
+    void SetFramerate(vortex::ratio32_t framerate) noexcept
     {
-        if (width == 0 || height == 0) {
-            vortex::error("NDI swapchain resize called with zero dimensions");
-            return false;
-        }
-
-        // No need to resize if the dimensions are the same or lower than the current size
-        if (width <= _video_frame.xres && height <= _video_frame.yres) {
-            _video_frame.xres = int32_t(width);
-            _video_frame.yres = int32_t(height);
-            return false;
-        }
-
-        // Resize the texture and staging buffers (avoid fragmentation)
-        _texture = {};
-        CreateBuffers(gfx, width, height);
-        return true;
+        _video_frame.frame_rate_N = framerate.num();
+        _video_frame.frame_rate_D = framerate.denom();
     }
     void SetName(std::string_view name)
     {
         _send_instance.Recreate(name);
     }
+    bool Resize(const vortex::Graphics& gfx, uint32_t width, uint32_t height);
+    void SendAudio(std::span<const float> samples);
 
 private:
-    void CopyToStagingBuffer(wis::CommandList& cmd_list)
+    void CopyToStagingBuffer(wis::CommandList& cmd_list, uint32_t index)
     {
         wis::BufferTextureCopyRegion region{
             .texture = {
                     .size = { uint32_t(_video_frame.xres), uint32_t(_video_frame.yres), 1 },
                     .format = _format }
         };
-        cmd_list.CopyTextureToBuffer(_texture, _staging_buffer[_current_index], &region, 1);
+        cmd_list.CopyTextureToBuffer(_textures[index], _staging_buffer[_current_index], &region, 1);
     }
     void SwapBuffers()
     {
@@ -81,12 +72,14 @@ private:
         SwapBuffers();
     }
 
-    void CreateBuffers(const vortex::Graphics& gfx, uint32_t width, uint32_t height);
+    auto CreateBuffers(const vortex::Graphics& gfx, uint32_t width, uint32_t height) noexcept -> wis::Result;
+    void DestroyBuffers() noexcept;
 
 private:
-    wis::Texture _texture;
-    wis::RenderTarget _render_targets[max_swapchain_images];
-    wis::Buffer _staging_buffer[max_swapchain_images]; // more is ineffective
+    wis::Texture _textures[max_swapchain_images];
+    wis::Buffer _staging_buffer[max_swapchain_images];
+    wis::CommandList _command_list_aux;
+
     uint8_t* _staging_data = nullptr;
     uint32_t _current_index = 0;
     wis::DataFormat _format = wis::DataFormat::RGBA8Unorm;
@@ -95,4 +88,5 @@ private:
     NDISendInstance _send_instance;
     NDIlib_video_frame_v2_t _video_frame = {};
 };
+
 } // namespace vortex

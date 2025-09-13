@@ -4,10 +4,38 @@
 #include <vortex/ui/cef_app.h>
 
 struct MainArgs {
+    bool headless = false;
 };
 
-int entry_main(std::span<std::string_view> args)
+MainArgs ParseArgs(std::span<std::string_view> args) noexcept
+{
+    MainArgs result;
+    for (const auto& arg : args) {
+        if (arg == "--headless") {
+            result.headless = true;
+        }
+    }
+    return result;
+}
+
+int LaunchHeadlessMode(MainArgs args)
+{
+    vortex::info("Launching in headless mode...");
+    // Initialize Node Library
+    vortex::RegisterHardwareNodes();
+
+    int result = 0;
+    {
+        vortex::App app;
+        result = app.Run();
+    }
+    return 0;
+}
+
+int EntryMain(std::span<std::string_view> args)
 try {
+    MainArgs parsed_args = ParseArgs(args);
+
     bool debug = true;
     vortex::LogOptions options{
         .name = vortex::app_log_name,
@@ -37,6 +65,11 @@ try {
         vortex::AppExitControl::Exit();
     });
 
+    // Handle headless mode
+    if (parsed_args.headless) {
+        return LaunchHeadlessMode(parsed_args);
+    }
+
     // Initialize Cef
     CefMainArgs cef_args{ GetModuleHandleW(nullptr) };
     CefRefPtr<vortex::ui::VortexCefApp> cef_app{ new vortex::ui::VortexCefApp() };
@@ -54,7 +87,7 @@ try {
 
     if (!CefInitialize(cef_args, cef_settings, cef_app, nullptr)) {
         vortex::critical("CefInitialize failed");
-        return 3; // Initialization failed
+        return CefGetExitCode(); // Initialization failed
     }
 
     // Initialize Node Library
@@ -90,7 +123,7 @@ int main(int argc, char* argv[])
         std::construct_at(&args[i], argv[i]); // Construct std::string_view from char* without UB
     }
 
-    int ret = entry_main(std::span(args, argc));
+    int ret = EntryMain(std::span(args, argc));
     std::destroy_n(args, argc); // Destroy std::string_view objects
     return ret;
 }

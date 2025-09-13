@@ -1,11 +1,59 @@
 #include <vortex/util/ffmpeg/stream_manager.h>
 #include <vortex/util/ffmpeg/error.h>
 #include <vortex/graphics.h>
+#include <system_error>
+
+void vortex::ffmpeg::StreamManager::AvLogCallbackThunk(void* ptr, int level, const char* fmt, va_list vargs)
+{
+    static auto log = vortex::GetLog(vortex::stream_log_name); // Static to avoid repeated lookups
+
+    // Get only above info level
+    if (level >= AV_LOG_INFO) {
+        return;
+    }
+
+    char message[1024];
+    vsnprintf(message, sizeof(message), fmt, vargs);
+
+    // Remove trailing newlines
+    size_t len = strlen(message);
+    while (len > 0 && (message[len - 1] == '\n' || message[len - 1] == '\r')) {
+        message[--len] = '\0';
+    }
+
+    switch (level) {
+    case AV_LOG_QUIET:
+        return; // No logging
+    case AV_LOG_PANIC:
+    case AV_LOG_FATAL:
+        log.critical("[FFmpeg] {}", message);
+        break;
+    case AV_LOG_ERROR:
+        log.error("[FFmpeg] {}", message);
+        break;
+    case AV_LOG_WARNING:
+        log.warn("[FFmpeg] {}", message);
+        break;
+    case AV_LOG_INFO:
+        log.info("[FFmpeg] {}", message);
+        break;
+    case AV_LOG_VERBOSE:
+    case AV_LOG_DEBUG:
+        log.debug("[FFmpeg] {}", message);
+        break;
+    default:
+        log.info("[FFmpeg] {}", message);
+        break;
+    }
+}
 
 vortex::ffmpeg::StreamManager::StreamManager(const vortex::Graphics& gfx)
     : _log(vortex::GetLog(vortex::stream_log_name))
-    , _va_decode_context(ffmpeg::CreateDecodeContext(gfx.GetDevice()).value())
 {
+    // Set FFmpeg log callback
+    av_log_set_callback(AvLogCallbackThunk);
+
+    _va_decode_context = ffmpeg::CreateDecodeContext(gfx.GetDevice()).value();
     // Start the IO loop thread
     _io_threads.emplace_back([this](std::stop_token stop) { IOLoop(stop); });
 }
@@ -68,30 +116,12 @@ void vortex::ffmpeg::StreamManager::IOLoop(std::stop_token stop)
 void vortex::ffmpeg::StreamManager::IOFlushStream(vortex::ffmpeg::ManagedStream& stream)
 {
     for (auto& [index, channel] : stream.channels) {
-        if (!channel.decoder_ctx) {
+        if (!channel.IsValid()) {
             continue;
         }
 
-        // Try to acquire the semaphore to avoid blocking if the decoder is busy
-        if (!channel.decoder_sem.try_acquire()) {
-            // Enqueue a flush request to be handled later
-            channel.packets.emplace();
-            continue; // Decoder is busy, skip flushing for now
-        }
-
-        // Send all the queued packets first
-        while (!channel.packets.empty()) {
-            avcodec_send_packet(channel.decoder_ctx.get(), channel.packets.front().address_of());
-            channel.packets.pop();
-        }
-
-        // Send a null packet to flush the decoder
-        if (avcodec_send_packet(channel.decoder_ctx.get(), nullptr) < 0) {
-            _log.error("Error sending flush packet to decoder for stream index {}", index);
-            channel.decoder_sem.release();
-            continue;
-        }
-        channel.decoder_sem.release();
+        // Enqueue a flush packet for the decoder
+        channel.SendPacket(nullptr, _log);
     }
 }
 bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStream& stream)
@@ -103,20 +133,19 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
 
     // Check if any decoder is overloaded with sent packets
     for (auto& [index, channel] : stream.channels) {
-        if (channel.sent_packets.load(std::memory_order::relaxed) >= PacketStorage::max_sent_packets) {
-            _log.warn("Decoder for stream index {} is overloaded ({} sent packets). Skipping read.", index, channel.sent_packets.load(std::memory_order::relaxed));
-            return false; // Skip reading if any decoder is overloaded
+        // Try to send queued packets to free up space
+        bool ok = channel.SendQueuedPackets(_log);
+        if (!ok && channel.IsOverflown()) {
+            _log.warn("Decoder for stream {} is overloaded and cannot send queued packets.", index);
+            return false; // If sending queued packets failed, skip reading new packets
         }
     }
 
     // This is the core of the non-blocking read. av_read_frame will return
     // after a timeout (set in StreamInput::initialize_stream) or when a packet arrives.
-    ffmpeg::unique_packet packet;
-    int ret = av_read_frame(stream.context.get(), packet.put<clear_strategy::none>());
-    if (ret < 0) {
-        if (ret == AVERROR(EAGAIN)) {
-            return false; // No data available right now
-        }
+    ffmpeg::unique_packet packet{ av_packet_alloc() };
+    int ret = av_read_frame(stream.context.get(), packet.get());
+    if (ret < 0 && ret != AVERROR(EAGAIN)) {
         if (ret == AVERROR_EOF) {
             // End of stream, send flush packets to all decoders
             IOFlushStream(stream);
@@ -124,6 +153,7 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
         _log.error("Error reading frame from stream: {}", ffmpeg::ffmpeg_error_string(ret));
         return false;
     }
+    bool packet_valid = ret >= 0;
 
     // Successfully read a packet, now dispatch it to the appropriate channel
     auto it = stream.channels.find(packet->stream_index);
@@ -131,35 +161,14 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
         // No active channel for this stream index, discard the packet
         return false;
     }
-
-    // We have a packet for an active channel
     auto& channel = it->second;
-    if (!channel.decoder_sem.try_acquire()) {
-        channel.packets.emplace(std::move(packet));
-        return true;
-    }
 
-    // We have the semaphore, send the packet
-    if (!channel.packets.empty()) {
-        channel.sent_packets.fetch_add(channel.packets.size(), std::memory_order::relaxed);
-        // If there are queued packets, send them first
-        while (!channel.packets.empty()) {
-            auto& queued_packet = channel.packets.front();
-            avcodec_send_packet(channel.decoder_ctx.get(), queued_packet.address_of());
-            channel.packets.pop();
-        }
-    }
-
-    // Now send the current packet
-    avcodec_send_packet(channel.decoder_ctx.get(), packet.address_of());
-    channel.sent_packets.fetch_add(1, std::memory_order::relaxed);
-    channel.decoder_sem.release();
+    bool ok = channel.SendPacket(std::move(packet), _log);
     return true;
 }
 
 bool vortex::ffmpeg::StreamManager::InitVideoDecoder(vortex::ffmpeg::ManagedStream& stream, int channel)
 {
-    av_log_set_level(AV_LOG_WARNING);
     AVCodecParameters* codec_params = stream.context->streams[channel]->codecpar;
     const AVCodec* codec = avcodec_find_decoder(codec_params->codec_id);
     if (!codec) {
@@ -167,24 +176,23 @@ bool vortex::ffmpeg::StreamManager::InitVideoDecoder(vortex::ffmpeg::ManagedStre
         return false;
     }
 
-    stream.channels[channel]; // Ensure the channel entry exists
-    stream.channels[channel].decoder_ctx.reset(avcodec_alloc_context3(codec));
-    if (!stream.channels[channel].decoder_ctx) {
+    ffmpeg::unique_codec_context decoder_ctx{ avcodec_alloc_context3(codec) };
+    if (!decoder_ctx) {
         _log.error("Failed to allocate decoder context for stream {}: {}", channel, *codec_params);
         stream.channels.erase(channel);
         return false;
     }
-    auto& decoder = stream.channels[channel].decoder_ctx;
-
-    if (avcodec_parameters_to_context(decoder.get(), stream.context->streams[channel]->codecpar) < 0) {
+    if (avcodec_parameters_to_context(decoder_ctx.get(), codec_params) < 0) {
         _log.error("Failed to copy codec parameters to context for stream {}: {}", channel, *codec_params);
         stream.channels.erase(channel);
         return false;
     }
-    decoder->hw_device_ctx = av_buffer_ref(_va_decode_context.GetHWDeviceContext());
+
+    // Setup hardware acceleration context
+    decoder_ctx->hw_device_ctx = av_buffer_ref(_va_decode_context.GetHWDeviceContext());
     auto frames_ctx_result = _va_decode_context.CreateHWFramesContext(
-            decoder->width,
-            decoder->height,
+            decoder_ctx->width,
+            decoder_ctx->height,
             AV_PIX_FMT_NV12);
 
     if (!frames_ctx_result) {
@@ -192,30 +200,28 @@ bool vortex::ffmpeg::StreamManager::InitVideoDecoder(vortex::ffmpeg::ManagedStre
         stream.channels.erase(channel);
         return false;
     }
-    decoder->hw_frames_ctx = frames_ctx_result.value().release();
-    decoder->thread_count = 1; // Use single-threaded decoding for hardware acceleration
-    decoder->thread_type = FF_THREAD_FRAME;
+    decoder_ctx->hw_frames_ctx = frames_ctx_result.value().release();
+    decoder_ctx->thread_count = 1; // Use single-threaded decoding for hardware acceleration
+    decoder_ctx->thread_type = FF_THREAD_FRAME;
 
     // Configure decoder for better hardware acceleration compatibility
-    decoder->flags |= AV_CODEC_FLAG_OUTPUT_CORRUPT; // Handle corrupted frames gracefully
-    decoder->flags2 |= AV_CODEC_FLAG2_FAST; // Prioritize speed over quality
+    decoder_ctx->flags |= AV_CODEC_FLAG_OUTPUT_CORRUPT; // Handle corrupted frames gracefully
+    decoder_ctx->flags2 |= AV_CODEC_FLAG2_FAST; // Prioritize speed over quality
 
-    decoder->error_concealment = FF_EC_GUESS_MVS | FF_EC_DEBLOCK;
-    decoder->err_recognition = AV_EF_CAREFUL | AV_EF_COMPLIANT | AV_EF_AGGRESSIVE;
-    decoder->skip_frame = AVDISCARD_DEFAULT;
-    decoder->skip_idct = AVDISCARD_DEFAULT;
-    decoder->skip_loop_filter = AVDISCARD_DEFAULT;
+    decoder_ctx->error_concealment = FF_EC_GUESS_MVS | FF_EC_DEBLOCK;
+    decoder_ctx->err_recognition = AV_EF_CAREFUL | AV_EF_COMPLIANT | AV_EF_AGGRESSIVE;
 
     unique_dictionary opts;
     av_dict_set(opts.address_of(), "extra_hw_frames", "16", 0); // Extra surfaces for reference frames
     av_dict_set(opts.address_of(), "async_depth", "8", 0); // Async decode depth
 
-    if (avcodec_open2(decoder.get(), codec, opts.address_of()) < 0) {
+    if (avcodec_open2(decoder_ctx.get(), codec, opts.address_of()) < 0) {
         _log.error("Failed to open codec for stream {}: {}", channel, *codec_params);
         stream.channels.erase(channel);
         return false;
     }
     _log.info("Initialized decoder for stream {}: {}", channel, *codec_params);
+    stream.channels.emplace(channel, std::move(decoder_ctx));
     return true;
 }
 bool vortex::ffmpeg::StreamManager::InitAudioDecoder(vortex::ffmpeg::ManagedStream& stream, int channel)
@@ -226,24 +232,25 @@ bool vortex::ffmpeg::StreamManager::InitAudioDecoder(vortex::ffmpeg::ManagedStre
         _log.error("Failed to find decoder for stream {}: {}", channel, *codec_params);
         return false;
     }
-    stream.channels[channel]; // Ensure the channel entry exists
-    stream.channels[channel].decoder_ctx.reset(avcodec_alloc_context3(codec));
-    if (!stream.channels[channel].decoder_ctx) {
+
+    ffmpeg::unique_codec_context decoder_ctx{ avcodec_alloc_context3(codec) };
+    if (!decoder_ctx) {
         _log.error("Failed to allocate decoder context for stream {}: {}", channel, *codec_params);
         stream.channels.erase(channel);
         return false;
     }
-    if (avcodec_parameters_to_context(stream.channels[channel].decoder_ctx.get(), stream.context->streams[channel]->codecpar) < 0) {
+    if (avcodec_parameters_to_context(decoder_ctx.get(), codec_params) < 0) {
         _log.error("Failed to copy codec parameters to context for stream {}: {}", channel, *codec_params);
         stream.channels.erase(channel);
         return false;
     }
-    if (avcodec_open2(stream.channels[channel].decoder_ctx.get(), codec, nullptr) < 0) {
+    if (avcodec_open2(decoder_ctx.get(), codec, nullptr) < 0) {
         _log.error("Failed to open codec for stream {}: {}", channel, *codec_params);
         stream.channels.erase(channel);
         return false;
     }
     _log.info("Initialized decoder for stream {}: {}", channel, *codec_params);
+    stream.channels.emplace(channel, std::move(decoder_ctx)); // Ensure the channel entry exists
     return true;
 }
 void vortex::ffmpeg::StreamManager::InitDecoder(vortex::ffmpeg::ManagedStream& stream, int channel)
@@ -334,4 +341,106 @@ void vortex::ffmpeg::StreamManager::DeactivateChannels(StreamHandle handle, std:
         }
         stream->update_pending.store(true, std::memory_order::relaxed);
     }
+}
+
+auto vortex::ffmpeg::ChannelStorage::Decode() noexcept -> std::expected<vortex::ffmpeg::unique_frame, vortex::ffmpeg::ffmpeg_errc>
+{
+    ffmpeg::unique_frame frame{ av_frame_alloc() };
+    AVCodecContext* ctx = _decoder_ctx.get();
+    AVFrame* raw_frame = frame.get();
+    int ret = 0;
+
+    ret = avcodec_receive_frame(ctx, raw_frame);
+    if (ret == AVERROR(EAGAIN)) {
+        return std::unexpected{ ffmpeg_errc::not_enough_data };
+    }
+    if (ret == AVERROR_EOF) {
+        return std::unexpected{ ffmpeg_errc::end_of_file };
+    }
+    if (ret < 0) {
+        vortex::error("Error during decoding video frame: {}", ffmpeg::ffmpeg_error_string(ret));
+        return std::unexpected{ ffmpeg::ffmpeg_errc(ret) };
+    }
+    return std::expected<ffmpeg::unique_frame, ffmpeg::ffmpeg_errc>(std::move(frame)); // Successfully received a frame
+}
+auto vortex::ffmpeg::ChannelStorage::SendQueuedPackets(vortex::LogView log) noexcept -> bool
+{
+    // We have the semaphore, send the packet
+    if (_packets.empty()) {
+        return true; // Nothing to send
+    }
+
+    std::size_t sent_count = 0;
+    // If there are queued packets, send them first
+    while (!_packets.empty()) {
+        auto& queued_packet = _packets.front();
+        int result = avcodec_send_packet(_decoder_ctx.get(), queued_packet.get());
+        switch (result) {
+        case 0:
+            break; // Successfully sent
+        case AVERROR(EAGAIN):
+            if (IsFrameQueueFull()) {
+                return false; // Frame queue is full, cannot send more packets
+            }
+
+            while (TryDecodeFrame()) {
+                // Keep decoding frames until we can't anymore
+            }
+            continue; // Resend the same packet
+        case AVERROR_EOF:
+            _packets = {}; // Clear all packets
+            log.info("Decoder flushed, clearing queued packets.");
+            return false; // Decoder flushed
+        default:
+            log.error("Error sending queued packet to decoder: {}", ffmpeg::ffmpeg_error_string(result));
+            return false; // Problem sending packet. Stop processing.
+        }
+        _packets.pop();
+    }
+}
+auto vortex::ffmpeg::ChannelStorage::SendPacket(ffmpeg::unique_packet packet, vortex::LogView log) noexcept -> bool
+{
+    // We have the semaphore, send the packet
+    int result = avcodec_send_packet(_decoder_ctx.get(), packet.get());
+    auto pts = packet->pts;
+    switch (result) {
+    case 0:
+        return true; // Successfully sent
+    case AVERROR(EAGAIN):
+        _packets.emplace(std::move(packet));
+        return true; // Decoder not ready, try again later
+    case AVERROR_EOF:
+        _packets = {};
+        log.info("Decoder flushed, clearing queued packets.");
+        return false; // Decoder flushed
+    default:
+        log.error("Error sending packet to decoder: {}", ffmpeg::ffmpeg_error_string(result));
+        return false; // Problem sending packet. Stop processing.
+    }
+}
+auto vortex::ffmpeg::ChannelStorage::GetDecodedFrame() noexcept -> std::optional<ffmpeg::unique_frame>
+{
+    ffmpeg::unique_frame frame;
+    auto sz = _frames.size();
+
+    if (_frames.try_pop(frame)) {
+        return std::optional<ffmpeg::unique_frame>{ std::move(frame) };
+    }
+    return std::nullopt;
+}
+auto vortex::ffmpeg::ChannelStorage::TryDecodeFrame() noexcept -> bool
+{
+    if (IsFrameQueueFull()) {
+        return false; // Frame queue is full, cannot decode more frames
+    }
+
+    auto decode_result = Decode();
+    if (!decode_result) {
+        auto err = decode_result.error();
+        if (err == ffmpeg_errc::end_of_file) {
+            _packets = {}; // Clear all packets
+        }
+        return false; // Decoder not ready, try again later
+    }
+    return _frames.try_push(std::move(decode_result.value()));
 }

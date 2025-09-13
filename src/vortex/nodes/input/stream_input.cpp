@@ -1,56 +1,12 @@
 #include "stream_input.h"
 #include <vortex/graphics.h>
 #include <vortex/util/ffmpeg/error.h>
-#include <vortex/util/ffmpeg/hw_decoder.h>
-#include <vortex/ui/sdl.h>
+#include <vortex/gfx/descriptor_buffer.h>
 
-static std::array<wis::DX12ShaderResource, 2>
-DX12CreateSRVNV12(wis::Result& result, const wis::DX12Device& device, wis::DX12TextureView texture, std::span<const wis::ShaderResourceDesc> desc) noexcept
+
+uint64_t TimeToPts(AVRational timebase, uint64_t time_ms)
 {
-    std::array<wis::DX12ShaderResource, 2> out_resource;
-    auto& internal_0 = out_resource[0].GetMutableInternal();
-    auto& internal_1 = out_resource[1].GetMutableInternal();
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc[2];
-    for (size_t i = 0; i < 2; i++) {
-        srv_desc[i] = {
-            .Format = convert_dx(desc[i].format),
-            .ViewDimension = convert_dx(desc[i].view_type),
-            .Shader4ComponentMapping = UINT(D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
-                    convert_dx(desc[i].component_mapping.r),
-                    convert_dx(desc[i].component_mapping.g),
-                    convert_dx(desc[i].component_mapping.b),
-                    convert_dx(desc[i].component_mapping.a))),
-        };
-        switch (desc[i].view_type) {
-        case wis::TextureViewType::Texture2D:
-            srv_desc[i].Texture2D = {
-                .MostDetailedMip = desc[i].subresource_range.base_mip_level,
-                .MipLevels = desc[i].subresource_range.level_count,
-                .PlaneSlice = UINT(i), // Plane 0 for Y, Plane 1 for UV
-                .ResourceMinLODClamp = 0.0f,
-            };
-            break;
-        default:
-            result = wis::make_result<wis::Func<wis::FuncD()>(), "Unsupported view type for NV12 texture">(E_INVALIDARG);
-            return {};
-        }
-    }
-
-    D3D12_DESCRIPTOR_HEAP_DESC heap_desc{
-        .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors = 1,
-        .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE
-    };
-
-    auto& device_x = device.GetInternal().device;
-
-    auto x = device_x->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    device_x->CreateDescriptorHeap(&heap_desc, internal_0.heap.iid(), internal_0.heap.put_void());
-    device_x->CreateDescriptorHeap(&heap_desc, internal_1.heap.iid(), internal_1.heap.put_void());
-    device_x->CreateShaderResourceView(std::get<0>(texture), &srv_desc[0], internal_0.heap->GetCPUDescriptorHandleForHeapStart());
-    device_x->CreateShaderResourceView(std::get<0>(texture), &srv_desc[1], internal_1.heap->GetCPUDescriptorHandleForHeapStart());
-    return out_resource;
+    return av_rescale_q(time_ms, { 1, 1000 }, timebase);
 }
 
 vortex::StreamInputLazy::StreamInputLazy(const vortex::Graphics& gfx)
@@ -134,26 +90,8 @@ void vortex::StreamInput::InitializeStream()
 
     // Optimized settings for low latency and reduced buffering
     ffmpeg::unique_dictionary options;
-    av_dict_set(options.address_of(), "timeout", "5000000", 0); // 5 second timeout
-    av_dict_set(options.address_of(), "max_delay", "500000", 0); // 0.5s max delay (reduced)
-    av_dict_set(options.address_of(), "rtsp_transport", "tcp", 0);
-    av_dict_set(options.address_of(), "buffer_size", "1048576", 0); // 1MB buffer (reduced from 4MB)
-    av_dict_set(options.address_of(), "rtsp_flags", "prefer_tcp", 0);
-
-    // Low latency and aggressive flushing
-    av_dict_set(options.address_of(), "fflags", "+genpts+discardcorrupt+flush_packets+nobuffer", 0);
-    av_dict_set(options.address_of(), "flags", "+low_delay", 0);
-    
-    // Critical: Add error concealment options for missing reference frames
-    av_dict_set(options.address_of(), "ec", "guess_mvs+deblock", 0);    
-    av_dict_set(options.address_of(), "err_detect", "ignore_err", 0);   
-    av_dict_set(options.address_of(), "skip_frame", "noref", 0);        
-
-    // NEW: Additional low-latency options
-    av_dict_set(options.address_of(), "reorder_queue_size", "0", 0);    // Disable frame reordering
-    av_dict_set(options.address_of(), "thread_queue_size", "4", 0);     // Small thread queue
-    av_dict_set(options.address_of(), "avoid_negative_ts", "make_zero", 0); // Handle timing issues
-
+    av_dict_set(options.address_of(), "timeout", "10000000", 0); // 5 second timeout
+    av_dict_set(options.address_of(), "analyzeduration", "10000000", 0); // 0.5 second timeout
     auto context_result = codec::CodecFFmpeg::ConnectToStream(stream_url, std::move(options));
     if (!context_result) {
         return;
@@ -167,13 +105,11 @@ void vortex::StreamInput::InitializeStream()
     }
 
     _stream_collection = std::move(channels_result.value());
-    _stream_indices[0] = _stream_collection.video_channels[0]->index; 
-    _stream_indices[1] = _stream_collection.audio_channels[0]->index; 
+    _stream_indices[0] = _stream_collection.video_channels[0]->index;
+    _stream_indices[1] = _stream_collection.audio_channels[0]->index;
 
-    std::array<int, 1> active_indices = { -1 }; 
+    std::array<int, 1> active_indices = { -1 };
     _stream_handle = MakeUniqueStream(std::move(context), active_indices);
-    
-    ExtractStreamTiming();
 }
 void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
 {
@@ -182,96 +118,19 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
     }
 
     // TODO: make this less ugly
-    auto& stream = *std::bit_cast<ffmpeg::ManagedStream*>(_stream_handle.get());    
+    auto& stream = *std::bit_cast<ffmpeg::ManagedStream*>(_stream_handle.get());
     auto& video_channel = stream.channels.at(_stream_indices[0]);
     auto& audio_channel = stream.channels.at(_stream_indices[1]);
 
-    // Decode video frames with better error handling
-    video_channel.decoder_sem.acquire();
-    while (true) {
-        ffmpeg::unique_frame frame{ av_frame_alloc() };
-        int ret = avcodec_receive_frame(video_channel.decoder_ctx.get(), frame.get());
-        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            video_channel.sent_packets.store(0, std::memory_order::relaxed);
-            frame.reset();
-            break;
-        } else if (ret < 0) {
-            // Log specific error types for debugging
-            if (ret == AVERROR_INVALIDDATA) {
-                vortex::debug("StreamInput: Invalid video data received, continuing...");
-            } else {
-                vortex::debug("StreamInput: Video decode error: {}", ffmpeg::ffmpeg_error_string(ret));
-            }
-            video_channel.sent_packets.store(0, std::memory_order::relaxed);
-            frame.reset();
-            break;
-        }
+    DecodeVideoFrames(video_channel);
+    DecodeAudioFrames(audio_channel);
 
-        // Validate frame before processing
-        if (frame->width <= 0 || frame->height <= 0) {
-            vortex::debug("StreamInput: Received invalid frame dimensions: {}x{}", frame->width, frame->height);
-            continue;
-        }
-
-        // Track the first PTS to use as baseline
-        if (!_stream_timing.video_initialized && frame->pts != AV_NOPTS_VALUE) {
-            _stream_timing.first_video_pts = frame->pts;
-            _stream_timing.start_time = std::chrono::steady_clock::now();
-            _stream_timing.video_initialized = true;
-            vortex::info("StreamInput: First video frame PTS: {}", _stream_timing.first_video_pts);
-        }
-        
-        // Only store frames with valid PTS
-        if (frame->pts != AV_NOPTS_VALUE) {
-            _video_frames[frame->pts] = std::move(frame);
-        }
-    }
-    video_channel.decoder_sem.release();
-
-    // Decode audio frames
-    audio_channel.decoder_sem.acquire();
-    while (true) {
-        ffmpeg::unique_frame frame{ av_frame_alloc() };
-        int ret = avcodec_receive_frame(audio_channel.decoder_ctx.get(), frame.get());
-        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            audio_channel.sent_packets.store(0, std::memory_order::relaxed);
-            frame.reset();
-            break;
-        } else if (ret < 0) {
-            if (ret != AVERROR_INVALIDDATA) { // Don't spam logs for common corruption
-                vortex::debug("StreamInput: Audio decode error: {}", ffmpeg::ffmpeg_error_string(ret));
-            }
-            audio_channel.sent_packets.store(0, std::memory_order::relaxed);
-            frame.reset();
-            break;
-        }
-
-        if (!_stream_timing.audio_initialized && frame->pts != AV_NOPTS_VALUE) {
-            _stream_timing.first_audio_pts = frame->pts;
-            if (!_stream_timing.video_initialized) {
-                _stream_timing.start_time = std::chrono::steady_clock::now();
-            }
-            _stream_timing.audio_initialized = true;
-            vortex::info("StreamInput: First audio frame PTS: {}", _stream_timing.first_audio_pts);
-        }
-
-        if (frame->pts != AV_NOPTS_VALUE) {
-            _audio_frames[frame->pts] = std::move(frame);
-        }
-    }
-    audio_channel.decoder_sem.release();
-    TrimOldFrames();
-}
-
-void vortex::StreamInput::TrimOldFrames()
-{
-    static constexpr std::size_t max_cached_frames = 32; // Max number of frames to cache
-    // Trim video frames
-    while (_video_frames.size() > max_cached_frames) {
+    // Remove old video frames (keep only the latest 100 frames)
+    while (_video_frames.size() > 100) {
         _video_frames.erase(_video_frames.begin());
     }
-    // Trim audio frames
-    while (_audio_frames.size() > max_cached_frames) {
+    // Remove old audio frames (keep only the latest 100 frames)
+    while (_audio_frames.size() > 100) {
         _audio_frames.erase(_audio_frames.begin());
     }
 }
@@ -284,28 +143,39 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
         return; // Skip rendering if texture is not valid
     }
 
-    auto* selected_frame = SelectFrameForCurrentTime(probe);
-    if (!selected_frame || !selected_frame->get()) {
-        vortex::warn("StreamInput: No suitable frame found for current time.");
+    auto now = std::chrono::steady_clock::now();
+    if (_first_video_pts == AV_NOPTS_VALUE) {
         return;
     }
 
+    static std::streamsize frames_available = 0;
+    uint64_t elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - _start_time_video).count();
+    uint64_t current_video_pts = _first_video_pts + TimeToPts(_stream_collection.video_channels[0]->time_base, elapsed_ms);
+    // adjust for some latency
+    current_video_pts = std::max<int64_t>(_first_video_pts, current_video_pts - 2000);
+    auto it = _video_frames.lower_bound(current_video_pts);
+    if (it == _video_frames.end()) {
+        return; // No frames ready to be played
+    }
+
+    AVFrame* frame = it->second.get();
+
     // Get D3D12 texture from the frame
-    auto result_texture = ffmpeg::GetTextureFromFrame(*selected_frame->get());
+    auto result_texture = ffmpeg::GetTextureFromFrame(*frame);
     if (!result_texture) {
         vortex::warn("StreamInput: Failed to get texture from frame: {}", result_texture.error().message());
         return;
     }
     auto& texture = _textures[probe.frame_number % vortex::max_frames_in_flight] = std::move(result_texture.value());
 
-    auto result_fence = ffmpeg::GetFenceFromFrame(*selected_frame->get());
+    auto result_fence = ffmpeg::GetFenceFromFrame(*frame);
     if (!result_fence) {
         vortex::warn("StreamInput: Failed to get fence from frame: {}", result_fence.error().message());
         return;
     }
     auto& fence = _fences[probe.frame_number % vortex::max_frames_in_flight] = std::move(result_fence.value());
 
-    auto fence_value = ffmpeg::GetFenceValueFromFrame(*selected_frame->get());
+    auto fence_value = ffmpeg::GetFenceValueFromFrame(*frame);
     if (!fence_value) {
         vortex::warn("StreamInput: Failed to get fence value from frame: {}", fence_value.error().message());
         return;
@@ -325,7 +195,7 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
                                         .subresource_range = { 0, 1, 0, 1 } } };
 
     _shader_resources[probe.frame_number % vortex::max_frames_in_flight] =
-            DX12CreateSRVNV12(res, device, texture, descs);
+            vortex::ffmpeg::DX12CreateSRVNV12(res, device, texture, descs);
 
     gfx.GetMainQueue().WaitQueue(fence, value); // Wait for the frame to be ready
 
@@ -364,188 +234,84 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
 
     // End the render pass
     cmd_list.EndRenderPass();
-
-// At the end of StreamInput::Evaluate method:
-    if (probe.audio_stream && !_audio_frames.empty()) {
-        auto audio_data = GetAudioForPlayback(probe);
-        if (!audio_data.empty()) {
-            // Uncomment and use SDL3 audio queueing:
-            if (!SDL_PutAudioStreamData(probe.audio_stream, audio_data.data(), static_cast<int>(audio_data.size()))) {
-                vortex::warn("Failed to put audio data to stream: {}", SDL_GetError());
-            }
-        }
-    }
 }
 
-void vortex::StreamInput::ExtractStreamTiming()
+
+void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
 {
-    // Reset timing info
-    _stream_timing = StreamTimingInfo{};
-
-    // Extract video timing from first video stream
-    if (!_stream_collection.video_channels.empty()) {
-        AVStream* video_stream = _stream_collection.video_channels[0];
-
-        _stream_timing.video_timebase = video_stream->time_base;
-
-        // Extract framerate - prefer avg_frame_rate, fallback to r_frame_rate
-        if (video_stream->avg_frame_rate.num > 0 && video_stream->avg_frame_rate.den > 0) {
-            _stream_timing.video_framerate = video_stream->avg_frame_rate;
-        } else if (video_stream->r_frame_rate.num > 0 && video_stream->r_frame_rate.den > 0) {
-            _stream_timing.video_framerate = video_stream->r_frame_rate;
-        } else {
-            // Try to get framerate from codec parameters
-            if (video_stream->codecpar->framerate.num > 0 && video_stream->codecpar->framerate.den > 0) {
-                _stream_timing.video_framerate = video_stream->codecpar->framerate;
-            } else {
-                _stream_timing.video_framerate = { 30, 1 }; // 30 FPS fallback
-                vortex::warn("StreamInput: No video framerate found, using 30 FPS default");
-            }
-        }
-
-        vortex::info("StreamInput: Video - timebase: {}/{}, framerate: {}/{}",
-                     _stream_timing.video_timebase.num, _stream_timing.video_timebase.den,
-                     _stream_timing.video_framerate.num, _stream_timing.video_framerate.den);
-    }
-
-    // Extract audio timing from first audio stream
-    if (!_stream_collection.audio_channels.empty()) {
-        AVStream* audio_stream = _stream_collection.audio_channels[0];
-
-        _stream_timing.audio_timebase = audio_stream->time_base;
-        _stream_timing.audio_sample_rate = audio_stream->codecpar->sample_rate;
-
-        vortex::info("StreamInput: Audio - timebase: {}/{}, sample_rate: {} Hz",
-                     _stream_timing.audio_timebase.num, _stream_timing.audio_timebase.den,
-                     _stream_timing.audio_sample_rate);
-    }
-}
-
-int64_t vortex::StreamInput::CalculateTargetVideoPTS(const vortex::RenderProbe& probe) const
-{
-    if (!_stream_timing.video_initialized || _stream_timing.first_video_pts == AV_NOPTS_VALUE) {
-        return _stream_timing.first_video_pts;
-    }
-
     auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - _stream_timing.start_time);
+    if (_first_audio_pts == AV_NOPTS_VALUE) {
+        return;
+    }
 
-    // Calculate target frame based on output timing
-    double output_frame_duration_ms = 1000.0 * probe.output_framerate.denominator / probe.output_framerate.numerator;
-    double video_frame_duration_ms = 1000.0 * _stream_timing.video_framerate.den / _stream_timing.video_framerate.num;
+    static std::streamsize samples_available = 0;
 
-    // Frame selection ratio (handles framerate mismatch between stream and output)
-    double frame_ratio = video_frame_duration_ms / output_frame_duration_ms;
-    double output_frames_elapsed = elapsed.count() / 1000.0 / output_frame_duration_ms;
-    double target_video_frame = output_frames_elapsed * frame_ratio;
+    uint64_t elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - _start_time_audio).count();
+    uint64_t current_audio_pts = _first_audio_pts + TimeToPts(_stream_collection.audio_channels[0]->time_base, elapsed_ms);
 
-    // Convert frame index to PTS using actual video timebase
-    int64_t frame_duration_pts = av_rescale_q(1,
-                                              av_inv_q(_stream_timing.video_framerate),
-                                              _stream_timing.video_timebase);
+    // adjust for some latency
+    current_audio_pts = current_audio_pts - 6000;
+    if (current_audio_pts < _first_audio_pts) {
+        return;
+    }
 
-    int64_t target_pts = _stream_timing.first_video_pts +
-            static_cast<int64_t>(target_video_frame * frame_duration_pts);
+    // Get all audio frames that are ready to be played
+    auto it = _audio_frames.lower_bound(current_audio_pts);
+    if (it == _audio_frames.end()) {
+        return; // No frames ready to be played
+    }
 
-    return target_pts;
+    AVFrame* frame = it->second.get();
+    probe.first_audio_pts = it->first;
+
+    auto& data = probe.audio_data;
+    data.resize(frame->ch_layout.nb_channels * frame->nb_samples);
+
+    // MOCK: assume the audio is already in float format and has stereo planar layout
+    if (frame->format == AV_SAMPLE_FMT_FLTP && frame->ch_layout.nb_channels == 2) {
+        std::memcpy(data.data(), frame->data[0], frame->nb_samples * sizeof(float)); // Left channel
+        std::memcpy(data.data() + frame->nb_samples, frame->data[1], frame->nb_samples * sizeof(float)); // Right channel
+    } else {
+        vortex::warn("StreamInput: Unsupported audio format or channel count. Expected float planar stereo.");
+    }
+    probe.last_audio_pts = it->first + frame->duration;
 }
 
-int64_t vortex::StreamInput::CalculateTargetAudioPTS(const vortex::RenderProbe& probe) const
+void vortex::StreamInput::DecodeVideoFrames(vortex::ffmpeg::ChannelStorage& video_channel)
 {
-    if (!_stream_timing.audio_initialized || _stream_timing.first_audio_pts == AV_NOPTS_VALUE) {
-        return _stream_timing.first_audio_pts;
-    }
+    static int64_t last_pts = AV_NOPTS_VALUE;
 
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - _stream_timing.start_time);
-
-    // Convert elapsed time to audio samples
-    int64_t samples_elapsed = (elapsed.count() * _stream_timing.audio_sample_rate) / 1000000;
-
-    // Convert samples to PTS using audio timebase
-    int64_t pts_offset = av_rescale_q(samples_elapsed,
-                                      { 1, _stream_timing.audio_sample_rate },
-                                      _stream_timing.audio_timebase);
-
-    return _stream_timing.first_audio_pts + pts_offset;
-}
-
-vortex::ffmpeg::unique_frame* vortex::StreamInput::SelectFrameForCurrentTime(const vortex::RenderProbe& probe)
-{
-    if (_video_frames.empty() || !_stream_timing.video_initialized) {
-        return _video_frames.empty() ? nullptr : &_video_frames.begin()->second;
-    }
-
-    int64_t target_pts = CalculateTargetVideoPTS(probe);
-
-    // Find the frame closest to target PTS
-    auto it = _video_frames.lower_bound(target_pts);
-
-    if (it == _video_frames.end()) {
-        return &_video_frames.rbegin()->second;
-    }
-
-    if (it == _video_frames.begin()) {
-        return &it->second;
-    }
-
-    // Check if previous frame is closer to target
-    auto prev_it = std::prev(it);
-    int64_t curr_diff = std::abs(target_pts - it->first);
-    int64_t prev_diff = std::abs(target_pts - prev_it->first);
-
-    return (prev_diff <= curr_diff) ? &prev_it->second : &it->second;
-}
-
-std::vector<uint8_t> vortex::StreamInput::GetAudioForPlayback(const vortex::RenderProbe& probe)
-{
-    if (_audio_frames.empty() || !_stream_timing.audio_initialized) {
-        return {};
-    }
-
-    int64_t target_pts = CalculateTargetAudioPTS(probe);
-
-    // Collect multiple frames for better buffering (e.g., 3-5 frames)
-    std::vector<uint8_t> combined_buffer;
-    auto it = _audio_frames.lower_bound(target_pts);
-
-    // Process up to 3 frames at once for better latency
-    for (int frame_count = 0; frame_count < 4 && it != _audio_frames.end(); ++frame_count, ++it) {
-        auto& frame = it->second;
-
-        // Setup resampler if needed (same as before)
-        if (!_swr_context) {
-            _swr_context.reset(swr_alloc());
-            AVChannelLayout out_ch_layout = AV_CHANNEL_LAYOUT_STEREO;
-            swr_alloc_set_opts2(_swr_context.address_of(),
-                                &out_ch_layout, AV_SAMPLE_FMT_FLT, probe.audio_sample_rate,
-                                &frame->ch_layout, (AVSampleFormat)frame->format, frame->sample_rate,
-                                0, nullptr);
-            swr_init(_swr_context.get());
+    // try read frames from atomic queue
+    while (auto frame = video_channel.GetDecodedFrame()) {
+        // if first audio frame, set the first audio pts
+        if (_first_video_pts == AV_NOPTS_VALUE) {
+            _start_time_video = std::chrono::steady_clock::now();
+            _first_video_pts = _first_video_pts == AV_NOPTS_VALUE ? frame->get()->pts : _first_video_pts;
         }
 
-        // Resample this frame
-        uint8_t* resampled_data = nullptr;
-        int out_samples = swr_get_out_samples(_swr_context.get(), frame->nb_samples);
-        av_samples_alloc(&resampled_data, nullptr, 2, out_samples, AV_SAMPLE_FMT_FLT, 0);
+        AVFrame* raw_frame = frame->get();
+        // vortex::info("Drained audio frame with PTS: {}, nb_samples: {}, dpts: {}", raw_frame->pts, raw_frame->nb_samples, raw_frame->pts - last_pts);
+        last_pts = raw_frame->pts;
 
-        int converted_samples = swr_convert(_swr_context.get(), &resampled_data, out_samples,
-                                            (const uint8_t**)frame->data, frame->nb_samples);
+        _video_frames[raw_frame->pts] = std::move(frame.value());
+    }
+}
+void vortex::StreamInput::DecodeAudioFrames(vortex::ffmpeg::ChannelStorage& audio_channel)
+{
+    static int64_t last_pts = AV_NOPTS_VALUE;
 
-        if (converted_samples > 0) {
-            int buffer_size = av_samples_get_buffer_size(nullptr, 2, converted_samples, AV_SAMPLE_FMT_FLT, 0);
-
-            // Append to combined buffer
-            size_t current_size = combined_buffer.size();
-            combined_buffer.resize(current_size + buffer_size);
-            std::memcpy(combined_buffer.data() + current_size, resampled_data, buffer_size);
+    // try read frames from atomic queue
+    while (auto frame = audio_channel.GetDecodedFrame()) {
+        // if first audio frame, set the first audio pts
+        if (_first_audio_pts == AV_NOPTS_VALUE) {
+            _start_time_audio = std::chrono::steady_clock::now();
+            _first_audio_pts = _first_audio_pts == AV_NOPTS_VALUE ? frame->get()->pts : _first_audio_pts;
         }
 
-        av_freep(&resampled_data);
+        AVFrame* raw_frame = frame->get();
+        // vortex::info("Drained audio frame with PTS: {}, nb_samples: {}, dpts: {}", raw_frame->pts, raw_frame->nb_samples, raw_frame->pts - last_pts);
+        last_pts = raw_frame->pts;
+
+        _audio_frames[raw_frame->pts] = std::move(frame.value());
     }
-
-    // Remove processed frames
-    _audio_frames.erase(_audio_frames.begin(), it);
-
-    return combined_buffer;
 }

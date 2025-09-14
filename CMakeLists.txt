@@ -92,7 +92,7 @@ PUBLIC
   "src/vortex/util/byte_ring.h"  
   "src/vortex/audio/audio_resampler.h" 
   "src/vortex/ui/message_dispatch.h" 
-)
+ "src/vortex/util/bench_clock.h")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES

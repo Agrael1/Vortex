@@ -147,6 +147,8 @@ void vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProb
     EvaluateAudio();
 }
 
+#include <vortex/util/bench_clock.h>
+
 void vortex::NDIOutput::EvaluateAudio()
 {
     auto sinks = _sinks.GetSinks();
@@ -185,9 +187,10 @@ void vortex::NDIOutput::EvaluateAudio()
         _last_audio_pts = audio_probe.last_audio_pts;
     }
 
+
     std::size_t read_samples = _audio_buffer.ReadPlanar(std::span{ _audio_samples });
     if (read_samples < _audio_buffer.SamplesForFramerate(framerate)) {
-        vortex::warn("NDIOutput: Not enough audio samples to send to NDI (needed {}, got {})", _audio_buffer.SamplesForFramerate(framerate), read_samples);
+        //vortex::warn("NDIOutput: Not enough audio samples to send to NDI (needed {}, got {})", _audio_buffer.SamplesForFramerate(framerate), read_samples);
         return; // No samples to send
     }
 

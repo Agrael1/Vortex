@@ -248,6 +248,7 @@ vortex::codec::CodecFFmpeg::ConnectToStream(std::string_view stream_url,
     // Set the interrupt callback for the format context
     format_context->interrupt_callback.opaque = &timeout_context;
     format_context->interrupt_callback.callback = TimeoutCallbackContext::operator();
+    format_context->flags |= AVFMT_FLAG_NONBLOCK; // Set non-blocking flag
 
     int ret = avformat_open_input(format_context.address_of(), stream_url.data(), nullptr, context_options.address_of());
     if (ret < 0) {

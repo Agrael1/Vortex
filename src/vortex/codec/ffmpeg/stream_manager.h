@@ -1,5 +1,5 @@
 #pragma once
-#include <vortex/util/ffmpeg/hw_decoder.h>
+#include <vortex/codec/ffmpeg/hw_decoder.h>
 #include <vortex/util/lib/SPSC-Queue.h>
 
 #include <unordered_map>
@@ -84,6 +84,7 @@ struct ManagedStream {
     // Only accessed from the I/O thread
     ffmpeg::unique_context context;
     std::unordered_map<int, ChannelStorage> channels;
+    dro::SPSCQueue<ffmpeg::unique_packet, 64> read_queue; // Packets read from the stream, to be sent to decoders
 
     // Modifiable from outside the I/O thread
     std::atomic<bool> update_pending{ false };
@@ -112,6 +113,13 @@ public:
     void DeactivateChannels(StreamHandle handle, std::span<int> inactive_channel_indices);
 
 private:
+    void PacketLoop(std::stop_token stop);
+    bool ReadStreamPackets(std::stop_token stop, vortex::ffmpeg::ManagedStream& stream);
+
+
+    void VideoDecodeLoop(std::stop_token stop);
+    void AudioDecodeLoop(std::stop_token stop);
+
     void IOLoop(std::stop_token stop);
     void IOFlushStream(vortex::ffmpeg::ManagedStream& stream);
     bool IOProcessStream(vortex::ffmpeg::ManagedStream& stream);
@@ -122,7 +130,7 @@ private:
     std::vector<std::jthread> _io_threads;
 
     // Control for unpdating streams
-    std::atomic<bool> _update_pending{ true };
+    std::atomic<uint64_t> _update_generation{ 0 };
     std::shared_mutex _streams_mutex;
     std::unordered_map<StreamHandle, std::shared_ptr<ManagedStream>> _streams;
 

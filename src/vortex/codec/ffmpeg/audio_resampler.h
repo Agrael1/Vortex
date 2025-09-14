@@ -1,6 +1,6 @@
 #pragma once
-#include <vortex/util/ffmpeg/types.h>
-#include <vortex/util/ffmpeg/error.h>
+#include <vortex/codec/ffmpeg/types.h>
+#include <vortex/codec/ffmpeg/error.h>
 #include <expected>
 
 namespace vortex::ffmpeg {

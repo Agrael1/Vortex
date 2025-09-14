@@ -1,5 +1,5 @@
-#include <vortex/util/ffmpeg/stream_manager.h>
-#include <vortex/util/ffmpeg/error.h>
+#include <vortex/codec/ffmpeg/stream_manager.h>
+#include <vortex/codec/ffmpeg/error.h>
 #include <vortex/graphics.h>
 #include <system_error>
 
@@ -54,6 +54,10 @@ vortex::ffmpeg::StreamManager::StreamManager(const vortex::Graphics& gfx)
     av_log_set_callback(AvLogCallbackThunk);
 
     _va_decode_context = ffmpeg::CreateDecodeContext(gfx.GetDevice()).value();
+
+    // Start a single packet reading thread
+    _io_threads.emplace_back([this](std::stop_token stop) { PacketLoop(stop); });
+
     // Start the IO loop thread
     _io_threads.emplace_back([this](std::stop_token stop) { IOLoop(stop); });
 }
@@ -65,19 +69,81 @@ vortex::ffmpeg::StreamManager::~StreamManager()
     }
 }
 
-void vortex::ffmpeg::StreamManager::IOLoop(std::stop_token stop)
+void vortex::ffmpeg::StreamManager::PacketLoop(std::stop_token stop)
 {
-    _log.info("I/O thread started.");
-
+    _log.info("Packet thread started.");
     std::vector<std::shared_ptr<ManagedStream>> streams_to_read;
+    uint64_t last_update_generation = 0;
+
     while (!stop.stop_requested()) {
-        // Copy the list of streams to read to minimize lock time
-        if (_update_pending.exchange(false, std::memory_order::relaxed)) {
+        // In order to stabilize the input stream, we read packets from all streams in a round-robin fashion.
+        uint64_t current_update_generation = _update_generation.load(std::memory_order::acquire);
+        if (current_update_generation != last_update_generation) {
             std::shared_lock lock(_streams_mutex);
             streams_to_read.clear();
             for (const auto& pair : _streams) {
                 streams_to_read.push_back(pair.second);
             }
+            last_update_generation = current_update_generation;
+        }
+
+        if (streams_to_read.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+
+        for (const auto& stream : streams_to_read) {
+            ReadStreamPackets(stop, *stream);
+        }
+    }
+    _log.info("Packet thread stopped.");
+}
+bool vortex::ffmpeg::StreamManager::ReadStreamPackets(
+        std::stop_token stop,
+        vortex::ffmpeg::ManagedStream& stream)
+{
+    ffmpeg::unique_packet packet{ av_packet_alloc() };
+    int ret = av_read_frame(stream.context.get(), packet.get());
+    if (ret == AVERROR(EAGAIN)) {
+        // No packet available right now, try again later
+        return false;
+    }
+    if (ret >= 0) {
+        if (stream.read_queue.size() == 64) {
+            // Read queue is full, drop the packet
+            _log.warn("Read queue full, force pushing for stream index {}", packet->stream_index);
+        }
+
+        // Successfully read a packet, now dispatch it to the appropriate channel
+        stream.read_queue.force_emplace(std::move(packet)); // Non-blocking enqueue
+        return true;
+    }
+
+    if (ret == AVERROR_EOF) {
+        // End of stream, send flush packets to all decoders
+        IOFlushStream(stream);
+        return false;
+    }
+    _log.error("Error reading frame from stream: {}", ffmpeg::ffmpeg_error_string(ret));
+    return false;
+}
+
+void vortex::ffmpeg::StreamManager::IOLoop(std::stop_token stop)
+{
+    _log.info("I/O thread started.");
+    std::vector<std::shared_ptr<ManagedStream>> streams_to_read;
+    uint64_t last_update_generation = 0;
+
+    while (!stop.stop_requested()) {
+        // Copy the list of streams to read to minimize lock time
+        uint64_t current_update_generation = _update_generation.load(std::memory_order::acquire);
+        if (current_update_generation != last_update_generation) {
+            std::shared_lock lock(_streams_mutex);
+            streams_to_read.clear();
+            for (const auto& pair : _streams) {
+                streams_to_read.push_back(pair.second);
+            }
+            last_update_generation = current_update_generation;
         }
 
         if (streams_to_read.empty()) {
@@ -132,38 +198,35 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
     }
 
     // Check if any decoder is overloaded with sent packets
-    for (auto& [index, channel] : stream.channels) {
-        // Try to send queued packets to free up space
-        bool ok = channel.SendQueuedPackets(_log);
-        if (!ok && channel.IsOverflown()) {
-            _log.warn("Decoder for stream {} is overloaded and cannot send queued packets.", index);
-            return false; // If sending queued packets failed, skip reading new packets
+    while (true) {
+        for (auto& [index, channel] : stream.channels) {
+            // Try to send queued packets to free up space
+            bool ok = channel.SendQueuedPackets(_log);
+            if (!ok && channel.IsOverflown()) {
+                _log.warn("Decoder for stream {} is overloaded and cannot send queued packets.", index);
+                return false; // If sending queued packets failed, skip reading new packets
+            }
         }
-    }
 
-    // This is the core of the non-blocking read. av_read_frame will return
-    // after a timeout (set in StreamInput::initialize_stream) or when a packet arrives.
-    ffmpeg::unique_packet packet{ av_packet_alloc() };
-    int ret = av_read_frame(stream.context.get(), packet.get());
-    if (ret < 0 && ret != AVERROR(EAGAIN)) {
-        if (ret == AVERROR_EOF) {
-            // End of stream, send flush packets to all decoders
-            IOFlushStream(stream);
+        // This is the core of the non-blocking read. av_read_frame will return
+        // after a timeout (set in StreamInput::initialize_stream) or when a packet arrives.
+
+        ffmpeg::unique_packet packet;
+        bool got_packet = stream.read_queue.try_pop(packet);
+        if (!got_packet) {
+            return false; // No more packets to process right now
         }
-        _log.error("Error reading frame from stream: {}", ffmpeg::ffmpeg_error_string(ret));
-        return false;
-    }
-    bool packet_valid = ret >= 0;
 
-    // Successfully read a packet, now dispatch it to the appropriate channel
-    auto it = stream.channels.find(packet->stream_index);
-    if (it == stream.channels.end()) {
-        // No active channel for this stream index, discard the packet
-        return false;
-    }
-    auto& channel = it->second;
+        // Successfully read a packet, now dispatch it to the appropriate channel
+        auto it = stream.channels.find(packet->stream_index);
+        if (it == stream.channels.end()) {
+            // No active channel for this stream index, discard the packet
+            continue;
+        }
+        auto& channel = it->second;
 
-    bool ok = channel.SendPacket(std::move(packet), _log);
+        bool ok = channel.SendPacket(std::move(packet), _log);
+    }
     return true;
 }
 
@@ -291,7 +354,7 @@ vortex::ffmpeg::StreamManager::RegisterStream(ffmpeg::unique_context context, st
     std::unique_lock lock(_streams_mutex);
     StreamHandle handle = std::bit_cast<StreamHandle>(stream.get());
     _streams[handle] = std::move(stream);
-    _update_pending.store(true, std::memory_order::relaxed);
+    _update_generation.fetch_add(1, std::memory_order::relaxed);
     return handle;
 }
 void vortex::ffmpeg::StreamManager::UnregisterStream(StreamHandle handle)
@@ -301,6 +364,7 @@ void vortex::ffmpeg::StreamManager::UnregisterStream(StreamHandle handle)
     }
     std::unique_lock lock(_streams_mutex);
     _streams.erase(handle);
+    _update_generation.fetch_add(1, std::memory_order::relaxed);
 }
 void vortex::ffmpeg::StreamManager::SetChannelActive(StreamHandle handle, int stream_index, bool active)
 {

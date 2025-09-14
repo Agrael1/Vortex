@@ -1,6 +1,6 @@
 #include "stream_input.h"
 #include <vortex/graphics.h>
-#include <vortex/util/ffmpeg/error.h>
+#include <vortex/codec/ffmpeg/error.h>
 #include <vortex/gfx/descriptor_buffer.h>
 
 
@@ -249,32 +249,40 @@ void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
     uint64_t elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - _start_time_audio).count();
     uint64_t current_audio_pts = _first_audio_pts + TimeToPts(_stream_collection.audio_channels[0]->time_base, elapsed_ms);
 
-    // adjust for some latency
-    current_audio_pts = current_audio_pts - 6000;
-    if (current_audio_pts < _first_audio_pts) {
-        return;
-    }
-
     // Get all audio frames that are ready to be played
     auto it = _audio_frames.lower_bound(current_audio_pts);
     if (it == _audio_frames.end()) {
         return; // No frames ready to be played
     }
 
+    std::size_t frames = std::distance(it, _audio_frames.end());
+    if (frames > 3) {
+        frames = 3; // Limit to 3 frames to avoid excessive latency
+    }
+
     AVFrame* frame = it->second.get();
     probe.first_audio_pts = it->first;
 
     auto& data = probe.audio_data;
-    data.resize(frame->ch_layout.nb_channels * frame->nb_samples);
+    data.resize(frame->ch_layout.nb_channels * frame->nb_samples * frames);
+    auto delta = frame->nb_samples * frames;
 
-    // MOCK: assume the audio is already in float format and has stereo planar layout
-    if (frame->format == AV_SAMPLE_FMT_FLTP && frame->ch_layout.nb_channels == 2) {
-        std::memcpy(data.data(), frame->data[0], frame->nb_samples * sizeof(float)); // Left channel
-        std::memcpy(data.data() + frame->nb_samples, frame->data[1], frame->nb_samples * sizeof(float)); // Right channel
-    } else {
-        vortex::warn("StreamInput: Unsupported audio format or channel count. Expected float planar stereo.");
+    for (std::size_t i = 0; i < frames; ++i) {
+        AVFrame* frame = it->second.get();
+        // MOCK: assume the audio is already in float format and has stereo planar layout
+        if (frame->format == AV_SAMPLE_FMT_FLTP && frame->ch_layout.nb_channels == 2) {
+            std::memcpy(data.data() + frame->nb_samples * i, frame->data[0], frame->nb_samples * sizeof(float)); // Left channel
+            std::memcpy(data.data() + delta + frame->nb_samples * i, frame->data[1], frame->nb_samples * sizeof(float)); // Right channel
+        } else {
+            vortex::warn("StreamInput: Unsupported audio format or channel count. Expected float planar stereo.");
+        }
+        // erase the frame after consuming
+        auto next_it = std::next(it);
+        _audio_frames.erase(it);
+        it = next_it;
     }
-    probe.last_audio_pts = it->first + frame->duration;
+
+    //probe.last_audio_pts = it->first + frame->duration;
 }
 
 void vortex::StreamInput::DecodeVideoFrames(vortex::ffmpeg::ChannelStorage& video_channel)

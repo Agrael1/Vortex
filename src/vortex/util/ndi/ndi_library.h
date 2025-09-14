@@ -99,6 +99,8 @@ private:
     {
         NDIlib_send_create_t create_desc = {};
         create_desc.p_ndi_name = name.data();
+        create_desc.clock_video = true;
+        create_desc.clock_audio = false;
         auto send_instance = NDIlib_send_create(&create_desc);
         if (!send_instance) {
             vortex::error("Failed to create NDI send instance");

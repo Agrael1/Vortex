@@ -58,7 +58,7 @@ public:
         };
 
         constexpr std::pair<std::string_view, std::string_view> stream_values[]{
-            std::pair{ "stream_url", "rtp://127.0.0.1:6000" },
+            std::pair{ "stream_url", "rtp://127.0.0.1:1234" },
         };
 
         // Test setup of the model

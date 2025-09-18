@@ -39,7 +39,7 @@ public:
     App(const MainArgs& args)
         : _gfx(true)
         , _exit(AppExitControl::GetInstance())
-        , _ui_app("Vortex Application", 1920, 1080, false)
+        , _ui_app(CreateUIApp(args.headless))
         , _descriptor_buffer(_gfx)
     {
         wis::Result res = wis::success;
@@ -178,6 +178,14 @@ private:
     static void OnNodeUpdateThunk(void* observer, uintptr_t node, uint32_t property_index, std::string_view value)
     {
         std::bit_cast<App*>(observer)->OnNodeUpdate(node, property_index, value);
+    }
+    static vortex::ui::UIApp CreateUIApp(bool headless)
+    {
+        if (headless) {
+            return vortex::ui::UIApp();
+        } else {
+            return vortex::ui::UIApp("Vortex Application", 1920, 1080, false);
+        }
     }
     void OnNodeUpdate(uintptr_t node, uint32_t property_index, std::string_view value)
     {

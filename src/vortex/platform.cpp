@@ -2,7 +2,7 @@
 #include <vortex/util/log.h>
 #include <wisdom/wisdom_platform.hpp>
 #include <SDL3/SDL_platform_defines.h>
-
+#include <SDL3/SDL_video.h>
 
 
 vortex::PlatformExtension::PlatformExtension()

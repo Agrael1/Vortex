@@ -41,58 +41,58 @@ public:
         return logger != nullptr;
     }
 
-    void info(std::string_view message)
+    void info(std::string_view message) const
     {
         logger->info(message);
     }
-    void warn(std::string_view message)
+    void warn(std::string_view message) const
     {
         logger->warn(message);
     }
-    void error(std::string_view message)
+    void error(std::string_view message) const
     {
         logger->error(message);
     }
-    void critical(std::string_view message)
+    void critical(std::string_view message) const
     {
         logger->critical(message);
     }
-    void trace(std::string_view message)
+    void trace(std::string_view message) const
     {
         logger->trace(message);
     }
-    void debug(std::string_view message)
+    void debug(std::string_view message) const
     {
         logger->debug(message);
     }
 
     template<class... _Types>
-    void info(const std::format_string<_Types...> fmt, _Types&&... args)
+    void info(const std::format_string<_Types...> fmt, _Types&&... args) const
     {
         info(std::vformat(fmt.get(), std::make_format_args(args...)));
     }
     template<class... _Types>
-    void warn(const std::format_string<_Types...> fmt, _Types&&... args)
+    void warn(const std::format_string<_Types...> fmt, _Types&&... args) const
     {
         warn(std::vformat(fmt.get(), std::make_format_args(args...)));
     }
     template<class... _Types>
-    void error(const std::format_string<_Types...> fmt, _Types&&... args)
+    void error(const std::format_string<_Types...> fmt, _Types&&... args) const
     {
         error(std::vformat(fmt.get(), std::make_format_args(args...)));
     }
     template<class... _Types>
-    void critical(const std::format_string<_Types...> fmt, _Types&&... args)
+    void critical(const std::format_string<_Types...> fmt, _Types&&... args) const
     {
         critical(std::vformat(fmt.get(), std::make_format_args(args...)));
     }
     template<class... _Types>
-    void trace(const std::format_string<_Types...> fmt, _Types&&... args)
+    void trace(const std::format_string<_Types...> fmt, _Types&&... args) const
     {
         trace(std::vformat(fmt.get(), std::make_format_args(args...)));
     }
     template<class... _Types>
-    void debug(const std::format_string<_Types...> fmt, _Types&&... args)
+    void debug(const std::format_string<_Types...> fmt, _Types&&... args) const
     {
         debug(std::vformat(fmt.get(), std::make_format_args(args...)));
     }

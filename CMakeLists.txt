@@ -29,18 +29,17 @@ add_library(VortexLib STATIC)
 target_sources(VortexLib
 PUBLIC
 # "src/vortex/pch.hpp"
-#
+
 # "src/vortex/gfx/swapchain.h"
-# "src/vortex/gfx/descriptor_buffer.h" 
-# "src/vortex/consts.h" 
-# "src/vortex/gfx/descriptor_buffer.cpp" 
+  "src/vortex/gfx/descriptor_buffer.h" 
+  "src/vortex/gfx/descriptor_buffer.cpp" 
 # "src/vortex/gfx/texture.cpp"
 # "src/vortex/gfx/texture.h"
 # "src/vortex/gfx/texture_pool.cpp"
 # "src/vortex/gfx/texture_pool.h"
-#
-# "src/vortex/graph/optimize_probe.h" 
-# "src/vortex/graph/optimize_probe.cpp"
+
+  "src/vortex/graph/optimize_probe.h" 
+  "src/vortex/graph/optimize_probe.cpp"
 # "src/vortex/graph/ports.h" 
 # "src/vortex/graph/connection.h" 
 # "src/vortex/graph/interfaces.h" 
@@ -79,15 +78,17 @@ PUBLIC
 #
  "src/vortex/ui/sdl.h"
  "src/vortex/ui/sdl.cpp"
-#
-# "src/vortex/graphics.h"
+
+# "src/vortex/consts.h" 
 # "src/vortex/probe.h" 
-#  
-# "src/vortex/platform.cpp" 
-# "src/vortex/graphics.cpp" 
-# "src/vortex/model.h" 
-# "src/vortex/model.cpp" 
-#  
+
+ "src/vortex/platform.cpp" 
+ "src/vortex/platform.h" 
+ "src/vortex/graphics.cpp" 
+ "src/vortex/graphics.h"
+ "src/vortex/model.h" 
+ "src/vortex/model.cpp" 
+  
 # "src/vortex/util/lazy.h"  
   "src/vortex/util/interprocess_lock.h" 
   "src/vortex/util/interprocess_lock.cpp" 
@@ -96,7 +97,7 @@ PUBLIC
 # "src/vortex/util/byte_ring.h"  
 # "src/vortex/audio/audio_resampler.h" 
 # "src/vortex/ui/message_dispatch.h" 
-#"src/vortex/util/bench_clock.h" 
+# "src/vortex/util/bench_clock.h" 
 
  "src/vortex/util/main_args.h")
 

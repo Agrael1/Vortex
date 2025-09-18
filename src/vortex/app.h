@@ -7,6 +7,8 @@
 #include <vortex/model.h>
 #include <vortex/util/lib/SPSC-Queue.h>
 #include <vortex/ui/message_dispatch.h>
+#include <vortex/util/ndi/ndi_library.h>
+#include <vortex/util/main_args.h>
 
 namespace vortex {
 struct AppExitControl {
@@ -16,7 +18,7 @@ struct AppExitControl {
 
     static void Exit()
     {
-        GetInstance().exit = true;
+        GetInstance().exit.store(true, std::memory_order::relaxed);
     }
 
     static AppExitControl& GetInstance()
@@ -25,7 +27,7 @@ struct AppExitControl {
         return instance;
     }
 
-    bool exit = false;
+    std::atomic<bool> exit = false;
 };
 
 class App
@@ -34,7 +36,7 @@ class App
     using MessaheHanlderDispatch = void (*)(App&, CefListValue&);
 
 public:
-    App()
+    App(const MainArgs& args)
         : _gfx(true)
         , _exit(AppExitControl::GetInstance())
         , _ui_app("Vortex Application", 1920, 1080, false)

@@ -19,7 +19,7 @@ vortex::interprocess_lock::interprocess_lock(std::string_view name)
 #endif
 }
 
-vortex::interprocess_lock::~interprocess_lock()
+vortex::interprocess_lock::~interprocess_lock() noexcept
 {
 #if defined(_WIN32)
     if (mutex_handle != nullptr) {
@@ -35,7 +35,7 @@ vortex::interprocess_lock::~interprocess_lock()
 #endif
 }
 
-bool vortex::interprocess_lock::try_lock(std::chrono::milliseconds timeout)
+bool vortex::interprocess_lock::try_lock(std::chrono::milliseconds timeout) noexcept
 {
 #if defined(_WIN32)
     DWORD result = WaitForSingleObject(mutex_handle, static_cast<DWORD>(timeout.count()));
@@ -57,7 +57,7 @@ bool vortex::interprocess_lock::try_lock(std::chrono::milliseconds timeout)
     return sem_timedwait(semaphore, &ts) == 0;
 #endif
 }
-bool vortex::interprocess_lock::lock()
+bool vortex::interprocess_lock::lock() noexcept
 {
 #if defined(_WIN32)
     DWORD result = WaitForSingleObject(mutex_handle, INFINITE);
@@ -67,7 +67,7 @@ bool vortex::interprocess_lock::lock()
 #endif
 }
 
-void vortex::interprocess_lock::unlock()
+void vortex::interprocess_lock::unlock() noexcept
 {
 #if defined(_WIN32)
     ReleaseMutex(mutex_handle);

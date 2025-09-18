@@ -1,4 +1,4 @@
-project(generator)
+project(prop_generator)
 
 find_program(CLANG_FORMAT_EXECUTABLE NAMES clang-format)
 if( CLANG_FORMAT_EXECUTABLE )
@@ -16,7 +16,7 @@ endif()
 
 add_executable(${PROJECT_NAME} generator.cpp)
 target_link_libraries(${PROJECT_NAME} 
-	tinyxml2::tinyxml2
+	tinyxml2
 )
 set_target_properties(${PROJECT_NAME}
 	PROPERTIES

@@ -2,7 +2,6 @@
 
 option(VORTEX_GENERATE_PROPERTIES "Build generator and generate properties" ON)
 option(VORTEX_BUILD_TESTS "Build tests" ON)
-set(WISDOM_FORCE_VULKAN ON CACHE BOOL "Force Vulkan backend for Wisdom")
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141 AND MSVC)
@@ -16,6 +15,11 @@ include(cmake/shaders.cmake)
 
 find_package(FFMPEG REQUIRED)
 
+if (UNIX AND NOT APPLE)
+  set(VORTEX_LINUX TRUE)
+  find_package(X11 REQUIRED)
+endif()
+
 if (VORTEX_GENERATE_PROPERTIES)
   add_subdirectory(gen)
 endif()
@@ -24,75 +28,77 @@ endif()
 add_library(VortexLib STATIC)
 target_sources(VortexLib
 PUBLIC
-  "src/vortex/pch.hpp"
-
-  "src/vortex/gfx/swapchain.h"
-  "src/vortex/gfx/descriptor_buffer.h" 
-  "src/vortex/consts.h" 
-  "src/vortex/gfx/descriptor_buffer.cpp" 
-  "src/vortex/gfx/texture.cpp"
-  "src/vortex/gfx/texture.h"
-  "src/vortex/gfx/texture_pool.cpp"
-  "src/vortex/gfx/texture_pool.h"
-
-  "src/vortex/graph/optimize_probe.h" 
-  "src/vortex/graph/optimize_probe.cpp"
-  "src/vortex/graph/ports.h" 
-  "src/vortex/graph/connection.h" 
-  "src/vortex/graph/interfaces.h" 
-  "src/vortex/graph/node_factory.h" 
-
-  "src/vortex/util/lib/SPSC-Queue.h" 
-  "src/vortex/util/reflection.h" 
-  "src/vortex/util/log.h"
-  "src/vortex/util/ndi/ndi_library.h"  
-  "src/vortex/util/ndi/ndi_swapchain.h" 
-  "src/vortex/util/ndi/ndi_swapchain.cpp"
-  "src/vortex/util/rational.h"
-  "src/vortex/util/unique_any.h"
-  "src/vortex/util/common.h"
-
-  "src/vortex/nodes/input/image_input.h"
-  "src/vortex/nodes/input/image_input.cpp"
-  "src/vortex/nodes/input/stream_input.h"
-  "src/vortex/nodes/input/stream_input.cpp"
-  "src/vortex/nodes/filter/composition.h"
-  "src/vortex/nodes/filter/blend.h"
-  "src/vortex/nodes/node_registry.h"
-
-  "src/vortex/codec/ffmpeg/types.h" 
-  "src/vortex/codec/ffmpeg/error.h" 
-  "src/vortex/codec/ffmpeg/stream_manager.h" 
-  "src/vortex/codec/ffmpeg/stream_manager.cpp" 
-  "src/vortex/codec/ffmpeg/hw_decoder.h" 
-  "src/vortex/codec/ffmpeg/audio_resampler.h" 
-  "src/vortex/codec/ffmpeg/audio_resampler.cpp"
-  "src/vortex/codec/ffmpeg/codec_ffmpeg.h" 
-  "src/vortex/codec/ffmpeg/codec_ffmpeg.cpp" 
-
-  "src/vortex/sync/wall_clock.h"
-  "src/vortex/sync/timeline.h"
-
-  "src/vortex/ui/sdl.h"
-  "src/vortex/ui/sdl.cpp"
-
-  "src/vortex/graphics.h"
-  "src/vortex/probe.h" 
-   
-  "src/vortex/platform.cpp" 
-  "src/vortex/graphics.cpp" 
-  "src/vortex/model.h" 
-  "src/vortex/model.cpp" 
-   
-  "src/vortex/util/lazy.h"  
+# "src/vortex/pch.hpp"
+#
+# "src/vortex/gfx/swapchain.h"
+# "src/vortex/gfx/descriptor_buffer.h" 
+# "src/vortex/consts.h" 
+# "src/vortex/gfx/descriptor_buffer.cpp" 
+# "src/vortex/gfx/texture.cpp"
+# "src/vortex/gfx/texture.h"
+# "src/vortex/gfx/texture_pool.cpp"
+# "src/vortex/gfx/texture_pool.h"
+#
+# "src/vortex/graph/optimize_probe.h" 
+# "src/vortex/graph/optimize_probe.cpp"
+# "src/vortex/graph/ports.h" 
+# "src/vortex/graph/connection.h" 
+# "src/vortex/graph/interfaces.h" 
+# "src/vortex/graph/node_factory.h" 
+#
+# "src/vortex/util/lib/SPSC-Queue.h" 
+# "src/vortex/util/reflection.h" 
+# "src/vortex/util/log.h"
+# "src/vortex/util/ndi/ndi_library.h"  
+# "src/vortex/util/ndi/ndi_swapchain.h" 
+# "src/vortex/util/ndi/ndi_swapchain.cpp"
+# "src/vortex/util/rational.h"
+# "src/vortex/util/unique_any.h"
+# "src/vortex/util/common.h"
+#
+# "src/vortex/nodes/input/image_input.h"
+# "src/vortex/nodes/input/image_input.cpp"
+# "src/vortex/nodes/input/stream_input.h"
+# "src/vortex/nodes/input/stream_input.cpp"
+# "src/vortex/nodes/filter/composition.h"
+# "src/vortex/nodes/filter/blend.h"
+# "src/vortex/nodes/node_registry.h"
+#
+# "src/vortex/codec/ffmpeg/types.h" 
+# "src/vortex/codec/ffmpeg/error.h" 
+# "src/vortex/codec/ffmpeg/stream_manager.h" 
+# "src/vortex/codec/ffmpeg/stream_manager.cpp" 
+# "src/vortex/codec/ffmpeg/hw_decoder.h" 
+# "src/vortex/codec/ffmpeg/audio_resampler.h" 
+# "src/vortex/codec/ffmpeg/audio_resampler.cpp"
+# "src/vortex/codec/ffmpeg/codec_ffmpeg.h" 
+# "src/vortex/codec/ffmpeg/codec_ffmpeg.cpp" 
+#
+# "src/vortex/sync/wall_clock.h"
+# "src/vortex/sync/timeline.h"
+#
+ "src/vortex/ui/sdl.h"
+ "src/vortex/ui/sdl.cpp"
+#
+# "src/vortex/graphics.h"
+# "src/vortex/probe.h" 
+#  
+# "src/vortex/platform.cpp" 
+# "src/vortex/graphics.cpp" 
+# "src/vortex/model.h" 
+# "src/vortex/model.cpp" 
+#  
+# "src/vortex/util/lazy.h"  
   "src/vortex/util/interprocess_lock.h" 
   "src/vortex/util/interprocess_lock.cpp" 
-  "src/vortex/nodes/output/ndi_output.cpp" 
-  "src/vortex/audio/audio_buffer.h" 
-  "src/vortex/util/byte_ring.h"  
-  "src/vortex/audio/audio_resampler.h" 
-  "src/vortex/ui/message_dispatch.h" 
- "src/vortex/util/bench_clock.h")
+# "src/vortex/nodes/output/ndi_output.cpp" 
+# "src/vortex/audio/audio_buffer.h" 
+# "src/vortex/util/byte_ring.h"  
+# "src/vortex/audio/audio_resampler.h" 
+# "src/vortex/ui/message_dispatch.h" 
+#"src/vortex/util/bench_clock.h" 
+
+ "src/vortex/util/main_args.h")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
@@ -110,23 +116,19 @@ target_link_libraries(VortexLib
     
     FFmpeg::FFmpeg
     frozen::frozen-headers
-
+    DirectXMath
 
     wis::wisdom-headers
     wis::wisdom-debug-headers
     wis::wisdom-extended-allocation-headers
     wis::wisdom-platform-headers
     wis::wisdom-descriptor-buffer-headers
+
+    #x11 for linux
+    $<$<BOOL:${VORTEX_LINUX}>:${X11_LIBRARIES}>
 )
 #target_compile_definitions(VortexLib PUBLIC WISDOM_FORCE_VULKAN=1)
 target_precompile_headers(VortexLib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
-
-
-
-
-
-
-
 
 
 add_executable(${PROJECT_NAME})
@@ -135,18 +137,20 @@ target_sources(${PROJECT_NAME}
 PRIVATE
   "src/entry_main.cpp"
 
-  "src/vortex/ui/cef_app.h"
-  "src/vortex/ui/implements.h"
   "src/vortex/ui/client.h" 
+  "src/vortex/ui/implements.h"
+  "src/vortex/ui/cef/app.h"
+  "src/vortex/ui/cef/app.cpp"
+  "src/vortex/ui/ui_app.h"
+  "src/vortex/ui/ui_app.cpp"
   "src/vortex/ui/value.h" 
-  "src/vortex/ui/ui_app.h"
-  "src/vortex/ui/ui_app.cpp" 
-  "src/vortex/ui/call_handler.h" 
-  "src/vortex/ui/cef_app.cpp"  
-  "src/vortex/ui/ui_app.h"
+  "src/vortex/ui/call_handler.h"  
 
   "src/vortex/app.h"
-
+)
+target_compile_options(${PROJECT_NAME} PRIVATE
+  $<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
+  $<$<CXX_COMPILER_ID:Clang>:-Wno-interference-size>
 )
 
 add_custom_target(ui)

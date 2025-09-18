@@ -3,6 +3,7 @@
 #include <vortex/util/log.h>
 #include <vortex/graphics.h>
 #include <vortex/util/common.h>
+#include <wisdom/wisdom_platform.hpp>
 
 typedef struct HWND__* HWND;
 
@@ -36,7 +37,7 @@ wis::SwapChain vortex::ui::SDLWindow::CreateSwapchain(const vortex::Graphics& gf
         Display* xdisplay = (Display*)SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
         ::Window xwindow = (::Window)SDL_GetNumberProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
         if (xdisplay && xwindow) {
-            swapchain = static_cast<wis::platform::X11Extension*>(platform.GetExtension())
+            swapchain = static_cast<const wis::platform::X11Extension*>(platform.GetExtension())
                                 ->CreateSwapchain(result, device, main_queue, desc, xdisplay, xwindow);
         }
     } break;
@@ -44,7 +45,7 @@ wis::SwapChain vortex::ui::SDLWindow::CreateSwapchain(const vortex::Graphics& gf
         struct wl_display* display = (struct wl_display*)SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
         struct wl_surface* surface = (struct wl_surface*)SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
         if (display && surface) {
-            swapchain = static_cast<wis::platform::WaylandExtension*>(platform.GetExtension())
+            swapchain = static_cast<const wis::platform::WaylandExtension*>(platform.GetExtension())
                                 ->CreateSwapchain(result, device, main_queue, desc, display, surface);
         }
     } break;

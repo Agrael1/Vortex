@@ -140,15 +140,6 @@ private:
     std::shared_ptr<spdlog::logger> logger;
 };
 
-inline Log CreateLog(const LogOptions& options, bool set_default = false)
-{
-    Log log{ options };
-    if (set_default) {
-        log.SetAsDefault();
-    }
-    return log;
-}
-
 inline void info(std::string_view message)
 {
     spdlog::info(message);
@@ -205,11 +196,6 @@ template<class... _Types>
 void debug(const std::format_string<_Types...> fmt, _Types&&... args)
 {
     spdlog::debug(std::vformat(fmt.get(), std::make_format_args(args...)));
-}
-
-inline LogView GetLog(std::string_view name)
-{
-    return LogView{ spdlog::get(name.data()) };
 }
 
 constexpr inline std::string_view graphics_log_name = "vortex.graphics";

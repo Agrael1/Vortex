@@ -2,14 +2,14 @@
 #include <vortex/ui/implements.h>
 #include <vortex/ui/value.h>
 #include <vortex/ui/call_handler.h>
-#include <include/cef_app.h>
+#include <vortex/util/lib/reflect.h>
+
 #include <fstream>
-#include <include/wrapper/cef_helpers.h>
+
+#include <include/cef_app.h>
+#include <include/cef_api_versions.h>
 
 namespace vortex::ui {
-
-
-
 class VortexResourceHandler : public CefImplements<VortexResourceHandler, CefResourceHandler>
 {
 public:
@@ -48,6 +48,36 @@ public:
 };
 class VortexCefApp : public CefImplements<VortexCefApp, CefApp, CefBrowserProcessHandler, CefRenderProcessHandler>
 {
+    struct InitGuard
+    {
+        explicit InitGuard(bool init)
+            : init(init)
+        {
+        }
+        ~InitGuard()
+        {
+            if (init) CefShutdown();
+        }
+        operator bool() const noexcept
+        {
+            return init;
+        }
+
+    private:
+        bool init = false;
+    };
+
+public:
+    VortexCefApp([[maybe_unused]] int argc, [[maybe_unused]] char** argv)
+#ifdef _WIN32 
+      : _main_args(GetModuleHandle(nullptr))
+#else
+      : _main_args(argc, argv)
+#endif
+    {
+
+    }
+
 public:
     CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override
     {
@@ -84,8 +114,33 @@ public:
         }
         return false; // Message not handled
     }
+    const CefMainArgs& GetMainArgs() const noexcept
+    {
+        return _main_args;
+    }
+
+    int StartCefSubprocess() noexcept
+    {
+        return CefExecuteProcess(_main_args, this, nullptr);
+    }
+    InitGuard InitializeCef() noexcept
+    {
+        CefSettings cef_settings;
+        cef_settings.multi_threaded_message_loop = true;
+        cef_settings.no_sandbox = true;
+        CefString(&cef_settings.cache_path).FromString((std::filesystem::current_path() / std::format("cef_cache_{}", CEF_API_VERSION_LAST)).string()); // Set cache path
+        
+        if (!CefInitialize(_main_args, cef_settings, this, nullptr)) {
+            int exit_code = CefGetExitCode();
+            vortex::critical("CefInitialize failed with error {}: {}", exit_code, 
+                reflect::enum_name(cef_return_value_t(exit_code)));
+            return InitGuard{ false }; // Initialization failed
+        }
+        return InitGuard{ true }; // Successfully initialized
+    }
 
 private:
     CefRefPtr<VortexV8Handler> _handler;
+    CefMainArgs _main_args;
 };
 } // namespace vortex::ui

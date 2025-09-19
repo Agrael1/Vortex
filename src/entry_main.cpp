@@ -27,19 +27,13 @@ try {
     // Create default logs after CEF initialization
     log_storage.CreateDefaultLogs(debug);
 
-    // catch Ctrl+C
-    std::signal(SIGINT, [](int) {
-        vortex::critical("Ctrl+C pressed");
-        vortex::AppExitControl::Exit();
-    });
-
     auto init_guard = cef_app->InitializeCef();
     if (!init_guard) {
         return -1; // CEF initialization failed
     }
 
     // Initialize Node Library
-    //vortex::RegisterHardwareNodes();
+    // vortex::RegisterHardwareNodes();
     return vortex::App{ parsed_args }.Run();
 } catch (const std::exception& e) {
     vortex::critical(e.what());

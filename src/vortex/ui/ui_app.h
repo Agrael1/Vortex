@@ -39,10 +39,6 @@ public:
 public:
     int ProcessEvents()
     {
-        if (!_window) {
-            return 0; // No window to process events for
-        }
-
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             switch (event.type) {

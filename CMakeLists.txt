@@ -220,15 +220,16 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   $<TARGET_FILE_DIR:${PROJECT_NAME}>
 )
 
+# Copy the CEF DLLs to the output directory
+# only copy dlls, bin and json files
+file(GLOB CEF_DLLS "${CEF_SOURCE_DIR}/Release/*.dll" "${CEF_SOURCE_DIR}/Release/*.bin" "${CEF_SOURCE_DIR}/Release/*.json")
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+  ${CEF_DLLS}
+  $<TARGET_FILE_DIR:${PROJECT_NAME}>
+)
+
 if (WIN32)
-  # Copy the CEF DLLs to the output directory
-  # only copy dlls, bin and json files
-  file(GLOB CEF_DLLS "${CEF_SOURCE_DIR}/Release/*.dll" "${CEF_SOURCE_DIR}/Release/*.bin" "${CEF_SOURCE_DIR}/Release/*.json")
-  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    ${CEF_DLLS}
-    $<TARGET_FILE_DIR:${PROJECT_NAME}>
-  )
   set(MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/rc")
   add_custom_command(
     TARGET ${PROJECT_NAME}

@@ -4,6 +4,7 @@
 #endif // NDI_AVAILABLE
 
 #include <vortex/util/log.h>
+#include <wisdom/wisdom.hpp>
 
 namespace vortex {
 class NDILibrary

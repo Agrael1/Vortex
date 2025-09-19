@@ -2,6 +2,7 @@
 #include <vortex/codec/ffmpeg/types.h>
 #include <vortex/codec/ffmpeg/error.h>
 #include <expected>
+#include <span>
 
 namespace vortex::ffmpeg {
 struct ResamplerDesc {

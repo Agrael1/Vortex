@@ -187,6 +187,9 @@ void vortex::NDIOutput::EvaluateAudio()
         _last_audio_pts = audio_probe.last_audio_pts;
     }
 
+    if (_audio_buffer.IsEmpty()) {
+        return; // No audio to send
+    }
 
     std::size_t read_samples = _audio_buffer.ReadPlanar(std::span{ _audio_samples });
     if (read_samples < _audio_buffer.SamplesForFramerate(framerate)) {

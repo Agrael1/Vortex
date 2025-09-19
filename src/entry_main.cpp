@@ -33,7 +33,7 @@ try {
     }
 
     // Initialize Node Library
-    // vortex::RegisterHardwareNodes();
+    vortex::RegisterHardwareNodes();
     return vortex::App{ parsed_args }.Run();
 } catch (const std::exception& e) {
     vortex::critical(e.what());

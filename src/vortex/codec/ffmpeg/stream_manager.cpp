@@ -1,11 +1,12 @@
 #include <vortex/codec/ffmpeg/stream_manager.h>
 #include <vortex/codec/ffmpeg/error.h>
+#include <vortex/util/log_storage.h>
 #include <vortex/graphics.h>
 #include <system_error>
 
 void vortex::ffmpeg::StreamManager::AvLogCallbackThunk(void* ptr, int level, const char* fmt, va_list vargs)
 {
-    static auto log = vortex::GetLog(vortex::stream_log_name); // Static to avoid repeated lookups
+    static auto log = vortex::LogStorage::GetLog(vortex::stream_log_name); // Static to avoid repeated lookups
 
     // Get only above info level
     if (level >= AV_LOG_INFO) {
@@ -48,7 +49,7 @@ void vortex::ffmpeg::StreamManager::AvLogCallbackThunk(void* ptr, int level, con
 }
 
 vortex::ffmpeg::StreamManager::StreamManager(const vortex::Graphics& gfx)
-    : _log(vortex::GetLog(vortex::stream_log_name))
+    : _log(vortex::LogStorage::GetLog(vortex::stream_log_name))
 {
     // Set FFmpeg log callback
     av_log_set_callback(AvLogCallbackThunk);

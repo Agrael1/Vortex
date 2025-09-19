@@ -153,6 +153,15 @@ public:
             _buffers[ch].clear();
         }
     }
+    bool IsEmpty() const noexcept
+    {
+        for (uint16_t ch = 0; ch < _format.channels; ++ch) {
+            if (_buffers[ch].size() != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
 
 public:
     std::unique_ptr<vortex::byte_ring[]> _buffers;

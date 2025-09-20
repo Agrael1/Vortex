@@ -7,6 +7,8 @@
 #include <vortex/model.h>
 #include <vortex/util/lib/SPSC-Queue.h>
 #include <vortex/ui/message_dispatch.h>
+#include <vortex/util/ndi/ndi_library.h>
+#include <vortex/util/main_args.h>
 
 namespace vortex {
 struct AppExitControl {
@@ -16,7 +18,7 @@ struct AppExitControl {
 
     static void Exit()
     {
-        GetInstance().exit = true;
+        GetInstance().exit.store(true, std::memory_order::relaxed);
     }
 
     static AppExitControl& GetInstance()
@@ -25,19 +27,19 @@ struct AppExitControl {
         return instance;
     }
 
-    bool exit = false;
+    std::atomic<bool> exit = false;
 };
 
 class App
 {
     using MessageHandler = void (App::*)(CefListValue&);
-    using MessaheHanlderDispatch = void (*)(App&, CefListValue&);
+    using MessageHanlderDispatch = void (*)(App&, CefListValue&);
 
 public:
-    App()
+    App(const MainArgs& args)
         : _gfx(true)
         , _exit(AppExitControl::GetInstance())
-        , _ui_app("Vortex Application", 1920, 1080, false)
+        , _ui_app(CreateUIApp(args.headless))
         , _descriptor_buffer(_gfx)
     {
         wis::Result res = wis::success;
@@ -177,6 +179,14 @@ private:
     {
         std::bit_cast<App*>(observer)->OnNodeUpdate(node, property_index, value);
     }
+    static vortex::ui::UIApp CreateUIApp(bool headless)
+    {
+        if (headless) {
+            return vortex::ui::UIApp();
+        } else {
+            return vortex::ui::UIApp("Vortex Application", 1920, 1080, false);
+        }
+    }
     void OnNodeUpdate(uintptr_t node, uint32_t property_index, std::string_view value)
     {
         // Handle node update logic here
@@ -196,7 +206,6 @@ private:
     vortex::ui::SDLLibrary _sdl;
 
     vortex::Graphics _gfx;
-    vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
     vortex::DescriptorBuffer _descriptor_buffer;
     dro::SPSCQueue<CefRefPtr<CefProcessMessage>, 64> _message_queue; ///< Queue for messages from the UI
 
@@ -212,11 +221,12 @@ private:
     // CEF client for UI
     vortex::ui::UIApp _ui_app;
     vortex::graph::GraphModel _model; ///< Model containing nodes and outputs
+    vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
 
     int32_t counter = 32; ///< Counter for async calls
 
     // used in hot code, so it should be fast
-    std::unordered_map<std::u16string_view, MessaheHanlderDispatch> _message_handlers_disp{
+    std::unordered_map<std::u16string_view, MessageHanlderDispatch> _message_handlers_disp{
         // Coroutines
         { u"GetNodeTypesAsync", ui::MessageDispatch<&App::GetNodeTypes>::Dispatch },
         { u"CreateNodeAsync", ui::MessageDispatch<&App::CreateNode>::Dispatch },

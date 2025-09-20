@@ -1,4 +1,4 @@
-#include <vortex/ui/cef_app.h>
+#include <vortex/ui/cef/app.h>
 #include <include/cef_parser.h>
 
 bool vortex::ui::VortexResourceHandler::Open(CefRefPtr<CefRequest> request, bool& handle_request, CefRefPtr<CefCallback> callback)

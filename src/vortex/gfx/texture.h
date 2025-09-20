@@ -45,7 +45,7 @@ private:
 namespace std {
 // spec for format
 template<>
-struct std::formatter<vortex::Texture2D> {
+struct formatter<vortex::Texture2D> {
     // Basic parse that simply returns the end of the format string
     constexpr auto parse(std::format_parse_context& ctx)
     {

@@ -23,12 +23,12 @@ class interprocess_lock
 {
 public:
     explicit interprocess_lock(std::string_view name = "stdout_sync");
-    ~interprocess_lock();
+    ~interprocess_lock() noexcept;
 
 public:
-    bool try_lock(std::chrono::milliseconds timeout = std::chrono::milliseconds(0));
-    bool lock();
-    void unlock();
+    bool try_lock(std::chrono::milliseconds timeout = std::chrono::milliseconds(0)) noexcept;
+    bool lock() noexcept;
+    void unlock() noexcept;
 
 private:
     std::string sync_name;

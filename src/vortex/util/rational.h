@@ -3,6 +3,7 @@
 #include <concepts>
 #include <expected>
 #include <format>
+#include <numeric>
 
 namespace vortex {
 

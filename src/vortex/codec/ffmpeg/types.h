@@ -1,5 +1,7 @@
 #pragma once
 #include <vortex/util/unique_any.h>
+#include <vortex/util/lib/reflect.h>
+#include <format>
 
 extern "C" {
 #include <libavformat/avformat.h>

@@ -6,6 +6,7 @@
 #include <vortex/probe.h>
 #include <vortex/properties/props.hpp>
 #include <vortex/util/lazy.h>
+#include <ranges>
 
 namespace vortex {
 // Debug output is a window with a swapchain for rendering contents directly to the screen

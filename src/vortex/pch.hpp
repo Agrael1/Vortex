@@ -1,24 +1,24 @@
 #pragma once
 
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/sinks/basic_file_sink.h>
-
-#include <format>
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <unordered_set>
-#include <memory>
-#include <algorithm>
-
-#include <vortex/util/lib/reflect.h>
-#include <vortex/util/log.h>
-
-#include <wisdom/wisdom.hpp>
-#include <wisdom/wisdom_debug.hpp>
-#include <wisdom/wisdom_descriptor_buffer.hpp>
-#include <wisdom/wisdom_platform.hpp>
-#include <wisdom/wisdom_extended_allocation.hpp>
+//#include <spdlog/spdlog.h>
+//#include <spdlog/sinks/stdout_color_sinks.h>
+//#include <spdlog/sinks/basic_file_sink.h>
+//
+//#include <format>
+//#include <string>
+//#include <vector>
+//#include <unordered_map>
+//#include <unordered_set>
+//#include <memory>
+//#include <algorithm>
+//
+//#include <vortex/util/lib/reflect.h>
+//#include <vortex/util/log.h>
+//
+//#include <wisdom/wisdom.hpp>
+//#include <wisdom/wisdom_debug.hpp>
+//#include <wisdom/wisdom_descriptor_buffer.hpp>
+//#include <wisdom/wisdom_platform.hpp>
+//#include <wisdom/wisdom_extended_allocation.hpp>
 
 //#include <include/cef_app.h>

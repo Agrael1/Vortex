@@ -1,7 +1,10 @@
 #pragma once
 #include <vortex/ui/implements.h>
+#include <vortex/util/log.h>
+#include <vortex/util/lib/reflect.h>
 #include <include/cef_client.h>
 #include <unordered_map>
+#include <functional>
 
 namespace vortex::ui {
 class Client : public CefImplements<Client, CefClient, CefLifeSpanHandler, CefDisplayHandler>
@@ -67,7 +70,6 @@ public:
                                   CefProcessId source_process,
                                   CefRefPtr<CefProcessMessage> message) override
     {
-
         vortex::info("Client::OnProcessMessageReceived: Received message from process {}: {}", reflect::enum_name(source_process), message->GetName().ToString());
         return _message_handler(std::move(message));
     }

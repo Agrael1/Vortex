@@ -1,5 +1,6 @@
 #pragma once
 #include <wisdom/wisdom_descriptor_buffer.hpp>
+#include <wisdom/wisdom.hpp>
 #include <vortex/consts.h>
 
 namespace vortex {

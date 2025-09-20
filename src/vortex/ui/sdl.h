@@ -1,5 +1,6 @@
 #pragma once
 #include <SDL3/SDL.h>
+#include <wisdom/wisdom.hpp>
 
 namespace wis {
 struct SwapchainDesc;

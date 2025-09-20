@@ -1,108 +1,40 @@
 #include <csignal>
 #include <vortex/app.h>
-#include <vortex/util/log.h>
-#include <vortex/ui/cef_app.h>
+#include <vortex/ui/cef/app.h>
+#include <vortex/util/log_storage.h>
 
-struct MainArgs {
-    bool headless = false;
-};
+int EntryMain(std::span<std::string_view> args, CefRefPtr<vortex::ui::VortexCefApp> cef_app)
+try {
+    bool debug = true;
+    vortex::MainArgs parsed_args = vortex::ParseArgs(args);
+    vortex::LogStorage log_storage;
 
-MainArgs ParseArgs(std::span<std::string_view> args) noexcept
-{
-    MainArgs result;
-    for (const auto& arg : args) {
-        if (arg == "--headless") {
-            result.headless = true;
-        }
+    // Make a default log for UI / CEF
+    vortex::LogOptions options_cef{
+        .name = vortex::ui_log_name,
+        .pattern_prefix = "vortex.cef",
+        .output_file_path = debug ? "" : "logs/vortex.cef.log"
+    };
+    vortex::LogView log_ui = log_storage.CreateLog(options_cef, true);
+
+    // Initialize CEF subprocess
+    int result = cef_app->StartCefSubprocess();
+    if (result >= 0) {
+        vortex::info("CEF subprocess exited with code: {}", result);
+        return result; // This is a CEF subprocess, exit with its return code
     }
-    return result;
-}
 
-int LaunchHeadlessMode(MainArgs args)
-{
-    vortex::info("Launching in headless mode...");
+    // Create default logs after CEF initialization
+    log_storage.CreateDefaultLogs(debug);
+
+    auto init_guard = cef_app->InitializeCef();
+    if (!init_guard) {
+        return -1; // CEF initialization failed
+    }
+
     // Initialize Node Library
     vortex::RegisterHardwareNodes();
-
-    int result = 0;
-    {
-        vortex::App app;
-        result = app.Run();
-    }
-    return 0;
-}
-
-int EntryMain(std::span<std::string_view> args)
-try {
-    MainArgs parsed_args = ParseArgs(args);
-
-    bool debug = true;
-    vortex::LogOptions options{
-        .name = vortex::app_log_name,
-        .pattern_prefix = "vortex",
-        .output_file_path = debug ? "" : "logs/vortex.log"
-    };
-    vortex::LogOptions options_gfx{
-        .name = vortex::graphics_log_name,
-        .pattern_prefix = "vortex.graphics",
-        .output_file_path = debug ? "" : "logs/vortex.gfx.log"
-    };
-    
-    vortex::LogOptions options_stream{
-        .name = vortex::stream_log_name,
-        .pattern_prefix = "vortex.stream",
-        .output_file_path = debug ? "" : "logs/vortex.stream.log"
-    };
-
-    vortex::Log log_global{ options };
-    vortex::Log log_graphics{ options_gfx };
-    vortex::Log log_stream{ options_stream };
-    log_global.SetAsDefault();
-
-    // catch Ctrl+C
-    std::signal(SIGINT, [](int) {
-        vortex::critical("Ctrl+C pressed");
-        vortex::AppExitControl::Exit();
-    });
-
-    // Handle headless mode
-    if (parsed_args.headless) {
-        return LaunchHeadlessMode(parsed_args);
-    }
-
-    // Initialize Cef
-    CefMainArgs cef_args{ GetModuleHandleW(nullptr) };
-    CefRefPtr<vortex::ui::VortexCefApp> cef_app{ new vortex::ui::VortexCefApp() };
-    int code = CefExecuteProcess(cef_args, cef_app, nullptr);
-    if (code >= 0) {
-        vortex::info("CefExecuteProcess returned: {}", code);
-        return code; // If this is a secondary process, exit immediately
-    }
-
-    // Initialize CEF settings
-    CefSettings cef_settings;
-    cef_settings.multi_threaded_message_loop = true; // Use single-threaded for better integration
-    cef_settings.no_sandbox = true; // Disable sandbox for simplicity
-    CefString(&cef_settings.cache_path).FromString((std::filesystem::current_path() / u"cef_cache").string()); // Set cache path
-
-    if (!CefInitialize(cef_args, cef_settings, cef_app, nullptr)) {
-        vortex::critical("CefInitialize failed");
-        return CefGetExitCode(); // Initialization failed
-    }
-
-    // Initialize Node Library
-    vortex::RegisterHardwareNodes();    
-
-    int result = 0;
-    {
-        vortex::App app;
-        result = app.Run();
-    }
-
-    // Shutdown CEF
-    CefShutdown();
-
-    return result;
+    return vortex::App{ parsed_args }.Run();
 } catch (const std::exception& e) {
     vortex::critical(e.what());
     return 1;
@@ -123,7 +55,8 @@ int main(int argc, char* argv[])
         std::construct_at(&args[i], argv[i]); // Construct std::string_view from char* without UB
     }
 
-    int ret = EntryMain(std::span(args, argc));
+    CefRefPtr<vortex::ui::VortexCefApp> cef_app(new vortex::ui::VortexCefApp{ argc, argv });
+    int ret = EntryMain(std::span(args, argc), std::move(cef_app));
     std::destroy_n(args, argc); // Destroy std::string_view objects
     return ret;
 }

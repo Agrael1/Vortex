@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/codec/ffmpeg/hw_decoder.h>
 #include <vortex/util/lib/SPSC-Queue.h>
+#include <vortex/util/log.h>
 
 #include <unordered_map>
 #include <shared_mutex>

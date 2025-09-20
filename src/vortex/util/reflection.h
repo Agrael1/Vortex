@@ -4,6 +4,7 @@
 #include <vortex/util/rational.h>
 #include <charconv>
 #include <DirectXMath.h>
+#include <span>
 
 namespace vortex {
 template<typename T>

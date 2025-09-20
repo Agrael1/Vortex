@@ -2,6 +2,7 @@
 #include <vortex/ui/client.h>
 #include <vortex/ui/sdl.h>
 #include <vortex/ui/value.h>
+#include <optional>
 
 namespace vortex::ui {
 class UIApp
@@ -12,7 +13,7 @@ class UIApp
     }
     bool EventWatch(SDL_Event& event)
     {
-        if (event.window.windowID == _window.GetID() && event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+        if (event.window.windowID == _window->GetID() && event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
             int width = event.window.data1;
             int height = event.window.data2;
             ResizeCEFBrowser(width, height);
@@ -22,8 +23,13 @@ class UIApp
     }
 
 public:
+    // Headless mode constructor
+    UIApp()
+    {
+        InitializeCEF();
+    }
     UIApp(const char* window_title, int width, int height, bool fullscreen)
-        : _window(window_title, width, height, fullscreen)
+        : _window(std::in_place, window_title, width, height, fullscreen)
     {
         SDL_AddEventWatch(EventWatchThunk, this);
         // Initialize CEF
@@ -91,7 +97,7 @@ private:
     void ResizeCEFBrowser(int width, int height);
 
 private:
-    SDLWindow _window; ///< SDL window for the application
+    std::optional<SDLWindow> _window; ///< SDL window for the application
     CefRefPtr<Client> _cef_client; ///< CEF client for handling browser events
 };
 } // namespace vortex::ui

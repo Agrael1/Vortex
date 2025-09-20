@@ -2,7 +2,7 @@
 #include <wisdom/wisdom_debug.hpp>
 #include <wisdom/wisdom_descriptor_buffer.hpp>
 #include <wisdom/wisdom_extended_allocation.hpp>
-#include <vortex/util/log.h>
+#include <vortex/util/log_storage.h>
 #include <vortex/platform.h>
 
 namespace vortex {
@@ -34,6 +34,7 @@ class Graphics
 {
 public:
     Graphics(bool debug_extension)
+        : _log(vortex::LogStorage::GetLog(vortex::graphics_log_name))
     {
         CreateDevice(debug_extension);
     }
@@ -85,6 +86,7 @@ private:
     void CreateDevice(bool debug_extension);
 
 private:
+    vortex::LogView _log;
     Debug _debug;
     wis::Device _device;
     wis::CommandQueue _main_queue;

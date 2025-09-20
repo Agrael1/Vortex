@@ -33,7 +33,7 @@ struct AppExitControl {
 class App
 {
     using MessageHandler = void (App::*)(CefListValue&);
-    using MessaheHanlderDispatch = void (*)(App&, CefListValue&);
+    using MessageHanlderDispatch = void (*)(App&, CefListValue&);
 
 public:
     App(const MainArgs& args)
@@ -206,7 +206,6 @@ private:
     vortex::ui::SDLLibrary _sdl;
 
     vortex::Graphics _gfx;
-    vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
     vortex::DescriptorBuffer _descriptor_buffer;
     dro::SPSCQueue<CefRefPtr<CefProcessMessage>, 64> _message_queue; ///< Queue for messages from the UI
 
@@ -222,11 +221,12 @@ private:
     // CEF client for UI
     vortex::ui::UIApp _ui_app;
     vortex::graph::GraphModel _model; ///< Model containing nodes and outputs
+    vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
 
     int32_t counter = 32; ///< Counter for async calls
 
     // used in hot code, so it should be fast
-    std::unordered_map<std::u16string_view, MessaheHanlderDispatch> _message_handlers_disp{
+    std::unordered_map<std::u16string_view, MessageHanlderDispatch> _message_handlers_disp{
         // Coroutines
         { u"GetNodeTypesAsync", ui::MessageDispatch<&App::GetNodeTypes>::Dispatch },
         { u"CreateNodeAsync", ui::MessageDispatch<&App::CreateNode>::Dispatch },

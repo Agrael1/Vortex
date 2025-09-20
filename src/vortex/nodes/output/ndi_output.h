@@ -52,7 +52,7 @@ public:
 private:
     void Throttle() const
     {
-        std::ignore = _fence.Wait(_fence_value);
+        std::ignore = _fence.Wait(_fence_value - 1);
     }
     void EvaluateAudio();
 

@@ -9,6 +9,8 @@
 #include <vortex/ui/message_dispatch.h>
 #include <vortex/util/ndi/ndi_library.h>
 #include <vortex/util/main_args.h>
+#include <vortex/util/term/input.h>
+#include <filesystem>
 
 namespace vortex {
 struct AppExitControl {
@@ -42,6 +44,11 @@ public:
         , _ui_app(CreateUIApp(args.headless))
         , _descriptor_buffer(_gfx)
     {
+        TerminalHandler::Instance().SetInputHandler([](std::string_view line, void* p) {
+            return static_cast<App*>(p)->TerminalMessageHandler(line);
+        },
+                                                    this);
+
         wis::Result res = wis::success;
         for (size_t i = 0; i < max_frames_in_flight; ++i) {
             _command_list[i] = _gfx.GetDevice().CreateCommandList(res, wis::QueueType::Graphics);
@@ -83,6 +90,8 @@ public:
             if (int code = _ui_app.ProcessEvents()) {
                 return code; // Exit requested
             }
+            vortex::PollTerminalInput(); // Process terminal input
+
             ProcessMessages(); // Process messages from the UI
 
             // Process the model and render the nodes
@@ -128,6 +137,36 @@ private:
         if (auto it = _message_handlers_disp.find(message_name.c_str()); it != _message_handlers_disp.end()) {
             _message_queue.emplace(std::move(message)); // Add message to the queue
             return true; // Message handled
+        }
+
+        return false; // Message not handled
+    }
+    bool TerminalMessageHandler(std::string_view line) noexcept
+    {
+        if (line == "exit" || line == "quit") {
+            AppExitControl::Exit();
+            return true; // Message handled
+        }
+
+        // Simple command execution
+        if (line.starts_with("exec ")) {
+            auto command = line.substr(5);
+            _ui_app.ExecuteJavaScript(command); //
+            return true; // Message handled
+        }
+
+        // Execute file
+        if (line.starts_with("execf ")) {
+            auto filename = line.substr(6);
+            std::filesystem::path path = filename;
+            if (std::filesystem::exists(path) && std::filesystem::is_regular_file(path)) {
+                std::ifstream file(path);
+                if (file) {
+                    std::string script((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+                    _ui_app.ExecuteJavaScript(script);
+                    return true; // Message handled
+                }
+            }
         }
 
         return false; // Message not handled

@@ -1,22 +1,13 @@
 #pragma once
 #include <spdlog/spdlog.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
+#include <vortex/util/term/log_sink.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <filesystem>
 #include <format>
-#include <vortex/util/interprocess_lock.h>
 
 namespace vortex {
-struct console_interprocess_mutex {
-    using mutex_t = vortex::interprocess_lock;
-    static mutex_t& mutex()
-    {
-        static mutex_t s_mutex;
-        return s_mutex;
-    }
-};
 #ifdef _WIN32
-using cross_process_console_sink = spdlog::sinks::wincolor_stdout_sink<console_interprocess_mutex>;
+using cross_process_console_sink = vortex::wincolor_sink;
 #else
 using cross_process_console_sink = spdlog::sinks::ansicolor_stdout_sink<console_interprocess_mutex>;
 #endif

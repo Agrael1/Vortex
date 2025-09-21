@@ -3,10 +3,12 @@
 #include <vortex/ui/cef/app.h>
 #include <vortex/util/log_storage.h>
 
+
 int EntryMain(std::span<std::string_view> args, CefRefPtr<vortex::ui::VortexCefApp> cef_app)
 try {
     bool debug = true;
     vortex::MainArgs parsed_args = vortex::ParseArgs(args);
+    vortex::TerminalHandler::Instance();
     vortex::LogStorage log_storage;
 
     // Make a default log for UI / CEF

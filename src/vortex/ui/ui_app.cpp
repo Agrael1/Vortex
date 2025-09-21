@@ -11,6 +11,13 @@ void vortex::ui::UIApp::InitializeCEF()
     _cef_client = new vortex::ui::Client();
     if (!_window) {
         // Headless mode, no window to create browser in
+        CefBrowserSettings browser_settings;
+        CefWindowInfo window_info;
+        window_info.SetAsWindowless(nullptr); // Headless mode
+        CefBrowserHost::CreateBrowser(window_info, _cef_client.get(),
+                                      "about:blank", browser_settings, nullptr, nullptr);
+
+
         return;
     } 
     

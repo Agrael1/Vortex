@@ -128,6 +128,7 @@ public:
         CefSettings cef_settings;
         cef_settings.multi_threaded_message_loop = true;
         cef_settings.no_sandbox = true;
+        cef_settings.windowless_rendering_enabled = true;
         CefString(&cef_settings.cache_path).FromString((std::filesystem::current_path() / std::format("cef_cache_{}", CEF_API_VERSION_LAST)).string()); // Set cache path
         
         if (!CefInitialize(_main_args, cef_settings, this, nullptr)) {

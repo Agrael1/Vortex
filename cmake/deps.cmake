@@ -34,6 +34,13 @@ CPMAddPackage(
   GIT_TAG 1.2.0
 )
 
+# utfcpp
+CPMAddPackage(
+  NAME utfcpp
+  GITHUB_REPOSITORY nemtrif/utfcpp
+  GIT_TAG v4.0.8
+)
+
 # DirectXMath
 CPMAddPackage(
   NAME DirectXMath

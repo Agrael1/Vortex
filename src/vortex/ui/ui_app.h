@@ -92,6 +92,21 @@ public:
         SendUIMessage(u"co_return", std::forward<Args>(args)...);
     }
 
+    void ExecuteJavaScript(std::string_view script)
+    {
+        if (!_cef_client) {
+            vortex::error("UIApp::ExecuteJavaScript: CEF client is not initialized.");
+            return;
+        }
+        auto browser = _cef_client->GetBrowser();
+        if (browser) {
+            auto frame = browser->GetMainFrame();
+            if (frame) {
+                frame->ExecuteJavaScript(string_traits::to_cef(script), "", 0);
+            }
+        }
+    }
+
 private:
     void InitializeCEF();
     void ResizeCEFBrowser(int width, int height);

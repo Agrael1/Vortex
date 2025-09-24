@@ -99,7 +99,7 @@ PUBLIC
   "src/vortex/ui/message_dispatch.h" 
   "src/vortex/util/bench_clock.h" 
 
- "src/vortex/util/main_args.h"  )
+ "src/vortex/util/main_args.h"   "src/vortex/nodes/output/window_output.cpp")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES

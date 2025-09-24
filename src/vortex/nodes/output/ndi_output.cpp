@@ -12,7 +12,8 @@ vortex::NDIOutput::NDIOutput(const vortex::Graphics& gfx, SerializedProperties p
                       .data_format = vortex::Float32Planar,
                       .sample_rate = audio_sample_rate,
                       .channels = max_audio_channels },
-              std::chrono::seconds(1))
+              std::chrono::seconds(1)
+      )
 {
     wis::Result result = wis::success;
 
@@ -138,7 +139,7 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::Rende
     probe._command_list = &_command_lists[frame_index];
     probe.output_framerate = GetFramerate();
 
-    auto sinks = _sinks.GetSinks();
+    auto sink = _sinks.GetSinks()[0];
 
     // Pass to the sink nodes for post-order processing
     RenderPassForwardDesc desc{
@@ -151,7 +152,7 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::Rende
     auto& cmd_list = *probe._command_list;
 
     // Video sink
-    if (!sinks[0]) {
+    if (!sink) {
         return false; // No video sink connected
     }
 
@@ -167,7 +168,7 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::Rende
                             },
                             current_texture);
 
-    bool res = sinks[0].source_node->Evaluate(gfx, probe, &desc);
+    bool res = sink.source_node->Evaluate(gfx, probe, &desc);
     if (!res) {
         // Nothing to do, just return
         return false;

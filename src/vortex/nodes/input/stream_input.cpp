@@ -92,6 +92,12 @@ void vortex::StreamInput::InitializeStream()
     ffmpeg::unique_dictionary options;
     av_dict_set(options.address_of(), "timeout", "10000000", 0); // 5 second timeout
     av_dict_set(options.address_of(), "analyzeduration", "10000000", 0); // 0.5 second timeout
+
+    // Make bigger RTP buffer
+    av_dict_set(options.address_of(), "buffer_size", "1048576", 0); // 1MB buffer
+    av_dict_set(options.address_of(), "rtbufsize", "1048576", 0); // 1MB buffer
+    av_dict_set(options.address_of(), "max_delay", "500000", 0); // 0.5 second max delay
+
     auto context_result = codec::CodecFFmpeg::ConnectToStream(stream_url, std::move(options));
     if (!context_result) {
         return;

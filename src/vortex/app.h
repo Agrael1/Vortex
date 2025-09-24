@@ -11,6 +11,7 @@
 #include <vortex/util/main_args.h>
 #include <vortex/util/term/input.h>
 #include <filesystem>
+#include <fstream>
 
 namespace vortex {
 struct AppExitControl {
@@ -63,7 +64,12 @@ public:
 
         constexpr std::pair<std::string_view, std::string_view> output_values2[]{
             std::pair{ "name", "Vortex Mega Output" },
-            std::pair{ "window_size", "[1920,1080]" }
+            std::pair{ "window_size", "[2000,2000]" }
+        };
+        constexpr std::pair<std::string_view, std::string_view> output_values3[]{
+            std::pair{ "name", "Vortex Mega Output 2" },
+            std::pair{ "window_size", "[1000,2000]" },
+            std::pair{ "framerate", "[30,1]" }
         };
 
         constexpr std::pair<std::string_view, std::string_view> stream_values[]{
@@ -72,13 +78,16 @@ public:
 
         // Test setup of the model
         auto i1 = _model.CreateNode(_gfx, "StreamInput", external_observer, stream_values); // Create a default node for testing
-        auto o1 = _model.CreateNode(_gfx, "NDIOutput", external_observer, output_values2); // Create a default output for testing
+        auto o1 = _model.CreateNode(_gfx, "NDIOutput", external_observer, output_values3); // Create a default output for testing
+        auto o2 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values2); // Create a default output for testing
 
         _model.SetNodeInfo(i1, "Image 1"); // Set some info for the node
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
 
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
         _model.ConnectNodes(i1, 1, o1, 1); // Connect the audio outputs
+
+        _model.ConnectNodes(i1, 0, o2, 0); // Connect the nodes in the model
     }
 
 public:

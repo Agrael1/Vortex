@@ -51,44 +51,6 @@ public:
             }
         }
         _fence = gfx.GetDevice().CreateFence(result);
-
-        // TODO: Move to audio
-        _audio_device_id = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
-        if (_audio_device_id == 0) {
-            vortex::error("Failed to open audio device: {}", SDL_GetError());
-        }
-        SDL_AudioSpec actual_spec;
-        int sample_grames = 0;
-        if (SDL_GetAudioDeviceFormat(_audio_device_id, &actual_spec, &sample_grames) == 0) {
-            SDL_Log("Device format: %d Hz, %d channels, format: %d",
-                    actual_spec.freq, actual_spec.channels, actual_spec.format);
-        }
-        auto name = SDL_GetAudioDeviceName(_audio_device_id);
-        vortex::info("Opened audio device: {}", name ? name : "Unknown");
-
-        _audio_sample_rate = actual_spec.freq;
-        _audio_channels = actual_spec.channels;
-
-        // Create audio stream
-        _audio_stream = SDL_OpenAudioDeviceStream(_audio_device_id, &actual_spec, nullptr, nullptr);
-        if (!_audio_stream) {
-            vortex::error("Failed to create SDL3 audio stream: {}", SDL_GetError());
-            SDL_CloseAudioDevice(_audio_device_id);
-            _audio_device_id = 0;
-        } else {
-            // Resume the device (SDL3 devices start paused)
-            SDL_ResumeAudioStreamDevice(_audio_stream);
-            vortex::info("SDL3 audio device and stream created successfully");
-        }
-    }
-    ~WindowOutput()
-    {
-        if (_audio_stream) {
-            SDL_DestroyAudioStream(_audio_stream);
-        }
-        if (_audio_device_id != 0) {
-            SDL_CloseAudioDevice(_audio_device_id);
-        }
     }
 
 public:
@@ -176,8 +138,6 @@ public:
 
         auto current_texture_index = _swapchain.GetCurrentIndex();
         probe._command_list = &_command_lists[_frame_index];
-        probe.audio_sample_rate = _audio_sample_rate;
-        probe.audio_channels = _audio_channels;
 
         // Pass to the sink nodes for post-order processing
         RenderPassForwardDesc desc{
@@ -242,10 +202,5 @@ public:
     uint64_t _fence_value = 1; ///< Current fence value for synchronization
     uint64_t _fence_values[vortex::max_frames_in_flight] = { 1, 0 }; ///< Current fence value for synchronization
     bool _resized = false; ///< Flag to indicate if the window has been resized
-
-    SDL_AudioDeviceID _audio_device_id = 0;
-    SDL_AudioStream* _audio_stream = nullptr;
-    uint32_t _audio_sample_rate = 48000; // Default sample rate
-    uint32_t _audio_channels = 2; // Default to stereo
 };
 } // namespace vortex

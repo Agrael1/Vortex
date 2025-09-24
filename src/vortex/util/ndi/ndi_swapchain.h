@@ -28,12 +28,10 @@ public:
     {
         return _textures;
     }
-    void Present(wis::CommandList& cmd_list)
+    void CopyToStagingBuffer(wis::CommandList& cmd_list)
     {
         // Copy the current texture to the staging buffer
         CopyToStagingBuffer(cmd_list, _current_index);
-        // Send the frame asynchronously
-        SendFrame();
     }
     auto GetCurrentIndex() const noexcept -> uint32_t
     {
@@ -50,6 +48,11 @@ public:
     }
     bool Resize(const vortex::Graphics& gfx, uint32_t width, uint32_t height);
     void SendAudio(std::span<const float> samples);
+    void Present()
+    {
+        NDIlib_send_send_video_async_v2(_send_instance, &_video_frame);
+        SwapBuffers();
+    }
 
 private:
     void CopyToStagingBuffer(wis::CommandList& cmd_list, uint32_t index)
@@ -66,11 +69,7 @@ private:
         _current_index = (_current_index + 1) % max_swapchain_images;
         std::swap(_video_frame.p_data, _staging_data);
     }
-    void SendFrame()
-    {
-        NDIlib_send_send_video_async_v2(_send_instance, &_video_frame);
-        SwapBuffers();
-    }
+
 
     auto CreateBuffers(const vortex::Graphics& gfx, uint32_t width, uint32_t height) noexcept -> wis::Result;
     void DestroyBuffers() noexcept;

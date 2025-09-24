@@ -71,8 +71,9 @@ auto vortex::NDISwapchain::CreateBuffers(const vortex::Graphics& gfx, uint32_t w
     }
 
     // Map the first staging buffer
-    _video_frame.p_data = _staging_buffer[0].Map<uint8_t>();
-    _staging_data = _staging_buffer[1].Map<uint8_t>();
+    // Assign in reverse order so that the first buffer is used for uploading
+    _video_frame.p_data = _staging_buffer[1].Map<uint8_t>(); 
+    _staging_data = _staging_buffer[0].Map<uint8_t>();
 
     // Transition all textures to copy source layout
     wis::TextureBarrier2 barriers[NDISwapchain::max_swapchain_images];
@@ -116,7 +117,6 @@ bool vortex::NDISwapchain::Resize(const vortex::Graphics& gfx, uint32_t width, u
     return true;
 }
 
-static int it = 10;
 void vortex::NDISwapchain::SendAudio(std::span<const float> samples)
 {
     if (!_send_instance) {
@@ -133,6 +133,7 @@ void vortex::NDISwapchain::SendAudio(std::span<const float> samples)
     audio_frame.channel_stride_in_bytes = audio_frame.no_samples * sizeof(float);
     NDIlib_send_send_audio_v3(_send_instance, &audio_frame);
 }
+
 void vortex::NDISwapchain::DestroyBuffers() noexcept
 {
     for (size_t i = 0; i < max_swapchain_images; ++i) {

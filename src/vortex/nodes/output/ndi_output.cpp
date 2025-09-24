@@ -10,8 +10,8 @@ vortex::NDIOutput::NDIOutput(const vortex::Graphics& gfx, SerializedProperties p
     , _audio_buffer(
               vortex::AudioFormat{
                       .data_format = vortex::Float32Planar,
-                      .sample_rate = 48000,
-                      .channels = 2 },
+                      .sample_rate = audio_sample_rate,
+                      .channels = max_audio_channels },
               std::chrono::seconds(1))
 {
     wis::Result result = wis::success;
@@ -51,15 +51,11 @@ vortex::NDIOutput::NDIOutput(const vortex::Graphics& gfx, SerializedProperties p
     std::size_t samples_per_frame = (framerate.denominator == 0 || framerate.numerator == 0) ? 0 : (48000 * framerate.denominator) / framerate.numerator;
     _audio_samples.resize(samples_per_frame * 2); // Reserve space for 1 second of stereo float samples at 48kHz
 }
-vortex::NDIOutput::~NDIOutput()
-{
-    Throttle();
-}
 
 void vortex::NDIOutput::Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
 {
     if (_resized) {
-        Throttle(); // Wait for GPU to finish before resizing
+        // Throttle(); // Wait for GPU to finish before resizing
 
         // Resize the swapchain and render target
         if (_swapchain.Resize(gfx, window_size.x, window_size.y)) {
@@ -76,9 +72,63 @@ void vortex::NDIOutput::Update(const vortex::Graphics& gfx, vortex::RenderProbe&
         _resized = false;
     }
 }
-void vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info)
+
+bool vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info)
 {
-    uint64_t frame_index = (_fence_value - 1) % vortex::max_frames_in_flight; // Current frame index based on fence value
+    bool video = EvaluateVideo(gfx, probe, output_info);
+    bool audio = EvaluateAudio();
+    return video || audio;
+}
+
+void vortex::NDIOutput::Throttle() const
+{
+    constexpr static uint64_t timeout_ns = 1'000'000'000; // 1 second timeout
+    wis::Result res = _fence.Wait(_fence_value - 1, timeout_ns);
+    if (res.status == wis::Status::Timeout) {
+        vortex::warn("NDIOutput: Timeout while waiting for fence in Throttle(). The GPU may be unresponsive.");
+    } else if (!vortex::success(res)) {
+        vortex::error("NDIOutput: Failed to wait for fence in Throttle(): {}", res.error);
+    }
+}
+
+bool vortex::NDIOutput::EvaluateAudio()
+{
+    auto sinks = _sinks.GetSinks();
+    if (!sinks[1]) {
+        return false; // No audio sink connected
+    }
+
+    // Not enough samples, need to read from the input
+    AudioProbe audio_probe;
+    audio_probe.audio_channels = 2; // Stereo
+    audio_probe.audio_sample_rate = audio_sample_rate; // 48 kHz (Used to determine if input is needed)
+    audio_probe.last_audio_pts = _last_audio_pts; // Start from the last PTS
+    sinks[1].source_node->EvaluateAudio(audio_probe);
+
+    if (!audio_probe.audio_data.empty()) {
+        // Here is a good place to resample if needed in the future
+        _audio_buffer.WritePlanar(std::span{ audio_probe.audio_data }); // Write the audio data to the buffer
+        _last_audio_pts = audio_probe.last_audio_pts;
+    }
+
+    if (_audio_buffer.IsEmpty()) {
+        return false; // No audio to send
+    }
+
+    std::size_t read_samples = _audio_buffer.ReadPlanar(std::span{ _audio_samples });
+    if (read_samples < _audio_buffer.SamplesForFramerate(framerate)) {
+        return false; // No samples to send
+    }
+
+    _swapchain.SendAudio(_audio_samples);
+    return true;
+}
+
+bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info)
+{
+    wis::Result result = wis::success;
+
+    uint64_t frame_index = CurrentFrameIndex(); // Current frame index based on fence value
     uint64_t current_texture_index = _swapchain.GetCurrentIndex();
 
     auto textures = _swapchain.GetTextures();
@@ -101,101 +151,70 @@ void vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProb
     auto& cmd_list = *probe._command_list;
 
     // Video sink
-    if (sinks[0]) {
-        std::ignore = cmd_list.Reset();
-        probe._descriptor_buffer.BindBuffers(gfx, cmd_list);
-        cmd_list.TextureBarrier({
-                                        .sync_before = wis::BarrierSync::Copy,
-                                        .sync_after = wis::BarrierSync::RenderTarget,
-                                        .access_before = wis::ResourceAccess::CopySource,
-                                        .access_after = wis::ResourceAccess::RenderTarget,
-                                        .state_before = wis::TextureState::CopySource,
-                                        .state_after = wis::TextureState::RenderTarget,
-                                },
-                                current_texture);
-
-        sinks[0].source_node->Evaluate(gfx, probe, &desc);
-
-        // Close the render target
-        cmd_list.TextureBarrier({
-                                        .sync_before = wis::BarrierSync::RenderTarget,
-                                        .sync_after = wis::BarrierSync::Copy,
-                                        .access_before = wis::ResourceAccess::RenderTarget,
-                                        .access_after = wis::ResourceAccess::CopySource,
-                                        .state_before = wis::TextureState::RenderTarget,
-                                        .state_after = wis::TextureState::CopySource,
-                                },
-                                current_texture);
-
-        _swapchain.Present(_command_lists[current_texture_index]);
-
-        // End the command list
-        if (!cmd_list.Close()) {
-            vortex::error("Failed to close command list for WindowOutput");
-            return;
-        }
-
-        auto& queue = gfx.GetMainQueue();
-        wis::CommandListView views[]{ cmd_list };
-        queue.ExecuteCommandLists(views, std::size(views));
-        std::ignore = queue.SignalQueue(_fence, _fence_values[frame_index]);
-
-        ++_fence_value;
-        _fence_values[_fence_value % vortex::max_frames_in_flight] = _fence_value;
+    if (!sinks[0]) {
+        return false; // No video sink connected
     }
 
-    EvaluateAudio();
-}
+    std::ignore = cmd_list.Reset();
+    probe._descriptor_buffer.BindBuffers(gfx, cmd_list);
+    cmd_list.TextureBarrier({
+                                    .sync_before = wis::BarrierSync::Copy,
+                                    .sync_after = wis::BarrierSync::RenderTarget,
+                                    .access_before = wis::ResourceAccess::CopySource,
+                                    .access_after = wis::ResourceAccess::RenderTarget,
+                                    .state_before = wis::TextureState::CopySource,
+                                    .state_after = wis::TextureState::RenderTarget,
+                            },
+                            current_texture);
 
-#include <vortex/util/bench_clock.h>
-
-void vortex::NDIOutput::EvaluateAudio()
-{
-    auto sinks = _sinks.GetSinks();
-    if (!sinks[1]) {
-        return; // No audio sink connected
+    bool res = sinks[0].source_node->Evaluate(gfx, probe, &desc);
+    if (!res) {
+        // Nothing to do, just return
+        return false;
     }
 
-    static constexpr std::size_t sample_rate = 48000; // NDI expects 48 kHz audio
-    // Check if we have enough samples to read for the current framerate
-    //if (_audio_buffer.CanReadForFramerate(framerate)) {
-    //    _audio_buffer.ReadPlanar(std::span{ _audio_samples });
-    //    _swapchain.SendAudio(_audio_samples);
-    //    return;
-    //}
+    // Close the render target
+    cmd_list.TextureBarrier({
+                                    .sync_before = wis::BarrierSync::RenderTarget,
+                                    .sync_after = wis::BarrierSync::Copy,
+                                    .access_before = wis::ResourceAccess::RenderTarget,
+                                    .access_after = wis::ResourceAccess::CopySource,
+                                    .state_before = wis::TextureState::RenderTarget,
+                                    .state_after = wis::TextureState::CopySource,
+                            },
+                            current_texture);
 
-    // Not enough samples, need to read from the input
-    AudioProbe audio_probe;
-    audio_probe.audio_channels = 2; // Stereo
-    audio_probe.audio_sample_rate = sample_rate; // 48 kHz (Used to determine if input is needed)
-    audio_probe.last_audio_pts = _last_audio_pts; // Start from the last PTS
-    sinks[1].source_node->EvaluateAudio(audio_probe);
+    // Copy the current texture to the staging buffer (it will be presented next time)
+    _swapchain.CopyToStagingBuffer(_command_lists[current_texture_index]);
 
-    if (!audio_probe.audio_data.empty()) {
-        // If audio data has PTS that is not continuous, reset the buffer
-        //std::size_t tolerance = (framerate.denominator == 0 || framerate.numerator == 0)
-        //        ? 0
-        //        : (sample_rate * framerate.denominator) / framerate.numerator; // Tolerance of 1 frame
-        //
-        //if (_last_audio_pts != 0 && audio_probe.first_audio_pts > _last_audio_pts + tolerance) {
-        //    vortex::warn("NDIOutput: Audio PTS discontinuity detected (last: {}, current: {}), resetting audio buffer", _last_audio_pts, audio_probe.first_audio_pts);
-        //    _audio_buffer.Reset();
-        //}
-
-        // Here is a good place to resample if needed in the future
-        _audio_buffer.WritePlanar(std::span{ audio_probe.audio_data }); // Write the audio data to the buffer
-        _last_audio_pts = audio_probe.last_audio_pts;
+    // End the command list
+    if (!cmd_list.Close()) {
+        vortex::error("Failed to close command list for WindowOutput");
+        return false;
     }
 
-    if (_audio_buffer.IsEmpty()) {
-        return; // No audio to send
+    auto& queue = gfx.GetMainQueue();
+    wis::CommandListView views[]{ cmd_list };
+    queue.ExecuteCommandLists(views, std::size(views));
+
+    // Signal the fence for the current frame
+    result = queue.SignalQueue(_fence, _fence_value);
+    if (!vortex::success(result)) {
+        vortex::error("Failed to signal fence for NDIOutput: {}", result.error);
+        return false;
     }
 
-    std::size_t read_samples = _audio_buffer.ReadPlanar(std::span{ _audio_samples });
-    if (read_samples < _audio_buffer.SamplesForFramerate(framerate)) {
-        //vortex::warn("NDIOutput: Not enough audio samples to send to NDI (needed {}, got {})", _audio_buffer.SamplesForFramerate(framerate), read_samples);
-        return; // No samples to send
+    // We have strong ordering on the fence values, so this is safe
+    // Wait for the previous frame to finish
+    result = _fence.Wait(_fence_value - 1);
+    if (!vortex::success(result)) {
+        vortex::error("Failed to wait for fence for NDIOutput: {}", result.error);
+        return false;
     }
 
-    _swapchain.SendAudio(_audio_samples);
+    // Present the swapchain (this will send the previous frame via NDI)
+    _swapchain.Present();
+
+    ++_fence_value;
+    return true;
 }

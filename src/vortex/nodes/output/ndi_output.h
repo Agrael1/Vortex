@@ -10,10 +10,15 @@ struct RenderPassForwardDesc;
 
 class NDIOutput : public vortex::graph::OutputImpl<NDIOutput, NDIOutputProperties, 2>
 {
+    static constexpr std::size_t audio_sample_rate = 48000; // Fixed sample rate for NDI audio
+    static constexpr std::size_t max_audio_channels = 2; // NDI supports up to 8 channels, but we'll limit to stereo for simplicity
     static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for render targets
 public:
     NDIOutput(const vortex::Graphics& gfx, SerializedProperties props);
-    ~NDIOutput();
+    ~NDIOutput()
+    {
+        Throttle(); // Wait for GPU to finish before destroying resources
+    }
 
 public:
     // Properties
@@ -36,6 +41,7 @@ public:
             _swapchain.SetFramerate(value);
         }
     }
+
 public:
     virtual vortex::ratio32_t GetOutputFPS() const noexcept
     {
@@ -47,14 +53,16 @@ public:
     }
 
     virtual void Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe) override;
-    virtual void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override;
+    virtual bool Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override;
 
 private:
-    void Throttle() const
+    void Throttle() const;
+    bool EvaluateAudio();
+    bool EvaluateVideo(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr);
+    uint64_t CurrentFrameIndex() const noexcept
     {
-        //std::ignore = _fence.Wait(_fence_value - 1);
+        return (_fence_value - 1) % vortex::max_frames_in_flight;
     }
-    void EvaluateAudio();
 
 private:
     NDISwapchain _swapchain;
@@ -63,7 +71,6 @@ private:
 
     wis::Fence _fence; ///< Fence for synchronization
     uint64_t _fence_value = 1; ///< Current fence value for synchronization
-    uint64_t _fence_values[vortex::max_frames_in_flight] = { 1, 0 }; ///< Current fence value for synchronization
 
     vortex::AudioBuffer _audio_buffer; ///< Audio buffer for storing audio samples (planar float)
     uint64_t _last_audio_pts = 0; ///< Last audio PTS sent to NDI

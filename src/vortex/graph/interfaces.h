@@ -33,7 +33,7 @@ enum class EvaluationStrategy {
 struct alignas(16) INode {
     virtual ~INode() = default;
     virtual void Update(const vortex::Graphics& gfx, RenderProbe& probe) { };
-    virtual void Evaluate(const vortex::Graphics& gfx, RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) { };
+    virtual bool Evaluate(const vortex::Graphics& gfx, RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) { return false; };
     virtual void EvaluateAudio(AudioProbe& probe) { };
     virtual void SetPropertyUpdateNotifier(UpdateNotifier notifier) { }
     constexpr virtual NodeType GetType() const noexcept

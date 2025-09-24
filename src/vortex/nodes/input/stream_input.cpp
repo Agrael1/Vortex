@@ -141,17 +141,17 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
     }
 }
 
-void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info)
+bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info)
 {
     // Check if the texture is valid before rendering
     if (_video_frames.empty()) {
         // vortex::info("ImageInput: Texture is not valid or has zero size.");
-        return; // Skip rendering if texture is not valid
+        return false; // Skip rendering if texture is not valid
     }
 
     auto now = std::chrono::steady_clock::now();
     if (_first_video_pts == AV_NOPTS_VALUE) {
-        return;
+        return false;
     }
 
     static std::streamsize frames_available = 0;
@@ -161,7 +161,7 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
     current_video_pts = std::max<int64_t>(_first_video_pts, current_video_pts - 2000);
     auto it = _video_frames.lower_bound(current_video_pts);
     if (it == _video_frames.end()) {
-        return; // No frames ready to be played
+        return false; // No frames ready to be played
     }
 
     AVFrame* frame = it->second.get();
@@ -170,21 +170,21 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
     auto result_texture = ffmpeg::GetTextureFromFrame(*frame);
     if (!result_texture) {
         vortex::warn("StreamInput: Failed to get texture from frame: {}", result_texture.error().message());
-        return;
+        return false;
     }
     auto& texture = _textures[probe.frame_number % vortex::max_frames_in_flight] = std::move(result_texture.value());
 
     auto result_fence = ffmpeg::GetFenceFromFrame(*frame);
     if (!result_fence) {
         vortex::warn("StreamInput: Failed to get fence from frame: {}", result_fence.error().message());
-        return;
+        return false;
     }
     auto& fence = _fences[probe.frame_number % vortex::max_frames_in_flight] = std::move(result_fence.value());
 
     auto fence_value = ffmpeg::GetFenceValueFromFrame(*frame);
     if (!fence_value) {
         vortex::warn("StreamInput: Failed to get fence value from frame: {}", fence_value.error().message());
-        return;
+        return false;
     }
     uint64_t value = fence_value.value();
 
@@ -203,7 +203,7 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
     _shader_resources[probe.frame_number % vortex::max_frames_in_flight] =
             vortex::ffmpeg::DX12CreateSRVNV12(res, device, texture, descs);
 
-    gfx.GetMainQueue().WaitQueue(fence, value); // Wait for the frame to be ready
+    std::ignore = gfx.GetMainQueue().WaitQueue(fence, value); // Wait for the frame to be ready
 
     // Bind the texture and sampler to the command list
     probe._descriptor_buffer.WriteTexture(probe.frame_number % vortex::max_frames_in_flight, 0, 0, _shader_resources[probe.frame_number % vortex::max_frames_in_flight][0]);
@@ -240,6 +240,7 @@ void vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
 
     // End the render pass
     cmd_list.EndRenderPass();
+    return true;
 }
 
 

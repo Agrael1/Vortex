@@ -65,6 +65,7 @@ vortex::ffmpeg::StreamManager::StreamManager(const vortex::Graphics& gfx)
 vortex::ffmpeg::StreamManager::~StreamManager()
 {
     // Stop all IO threads
+    std::unique_lock lock(_streams_mutex);
     for (auto& thread : _io_threads) {
         thread.request_stop();
     }

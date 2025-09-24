@@ -104,12 +104,12 @@ void vortex::ImageInput::Update(const vortex::Graphics& gfx, vortex::RenderProbe
     }
 }
 
-void vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info)
+bool vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info)
 {
     // Check if the texture is valid before rendering
     if (!_texture || _texture.GetSize().width == 0 || _texture.GetSize().height == 0) {
         //vortex::info("ImageInput: Texture is not valid or has zero size.");
-        return; // Skip rendering if texture is not valid
+        return false; // Skip rendering if texture is not valid
     }
 
     wis::RenderPassRenderTargetDesc target_desc{
@@ -142,4 +142,5 @@ void vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPro
 
     // End the render pass
     cmd_list.EndRenderPass();
+    return true;
 }

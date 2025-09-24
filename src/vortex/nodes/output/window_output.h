@@ -115,7 +115,7 @@ public:
     {
         return { window_size.x, window_size.y };
     }
-    void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
+    bool Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
         if (_resized) {
             // Resize the swapchain if the window has been resized
@@ -129,7 +129,7 @@ public:
                 _render_targets[i] = gfx.GetDevice().CreateRenderTarget(result, _textures[i], wis::RenderTargetDesc{ .format = wis::DataFormat::RGBA8Unorm });
                 if (!vortex::success(result)) {
                     vortex::error("Failed to recreate render target after swapchain resize: {}", result.error);
-                    return;
+                    return false;
                 }
             }
             _textures = _swapchain.GetBufferSpan(); // Update textures to match the new swapchain buffers
@@ -180,11 +180,12 @@ public:
         // End the command list
         if (!cmd_list.Close()) {
             vortex::error("Failed to close command list for WindowOutput");
-            return;
+            return false;
         }
         gfx.ExecuteCommandLists({ cmd_list });
 
         Present(gfx); // Present the swapchain after rendering
+        return true;
     }
 
 private:

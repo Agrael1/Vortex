@@ -36,8 +36,9 @@ public:
         return { window_size.x, window_size.y };
     }
 
-    void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
+    bool Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
+        return true; // Mock output always succeeds
     }
 
 private:

@@ -51,15 +51,15 @@ void vortex::WindowOutput::Throttle() noexcept
     constexpr static uint64_t timeout_ns = 1'000'000'000; // 1 second timeout
     wis::Result res = _fence.Wait(_fence_values[_frame_index] - 1, timeout_ns);
     if (res.status == wis::Status::Timeout) {
-        vortex::warn("NDIOutput: Timeout while waiting for fence in Throttle(). The GPU may be unresponsive.");
+        vortex::warn("WindowOutput: Timeout while waiting for fence in Throttle(). The GPU may be unresponsive.");
     } else if (!vortex::success(res)) {
-        vortex::error("NDIOutput: Failed to wait for fence in Throttle(): {}", res.error);
+        vortex::error("WindowOutput: Failed to wait for fence in Throttle(): {}", res.error);
     }
 }
 
 void vortex::WindowOutput::Present(const vortex::Graphics& gfx) noexcept
 {
-    // Present the swapchain
+    // Present the swapchain (non-blocking for window output)
     if (auto result = _swapchain.Present(); !vortex::success(result)) {
         vortex::error("Failed to present swapchain: {}", result.error);
         return;
@@ -72,8 +72,9 @@ void vortex::WindowOutput::Present(const vortex::Graphics& gfx) noexcept
         return;
     }
 
+    // Non-blocking fence check for window output
     _frame_index = _swapchain.GetCurrentIndex() % vortex::max_frames_in_flight;
-    result = _fence.Wait(_fence_value, _fence_values[_frame_index]);
+    result = _fence.Wait(_fence_values[_frame_index]);
     if (!vortex::success(result)) {
         vortex::error("Failed to wait for fence in WindowOutput: {}", result.error);
         return;
@@ -106,14 +107,13 @@ void vortex::WindowOutput::Update(const vortex::Graphics& gfx, vortex::RenderPro
 
 bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info)
 {
-    auto current_texture_index = _swapchain.GetCurrentIndex();
-    probe._command_list = &_command_lists[_frame_index];
+    probe.frame_number = _frame_index;
+    probe.command_list = &_command_lists[_frame_index];
     auto sink = _sinks.sinks[0];
 
     if (!sink) {
         return false; // No source connected, nothing to render
     }
-
 
     // Pass to the sink nodes for post-order processing
     RenderPassForwardDesc desc{
@@ -123,9 +123,9 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderP
     };
 
     // Barrier to ensure the render target is ready for rendering
-    auto& cmd_list = *probe._command_list;
+    auto& cmd_list = *probe.command_list;
     std::ignore = cmd_list.Reset();
-    probe._descriptor_buffer.BindBuffers(gfx, cmd_list);
+    probe.descriptor_buffer.BindBuffers(gfx, cmd_list);
 
     cmd_list.TextureBarrier({
                                     .sync_before = wis::BarrierSync::None,
@@ -135,7 +135,7 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderP
                                     .state_before = wis::TextureState::Present,
                                     .state_after = wis::TextureState::RenderTarget,
                             },
-                            _textures[current_texture_index]);
+                            _textures[_frame_index]);
 
     // Pass to the next nodes in the graph
     bool rendered = sink.source_node->Evaluate(gfx, probe, &desc);
@@ -152,7 +152,7 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderP
                                     .state_before = wis::TextureState::RenderTarget,
                                     .state_after = wis::TextureState::Present,
                             },
-                            _textures[current_texture_index]);
+                            _textures[_frame_index]);
 
     // End the command list
     if (!cmd_list.Close()) {
@@ -161,6 +161,9 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderP
     }
     gfx.ExecuteCommandLists({ cmd_list });
 
-    Present(gfx); // Present the swapchain after rendering
+    // Present the swapchain after rendering (non-blocking for window)
+    Present(gfx);
+    
+    // Window output doesn't block, so return true immediately
     return true;
 }

@@ -215,7 +215,7 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
 
         ffmpeg::unique_packet packet;
         bool got_packet = stream.read_queue.try_pop(packet);
-        if (!got_packet) {
+        if (!got_packet || !packet) {
             return false; // No more packets to process right now
         }
 

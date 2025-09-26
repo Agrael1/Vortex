@@ -206,9 +206,9 @@ bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
     std::ignore = gfx.GetMainQueue().WaitQueue(fence, value); // Wait for the frame to be ready
 
     // Bind the texture and sampler to the command list
-    probe._descriptor_buffer.WriteTexture(probe.frame_number % vortex::max_frames_in_flight, 0, 0, _shader_resources[probe.frame_number % vortex::max_frames_in_flight][0]);
-    probe._descriptor_buffer.WriteTexture(probe.frame_number % vortex::max_frames_in_flight, 0, 1, _shader_resources[probe.frame_number % vortex::max_frames_in_flight][1]);
-    probe._descriptor_buffer.WriteSampler(probe.frame_number % vortex::max_frames_in_flight, 0, 0, _lazy_data.uget()._sampler);
+    probe.descriptor_buffer.WriteTexture(probe.frame_number % vortex::max_frames_in_flight, 0, 0, _shader_resources[probe.frame_number % vortex::max_frames_in_flight][0]);
+    probe.descriptor_buffer.WriteTexture(probe.frame_number % vortex::max_frames_in_flight, 0, 1, _shader_resources[probe.frame_number % vortex::max_frames_in_flight][1]);
+    probe.descriptor_buffer.WriteSampler(probe.frame_number % vortex::max_frames_in_flight, 0, 0, _lazy_data.uget()._sampler);
 
     wis::RenderPassRenderTargetDesc target_desc{
         .target = output_info->_current_rt_view,
@@ -221,7 +221,7 @@ bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
         .targets = &target_desc,
     };
 
-    auto& cmd_list = *probe._command_list;
+    auto& cmd_list = *probe.command_list;
 
     // Begin the render pass
     cmd_list.BeginRenderPass(pass_desc);
@@ -234,7 +234,7 @@ bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPr
         DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
         DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
     };
-    probe._descriptor_buffer.BindOffsets(gfx, cmd_list, _lazy_data.uget()._root_signature, probe.frame_number % vortex::max_frames_in_flight, offsets);
+    probe.descriptor_buffer.BindOffsets(gfx, cmd_list, _lazy_data.uget()._root_signature, probe.frame_number % vortex::max_frames_in_flight, offsets);
     // Draw a quad that covers the viewport
     cmd_list.DrawInstanced(3, 1, 0, 0);
 

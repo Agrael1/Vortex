@@ -2,6 +2,7 @@
 #include <vortex/graph/interfaces.h>
 #include <vortex/graph/connection.h>
 #include <vortex/graph/optimize_probe.h>
+#include <vortex/graph/output_scheduler.h>
 #include <vortex/probe.h>
 #include <atomic>
 #include <unordered_set>
@@ -35,18 +36,17 @@ public:
 
     void TraverseNodes(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
     {
-        // Sort outputs if needed
-        SortOutputs();
-
         // Process all pending updates before rendering
         ProcessUpdates(gfx, probe);
 
-        // Execute outputs in sorted order
-        for (auto* output : _outputs) {
-            output->Evaluate(gfx, probe);
+        // Get the next output to evaluate based on scheduling
+        IOutput* output = _output_scheduler.GetNextReadyOutput();
+        if (!output) {
+            return; // No output is ready to be evaluated this frame
         }
 
-        ++frame;
+        // Evaluate the output node
+        output->Evaluate(gfx, probe);
     }
 
     void PrintGraph() const
@@ -63,72 +63,15 @@ public:
         vortex::info(out);
     }
 
-    void SortOutputs()
-    {
-        if (!_sorting_dirty) {
-            return;
-        }
-
-        // Group outputs by compatibility first, then sort within groups
-        std::vector<std::vector<IOutput*>> compatibility_groups;
-
-        for (auto* output : _outputs) {
-            // Find compatible group or create new one
-            bool found_group = false;
-            for (auto& group : compatibility_groups) {
-                if (!group.empty() && AreSizeCompatible(group[0], output)) {
-                    group.push_back(output);
-                    found_group = true;
-                    break;
-                }
-            }
-
-            if (!found_group) {
-                compatibility_groups.emplace_back().push_back(output);
-            }
-        }
-
-        // Sort groups by importance (largest first) and sort within groups
-        std::ranges::sort(compatibility_groups, [](const auto& a, const auto& b) {
-            if (a.empty() || b.empty()) {
-                return !a.empty();
-            }
-
-            auto a_pixels = static_cast<uint64_t>(a[0]->GetOutputSize().width) * a[0]->GetOutputSize().height;
-            auto b_pixels = static_cast<uint64_t>(b[0]->GetOutputSize().width) * b[0]->GetOutputSize().height;
-            return a_pixels > b_pixels;
-        });
-
-        // Sort within each group
-        for (auto& group : compatibility_groups) {
-            std::ranges::sort(group, CompareBySizeCompatibility);
-        }
-
-        // Flatten back to single list
-        _outputs.clear();
-        for (const auto& group : compatibility_groups) {
-            _outputs.insert(_outputs.end(), group.begin(), group.end());
-        }
-
-        _sorting_dirty = false;
-
-        // Enhanced logging
-        if (!_outputs.empty()) {
-            vortex::trace("GraphModel: Sorted {} outputs into {} compatibility groups",
-                          _outputs.size(), compatibility_groups.size());
-            for (size_t i = 0; i < _outputs.size(); ++i) {
-                if (_outputs[i]) {
-                    auto size = _outputs[i]->GetOutputSize();
-                    vortex::trace("  Output {}: {:x} ({} pixels)", i, size,
-                                  static_cast<uint64_t>(size.width) * size.height);
-                }
-            }
-        }
-    }
-
     std::span<IOutput*> GetOutputs() noexcept
     {
         return _outputs; // Return a span of outputs
+    }
+
+    // Get the output scheduler for external access
+    const OutputScheduler& GetOutputScheduler() const noexcept
+    {
+        return _output_scheduler;
     }
 
 private:
@@ -248,10 +191,9 @@ private:
     std::unordered_set<INode*> _dirty_nodes; ///< Set of nodes that have pending property updates
 
     std::vector<IOutput*> _outputs;
-    uint32_t frame = 0; ///< Frame counter for rendering
 
     OptimizeProbe _optimize_probe;
+    OutputScheduler _output_scheduler; ///< Frame-rate aware output scheduler
     bool _optimization_dirty = true;
-    bool _sorting_dirty = true; ///< Flag to indicate if output sorting is needed
 };
 } // namespace vortex::graph

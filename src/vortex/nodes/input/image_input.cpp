@@ -79,10 +79,10 @@ void vortex::ImageInput::Update(const vortex::Graphics& gfx, vortex::RenderProbe
         _texture_resource = _texture.CreateShaderResource(gfx);
 
         // Bind the texture and sampler to the command list
-        probe._descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
-        probe._descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _lazy_data.uget()._sampler);
+        probe.descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
+        probe.descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _lazy_data.uget()._sampler);
 
-        auto& cmd_list = *probe._command_list;
+        auto& cmd_list = *probe.command_list;
         // Update state to shader resource
         std::ignore = cmd_list.Reset();
         cmd_list.TextureBarrier({
@@ -123,7 +123,7 @@ bool vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPro
         .targets = &target_desc,
     };
 
-    auto& cmd_list = *probe._command_list;
+    auto& cmd_list = *probe.command_list;
 
     // Begin the render pass
     cmd_list.BeginRenderPass(pass_desc);
@@ -136,7 +136,7 @@ bool vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPro
         DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
         DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
     };
-    probe._descriptor_buffer.BindOffsets(gfx, cmd_list, _lazy_data.uget()._root_signature, probe.frame_number % vortex::max_frames_in_flight, offsets);
+    probe.descriptor_buffer.BindOffsets(gfx, cmd_list, _lazy_data.uget()._root_signature, probe.frame_number % vortex::max_frames_in_flight, offsets);
     // Draw a quad that covers the viewport
     cmd_list.DrawInstanced(3, 1, 0, 0);
 

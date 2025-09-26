@@ -1,6 +1,7 @@
 #pragma once
 #include <wisdom/wisdom.hpp>
 #include <vector>
+#include <vortex/util/rational.h>
 
 struct SDL_AudioStream;
 
@@ -10,15 +11,16 @@ class DescriptorBuffer;
 
 struct RenderProbe
 {
-    vortex::DescriptorBuffer& _descriptor_buffer;
-    wis::CommandList* _command_list = nullptr; // Command list for recording commands
-
-    wis::RenderTargetView _current_rt_view;
-    const wis::Texture* _current_rt_texture;
-    wis::Size2D _output_size; // Useful for different render targets
+    vortex::DescriptorBuffer& descriptor_buffer;
+    wis::CommandList* command_list = nullptr; // Command list for recording commands
+    wis::Size2D output_size; // Useful for different render targets
     uint64_t frame_number = 0;
 
     vortex::ratio32_t output_framerate = { 60, 1 }; // Default 60 FPS
+
+    // PTS timing information (90kHz timebase)
+    uint64_t current_pts = 0;     // Current presentation timestamp
+    uint64_t target_pts = 0;      // Target presentation timestamp for this frame
 };
 
 struct AudioProbe {

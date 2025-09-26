@@ -21,7 +21,8 @@ auto vortex::graph::GraphModel::CreateNode(
         return 0; // Return 0 if node creation failed
     }
     if (node->GetType() == NodeType::Output) {
-        _outputs.push_back(static_cast<IOutput*>(node.get())); // Add to outputs if it's an output node
+        auto& out = _outputs.emplace_back(static_cast<IOutput*>(node.get())); // Add to outputs if it's an output node
+        _output_scheduler.AddOutput(out);
     }
 
     // Static nodes are to be updated on changes
@@ -83,6 +84,7 @@ void vortex::graph::GraphModel::RemoveNode(uintptr_t node_ptr)
     _dirty_nodes.erase(node);
     if (node->GetType() == NodeType::Output) {
         if (auto output_it = std::ranges::find(_outputs, node); output_it != _outputs.end()) {
+            _output_scheduler.RemoveOutput(*output_it); // Remove from scheduler
             _outputs.erase(output_it); // Remove from outputs if it's an output node
         } else {
             vortex::error("Output node not found in outputs: {}", node_ptr);

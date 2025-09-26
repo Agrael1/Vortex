@@ -78,6 +78,9 @@ bool vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProb
 {
     bool video = EvaluateVideo(gfx, probe, output_info);
     bool audio = EvaluateAudio();
+    
+    // Return true if either video or audio was processed
+    // The scheduler will mark this output as presented after this call
     return video || audio;
 }
 
@@ -136,7 +139,7 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::Rende
     auto& current_texture = textures[current_texture_index];
     auto& current_render_target = _render_targets[current_texture_index];
 
-    probe._command_list = &_command_lists[frame_index];
+    probe.command_list = &_command_lists[frame_index];
     probe.output_framerate = GetFramerate();
 
     auto sink = _sinks.GetSinks()[0];
@@ -149,7 +152,7 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::Rende
     };
 
     // Barrier to ensure the render target is ready for rendering
-    auto& cmd_list = *probe._command_list;
+    auto& cmd_list = *probe.command_list;
 
     // Video sink
     if (!sink) {
@@ -157,7 +160,7 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::Rende
     }
 
     std::ignore = cmd_list.Reset();
-    probe._descriptor_buffer.BindBuffers(gfx, cmd_list);
+    probe.descriptor_buffer.BindBuffers(gfx, cmd_list);
     cmd_list.TextureBarrier({
                                     .sync_before = wis::BarrierSync::Copy,
                                     .sync_after = wis::BarrierSync::RenderTarget,
@@ -206,16 +209,18 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::Rende
     }
 
     // We have strong ordering on the fence values, so this is safe
-    // Wait for the previous frame to finish
+    // Wait for the previous frame to finish (this is where NDI blocks)
     result = _fence.Wait(_fence_value - 1);
     if (!vortex::success(result)) {
         vortex::error("Failed to wait for fence for NDIOutput: {}", result.error);
         return false;
     }
 
-    // Present the swapchain (this will send the previous frame via NDI)
+    // Present the swapchain (this will send the previous frame via NDI and may block)
     _swapchain.Present();
 
     ++_fence_value;
+    
+    // NDI output blocks during presentation, so return true to indicate successful presentation
     return true;
 }

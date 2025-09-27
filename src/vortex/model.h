@@ -34,10 +34,10 @@ public:
         return nullptr; // Node not found
     }
 
-    void TraverseNodes(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
+    void TraverseNodes(const vortex::Graphics& gfx)
     {
         // Process all pending updates before rendering
-        ProcessUpdates(gfx, probe);
+        ProcessUpdates(gfx);
 
         // Get the next output to evaluate based on scheduling
         IOutput* output = _output_scheduler.GetNextReadyOutput();
@@ -46,7 +46,7 @@ public:
         }
 
         // Evaluate the output node
-        output->Evaluate(gfx, probe);
+        output->Evaluate(gfx);
     }
 
     void PrintGraph() const
@@ -75,7 +75,7 @@ public:
     }
 
 private:
-    void ProcessUpdates(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
+    void ProcessUpdates(const vortex::Graphics& gfx)
     {
         // Optimize the graph if needed
         if (_optimization_dirty) {
@@ -84,7 +84,7 @@ private:
         }
 
         for (auto* node : _dirty_nodes) {
-            node->Update(gfx, probe); // Update the node with the graphics context and probe
+            node->Update(gfx); // Update the node with the graphics context and probe
         }
     }
 

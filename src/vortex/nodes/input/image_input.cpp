@@ -63,42 +63,42 @@ vortex::ImageInputLazy::ImageInputLazy(const vortex::Graphics& gfx)
     _sampler = gfx.GetDevice().CreateSampler(result, sampler_desc);
 }
 
-void vortex::ImageInput::Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
+void vortex::ImageInput::Update(const vortex::Graphics& gfx)
 {
     // Load the texture from the image path if it has changed
     if (path_changed && !image_path.empty()) {
-        auto result = codec::CodecFFmpeg::LoadTexture(gfx, image_path);
-        if (!result) {
-            vortex::error("ImageInput: Failed to load texture from path: {}. Error: {}", image_path, result.error().message());
-            image_path = ""; // Clear the path if loading failed
-            path_changed = false; // Reset the path changed flag
-            return; // Skip rendering if texture loading failed
-        }
+        //auto result = codec::CodecFFmpeg::LoadTexture(gfx, image_path);
+        //if (!result) {
+        //    vortex::error("ImageInput: Failed to load texture from path: {}. Error: {}", image_path, result.error().message());
+        //    image_path = ""; // Clear the path if loading failed
+        //    path_changed = false; // Reset the path changed flag
+        //    return; // Skip rendering if texture loading failed
+        //}
 
-        _texture = std::move(result.value()); // Store the loaded texture
-        _texture_resource = _texture.CreateShaderResource(gfx);
+        //_texture = std::move(result.value()); // Store the loaded texture
+        //_texture_resource = _texture.CreateShaderResource(gfx);
 
-        // Bind the texture and sampler to the command list
-        probe.descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
-        probe.descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _lazy_data.uget()._sampler);
+        //// Bind the texture and sampler to the command list
+        ////probe.descriptor_buffer.GetCurrentDescriptorBuffer().WriteTexture(0, 0, _texture_resource);
+        ////probe.descriptor_buffer.GetSamplerBuffer().WriteSampler(0, 0, _lazy_data.uget()._sampler);
 
-        auto& cmd_list = *probe.command_list;
-        // Update state to shader resource
-        std::ignore = cmd_list.Reset();
-        cmd_list.TextureBarrier({
-                                        .sync_before = wis::BarrierSync::None,
-                                        .sync_after = wis::BarrierSync::None,
-                                        .access_before = wis::ResourceAccess::NoAccess,
-                                        .access_after = wis::ResourceAccess::NoAccess,
-                                        .state_before = wis::TextureState::Undefined,
-                                        .state_after = wis::TextureState::ShaderResource,
-                                },
-                                _texture.Get());
+        //auto& cmd_list = *probe.command_list;
+        //// Update state to shader resource
+        //std::ignore = cmd_list.Reset();
+        //cmd_list.TextureBarrier({
+        //                                .sync_before = wis::BarrierSync::None,
+        //                                .sync_after = wis::BarrierSync::None,
+        //                                .access_before = wis::ResourceAccess::NoAccess,
+        //                                .access_after = wis::ResourceAccess::NoAccess,
+        //                                .state_before = wis::TextureState::Undefined,
+        //                                .state_after = wis::TextureState::ShaderResource,
+        //                        },
+        //                        _texture.Get());
 
-        cmd_list.Close();
-        wis::CommandListView views[]{ cmd_list };
-        gfx.GetMainQueue().ExecuteCommandLists(views, 1);
-        gfx.WaitForGPU(); // Ensure the texture is ready for rendering
+        //cmd_list.Close();
+        //wis::CommandListView views[]{ cmd_list };
+        //gfx.GetMainQueue().ExecuteCommandLists(views, 1);
+        //gfx.WaitForGPU(); // Ensure the texture is ready for rendering
 
         path_changed = false; // Reset the path changed flag after loading
     }
@@ -136,7 +136,7 @@ bool vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPro
         DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
         DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = true } // Sampler
     };
-    probe.descriptor_buffer.BindOffsets(gfx, cmd_list, _lazy_data.uget()._root_signature, probe.frame_number % vortex::max_frames_in_flight, offsets);
+    //probe.descriptor_buffer.BindOffsets(gfx, cmd_list, _lazy_data.uget()._root_signature, probe.frame_number % vortex::max_frames_in_flight, offsets);
     // Draw a quad that covers the viewport
     cmd_list.DrawInstanced(3, 1, 0, 0);
 

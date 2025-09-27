@@ -2,16 +2,16 @@
 #include <wisdom/wisdom.hpp>
 #include <vector>
 #include <vortex/util/rational.h>
+#include <vortex/gfx/descriptor_buffer.h>
 
 struct SDL_AudioStream;
 
 namespace vortex {
-class Graphics;
-class DescriptorBuffer;
-
 struct RenderProbe
 {
-    vortex::DescriptorBuffer& descriptor_buffer;
+    vortex::DescriptorBufferView descriptor_buffer;
+    vortex::DescriptorBufferView sampler_buffer;
+
     wis::CommandList* command_list = nullptr; // Command list for recording commands
     wis::Size2D output_size; // Useful for different render targets
     uint64_t frame_number = 0;

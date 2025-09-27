@@ -12,7 +12,8 @@ namespace vortex {
 // Debug output is a window with a swapchain for rendering contents directly to the screen
 class WindowOutput : public vortex::graph::OutputImpl<WindowOutput, WindowOutputProperties>
 {
-    static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for render targets
+    static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for
+                                                                           // render targets
     static constexpr size_t max_swapchain_images = 2; // Maximum number of swapchain images
 public:
     WindowOutput(const vortex::Graphics& gfx, SerializedProperties props);
@@ -40,16 +41,10 @@ public:
     }
 
 public:
-    virtual vortex::ratio32_t GetOutputFPS() const noexcept
-    {
-        return GetFramerate();
-    }
-    virtual wis::Size2D GetOutputSize() const noexcept
-    {
-        return { window_size.x, window_size.y };
-    }
-    void Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe) override;
-    bool Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override;
+    virtual vortex::ratio32_t GetOutputFPS() const noexcept { return GetFramerate(); }
+    virtual wis::Size2D GetOutputSize() const noexcept { return { window_size.x, window_size.y }; }
+    virtual void Update(const vortex::Graphics& gfx) override;
+    virtual bool Evaluate(const vortex::Graphics& gfx) override;
 
 private:
     vortex::ui::SDLWindow _window;
@@ -64,7 +59,10 @@ public:
 
     wis::Fence _fence; ///< Fence for synchronization
     uint64_t _fence_value = 1; ///< Current fence value for synchronization
-    uint64_t _fence_values[vortex::max_frames_in_flight] = { 1, 0 }; ///< Current fence value for synchronization
+    uint64_t _fence_values[vortex::max_frames_in_flight] = { 1, 0 }; ///< Current fence value for
+                                                                     ///< synchronization
     bool _resized = false; ///< Flag to indicate if the window has been resized
+
+    vortex::DescriptorBuffer _desc_buffer; ///< Descriptor buffer for the output
 };
 } // namespace vortex

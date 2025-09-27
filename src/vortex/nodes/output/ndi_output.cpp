@@ -14,6 +14,7 @@ vortex::NDIOutput::NDIOutput(const vortex::Graphics& gfx, SerializedProperties p
                       .channels = max_audio_channels },
               std::chrono::seconds(1)
       )
+    , _desc_buffer(gfx, 64, 8)
 {
     wis::Result result = wis::success;
 
@@ -53,7 +54,7 @@ vortex::NDIOutput::NDIOutput(const vortex::Graphics& gfx, SerializedProperties p
     _audio_samples.resize(samples_per_frame * 2); // Reserve space for 1 second of stereo float samples at 48kHz
 }
 
-void vortex::NDIOutput::Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
+void vortex::NDIOutput::Update(const vortex::Graphics& gfx)
 {
     if (_resized) {
         // Throttle(); // Wait for GPU to finish before resizing
@@ -74,9 +75,9 @@ void vortex::NDIOutput::Update(const vortex::Graphics& gfx, vortex::RenderProbe&
     }
 }
 
-bool vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info)
+bool vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx)
 {
-    bool video = EvaluateVideo(gfx, probe, output_info);
+    bool video = EvaluateVideo(gfx, _desc_buffer);
     bool audio = EvaluateAudio();
     
     // Return true if either video or audio was processed
@@ -128,7 +129,8 @@ bool vortex::NDIOutput::EvaluateAudio()
     return true;
 }
 
-bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info)
+bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx,
+                                      vortex::DescriptorBuffer& desc_buffer)
 {
     wis::Result result = wis::success;
 
@@ -139,10 +141,16 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::Rende
     auto& current_texture = textures[current_texture_index];
     auto& current_render_target = _render_targets[current_texture_index];
 
-    probe.command_list = &_command_lists[frame_index];
-    probe.output_framerate = GetFramerate();
-
     auto sink = _sinks.GetSinks()[0];
+    if (!sink) {
+        return false; // No video sink connected
+    }
+
+    RenderProbe probe{
+        .descriptor_buffer = desc_buffer.DescBufferView(frame_index),
+        .sampler_buffer = desc_buffer.SamplerBufferView(frame_index),
+        .command_list = &_command_lists[frame_index],
+        .output_framerate = GetFramerate() };
 
     // Pass to the sink nodes for post-order processing
     RenderPassForwardDesc desc{
@@ -153,14 +161,8 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx, vortex::Rende
 
     // Barrier to ensure the render target is ready for rendering
     auto& cmd_list = *probe.command_list;
-
-    // Video sink
-    if (!sink) {
-        return false; // No video sink connected
-    }
-
     std::ignore = cmd_list.Reset();
-    probe.descriptor_buffer.BindBuffers(gfx, cmd_list);
+    desc_buffer.BindBuffers(gfx, cmd_list);
     cmd_list.TextureBarrier({
                                     .sync_before = wis::BarrierSync::Copy,
                                     .sync_after = wis::BarrierSync::RenderTarget,

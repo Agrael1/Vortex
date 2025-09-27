@@ -44,7 +44,6 @@ public:
         : _gfx(true)
         , _exit(AppExitControl::GetInstance())
         , _ui_app(CreateUIApp(args.headless))
-        , _descriptor_buffer(_gfx)
     {
         TerminalHandler::Instance().SetInputHandler([](std::string_view line, void* p) {
             return static_cast<App*>(p)->TerminalMessageHandler(line);
@@ -75,15 +74,16 @@ public:
         // Test setup of the model
         auto i1 = _model.CreateNode(_gfx, "StreamInput", external_observer, stream_values); // Create a default node for testing
         auto o1 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values3); // Create a default output for testing
-        //auto o2 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values2); // Create a default output for testing
+        auto o2 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values2); // Create a default output for testing
 
         _model.SetNodeInfo(i1, "Image 1"); // Set some info for the node
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
+        _model.SetNodeInfo(o2, "Output 1"); // Set some info for the output node
 
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
         //_model.ConnectNodes(i1, 1, o1, 1); // Connect the audio outputs
 
-        //_model.ConnectNodes(i1, 0, o2, 0); // Connect the nodes in the model
+        _model.ConnectNodes(i1, 0, o2, 0); // Connect the nodes in the model
     }
 
 public:
@@ -101,10 +101,7 @@ public:
             ProcessMessages();
 
             // Process the model and render the nodes
-            vortex::RenderProbe probe{
-                .descriptor_buffer = _descriptor_buffer,
-            };
-            _model.TraverseNodes(_gfx, probe); // Traverse the nodes in the model
+            _model.TraverseNodes(_gfx); // Traverse the nodes in the model
         }
 
         return 0;
@@ -241,8 +238,6 @@ private:
     vortex::ui::SDLLibrary _sdl;
 
     vortex::Graphics _gfx;
-
-    vortex::DescriptorBuffer _descriptor_buffer;
     dro::SPSCQueue<CefRefPtr<CefProcessMessage>, 64> _message_queue; ///< Queue for messages from the UI
 
     // CEF client for UI

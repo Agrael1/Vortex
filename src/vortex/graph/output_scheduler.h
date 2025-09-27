@@ -36,12 +36,15 @@ struct OutputScheduleInfo {
 
 public:
     /// @brief Advances to the next frame and updates presentation timestamps.
-    /// @return The precious presentation timestamp (PTS) for the current frame, as a uint64_t value.
+    /// @return The precious presentation timestamp (PTS) for the current frame, as a uint64_t
+    /// value.
     constexpr uint64_t AdvanceToNextFrame(vortex::ratio32_t framerate) noexcept
     {
         ++frame_number;
         last_pts = next_pts;
-        next_pts = (sync::PTSClock::timebase_hz * framerate.denom() * frame_number) / framerate.num() + base_pts;
+        next_pts = (sync::PTSClock::timebase_hz * framerate.denom() * frame_number) /
+                        framerate.num() +
+                base_pts;
         return last_pts;
     }
     constexpr int64_t DurationToNextFrame() const noexcept
@@ -58,15 +61,17 @@ public:
 class OutputScheduler
 {
 public:
-    uint64_t GetCurrentPTS() const noexcept
-    {
-        return _master_clock.CurrentPTS();
-    }
+    uint64_t GetCurrentPTS() const noexcept { return _master_clock.CurrentPTS(); }
     void RemoveOutput(IOutput* output) noexcept
     {
         // Rebuild the priority queue without the removed output
         auto& current_queue = _scheduler;
-        current_queue.erase(std::remove_if(current_queue.begin(), current_queue.end(), [output](const OutputScheduleInfo& info) { return info.output == output; }), current_queue.end());
+        current_queue.erase(std::remove_if(current_queue.begin(),
+                                           current_queue.end(),
+                                           [output](const OutputScheduleInfo& info) {
+                                               return info.output == output;
+                                           }),
+                            current_queue.end());
 
         // Re-heapify the priority queue
         std::make_heap(current_queue.begin(), current_queue.end());
@@ -105,36 +110,42 @@ public:
         }
 
         // Check the output at the top of the priority queue
-        std::pop_heap(_scheduler.begin(), _scheduler.end());
+        std::pop_heap(_scheduler.begin(), _scheduler.end(), std::greater<>{});
         auto& next_info = _scheduler.back();
 
         // Now there can be three cases:
-        // 1. next_info.next_pts < current_pts: The output is overdue, reevaluate pts, advance frame, drop frame, get next output...
-        // 2. next_info.next_pts == current_pts +- eps: The output is due now, advance frame, return output
+        // 1. next_info.next_pts < current_pts: The output is overdue, reevaluate pts, advance
+        // frame, drop frame, get next output...
+        // 2. next_info.next_pts == current_pts +- eps: The output is due now, advance frame, return
+        // output
         // 3. next_info.next_pts > current_pts: The output is not due yet, push back and return null
 
         // Epsilon for timing tolerance (in 90kHz ticks)
         constexpr int64_t epsilon = 200; // ~2.2ms tolerance
 
-        int64_t pts_diff = static_cast<int64_t>(next_info.next_pts) - static_cast<int64_t>(current_pts);
+        int64_t pts_diff = static_cast<int64_t>(next_info.next_pts) -
+                static_cast<int64_t>(current_pts);
 
         if (pts_diff < -epsilon) {
             // Case 1: Output is overdue, drop frame and advance
             next_info.AdvanceToNextFrame(next_info.output->GetOutputFPS());
-            std::push_heap(_scheduler.begin(), _scheduler.end());
+            std::push_heap(_scheduler.begin(), _scheduler.end(), std::greater<>{});
             UpdateUpperBound(next_info.next_pts); // Update upper boundary
             // Report dropped frame (could log or count this event)
-            vortex::warn("OutputScheduler: Dropped frame for output due to being overdue. Output: {}", next_info.output->GetInfo());
+            vortex::warn(
+                    "OutputScheduler: Dropped frame for output due to being overdue. Output: {}",
+                    next_info.output->GetInfo());
             return GetNextReadyOutput(); // Recursively check for the next ready output
         } else if (std::abs(pts_diff) <= epsilon) {
+            IOutput* output = next_info.output;
             // Case 2: Output is due now, advance frame and return output
             next_info.AdvanceToNextFrame(next_info.output->GetOutputFPS());
-            std::push_heap(_scheduler.begin(), _scheduler.end());
             UpdateUpperBound(next_info.next_pts); // Update upper boundary
-            return next_info.output;
+            std::push_heap(_scheduler.begin(), _scheduler.end(), std::greater<>{});
+            return output;
         } else {
             // Case 3: Output is not due yet, push back and return null
-            std::push_heap(_scheduler.begin(), _scheduler.end());
+            std::push_heap(_scheduler.begin(), _scheduler.end(), std::greater<>{});
             return nullptr;
         }
     }

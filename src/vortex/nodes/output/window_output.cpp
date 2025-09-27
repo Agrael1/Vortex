@@ -4,6 +4,7 @@
 vortex::WindowOutput::WindowOutput(const vortex::Graphics& gfx, SerializedProperties props)
     : ImplClass(props)
     , _window(name.data(), int(window_size.x), int(window_size.y), false)
+    , _desc_buffer(gfx, 64, 8)
 {
     wis::Result result = wis::success;
     auto& device = gfx.GetDevice();
@@ -11,8 +12,10 @@ vortex::WindowOutput::WindowOutput(const vortex::Graphics& gfx, SerializedProper
     auto [gfx_width, gfx_height] = _window.PixelSize();
     wis::SwapchainDesc desc{
         .size = { uint32_t(gfx_width), uint32_t(gfx_height) },
-        .format = format, // RGBA8Unorm is the most common format for desktop applications TODO: make this configurable + HDR
-        .buffer_count = max_swapchain_images, // double buffering, TODO: make this configurable + query for supported buffer counts
+        .format = format, // RGBA8Unorm is the most common format for desktop applications TODO:
+        // make this configurable + HDR
+        .buffer_count = max_swapchain_images, // double buffering, TODO: make this configurable +
+        // query for supported buffer counts
         .stereo = false,
         .vsync = true,
         .tearing = false,
@@ -51,7 +54,8 @@ void vortex::WindowOutput::Throttle() noexcept
     constexpr static uint64_t timeout_ns = 1'000'000'000; // 1 second timeout
     wis::Result res = _fence.Wait(_fence_values[_frame_index] - 1, timeout_ns);
     if (res.status == wis::Status::Timeout) {
-        vortex::warn("WindowOutput: Timeout while waiting for fence in Throttle(). The GPU may be unresponsive.");
+        vortex::warn("WindowOutput: Timeout while waiting for fence in Throttle(). The GPU may be "
+                     "unresponsive.");
     } else if (!vortex::success(res)) {
         vortex::error("WindowOutput: Failed to wait for fence in Throttle(): {}", res.error);
     }
@@ -83,7 +87,7 @@ void vortex::WindowOutput::Present(const vortex::Graphics& gfx) noexcept
     _fence_values[_frame_index] = ++_fence_value;
 }
 
-void vortex::WindowOutput::Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe)
+void vortex::WindowOutput::Update(const vortex::Graphics& gfx)
 {
     if (_resized) {
         // Resize the swapchain if the window has been resized
@@ -94,21 +98,24 @@ void vortex::WindowOutput::Update(const vortex::Graphics& gfx, vortex::RenderPro
         // Recreate the render targets after resizing the swapchain
         wis::Result result = wis::success;
         for (size_t i = 0; i < _textures.size(); ++i) {
-            _render_targets[i] = gfx.GetDevice().CreateRenderTarget(result, _textures[i], wis::RenderTargetDesc{ .format = wis::DataFormat::RGBA8Unorm });
+            _render_targets[i] = gfx.GetDevice().CreateRenderTarget(
+                    result,
+                    _textures[i],
+                    wis::RenderTargetDesc{ .format = wis::DataFormat::RGBA8Unorm });
             if (!vortex::success(result)) {
-                vortex::error("Failed to recreate render target after swapchain resize: {}", result.error);
+                vortex::error("Failed to recreate render target after swapchain resize: {}",
+                              result.error);
                 return;
             }
         }
-        _textures = _swapchain.GetBufferSpan(); // Update textures to match the new swapchain buffers
+        _textures = _swapchain.GetBufferSpan(); // Update textures to match the new swapchain
+                                                // buffers
         _resized = false; // Reset the resized flag
     }
 }
 
-bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info)
+bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx)
 {
-    probe.frame_number = _frame_index;
-    probe.command_list = &_command_lists[_frame_index];
     auto sink = _sinks.sinks[0];
 
     if (!sink) {
@@ -121,21 +128,28 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderP
         ._current_rt_texture = &_textures[_frame_index],
         ._output_size = { window_size.x, window_size.y }
     };
+    vortex::RenderProbe probe{
+        .descriptor_buffer = _desc_buffer.DescBufferView(_frame_index),
+        .sampler_buffer = _desc_buffer.SamplerBufferView(_frame_index),
+        .command_list = &_command_lists[_frame_index],
+        .frame_number = _frame_index,
+    };
 
     // Barrier to ensure the render target is ready for rendering
     auto& cmd_list = *probe.command_list;
     std::ignore = cmd_list.Reset();
-    probe.descriptor_buffer.BindBuffers(gfx, cmd_list);
+    _desc_buffer.BindBuffers(gfx, cmd_list);
 
-    cmd_list.TextureBarrier({
-                                    .sync_before = wis::BarrierSync::None,
-                                    .sync_after = wis::BarrierSync::RenderTarget,
-                                    .access_before = wis::ResourceAccess::NoAccess,
-                                    .access_after = wis::ResourceAccess::RenderTarget,
-                                    .state_before = wis::TextureState::Present,
-                                    .state_after = wis::TextureState::RenderTarget,
-                            },
-                            _textures[_frame_index]);
+    cmd_list.TextureBarrier(
+            {
+                    .sync_before = wis::BarrierSync::None,
+                    .sync_after = wis::BarrierSync::RenderTarget,
+                    .access_before = wis::ResourceAccess::NoAccess,
+                    .access_after = wis::ResourceAccess::RenderTarget,
+                    .state_before = wis::TextureState::Present,
+                    .state_after = wis::TextureState::RenderTarget,
+            },
+            _textures[_frame_index]);
 
     // Pass to the next nodes in the graph
     bool rendered = sink.source_node->Evaluate(gfx, probe, &desc);
@@ -144,15 +158,16 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderP
     }
 
     // Close the render target
-    cmd_list.TextureBarrier({
-                                    .sync_before = wis::BarrierSync::RenderTarget,
-                                    .sync_after = wis::BarrierSync::RenderTarget,
-                                    .access_before = wis::ResourceAccess::RenderTarget,
-                                    .access_after = wis::ResourceAccess::Common,
-                                    .state_before = wis::TextureState::RenderTarget,
-                                    .state_after = wis::TextureState::Present,
-                            },
-                            _textures[_frame_index]);
+    cmd_list.TextureBarrier(
+            {
+                    .sync_before = wis::BarrierSync::RenderTarget,
+                    .sync_after = wis::BarrierSync::RenderTarget,
+                    .access_before = wis::ResourceAccess::RenderTarget,
+                    .access_after = wis::ResourceAccess::Common,
+                    .state_before = wis::TextureState::RenderTarget,
+                    .state_after = wis::TextureState::Present,
+            },
+            _textures[_frame_index]);
 
     // End the command list
     if (!cmd_list.Close()) {
@@ -163,7 +178,7 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, vortex::RenderP
 
     // Present the swapchain after rendering (non-blocking for window)
     Present(gfx);
-    
+
     // Window output doesn't block, so return true immediately
     return true;
 }

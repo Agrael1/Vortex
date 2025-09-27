@@ -3,17 +3,26 @@
 #include <vortex/properties/props.hpp>
 #include <vortex/util/ndi/ndi_swapchain.h>
 #include <vortex/audio/audio_buffer.h>
+#include <vortex/gfx/descriptor_buffer.h>
 
 namespace vortex {
 struct RenderProbe;
 struct RenderPassForwardDesc;
+class DescriptorBuffer;
 
 class NDIOutput : public vortex::graph::OutputImpl<NDIOutput, NDIOutputProperties, 2>
 {
-    static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for render targets
+    static constexpr std::size_t audio_sample_rate = 48000; // Fixed sample rate for NDI audio
+    static constexpr std::size_t max_audio_channels = 2; // NDI supports up to 8 channels, but we'll
+                                                         // limit to stereo for simplicity
+    static constexpr wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Default format for
+                                                                           // render targets
 public:
     NDIOutput(const vortex::Graphics& gfx, SerializedProperties props);
-    ~NDIOutput();
+    ~NDIOutput()
+    {
+        Throttle(); // Wait for GPU to finish before destroying resources
+    }
 
 public:
     // Properties
@@ -36,25 +45,22 @@ public:
             _swapchain.SetFramerate(value);
         }
     }
-public:
-    virtual vortex::ratio32_t GetOutputFPS() const noexcept
-    {
-        return GetFramerate();
-    }
-    virtual wis::Size2D GetOutputSize() const noexcept
-    {
-        return { window_size.x, window_size.y };
-    }
 
-    virtual void Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe) override;
-    virtual void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override;
+public:
+    virtual vortex::ratio32_t GetOutputFPS() const noexcept { return GetFramerate(); }
+    virtual wis::Size2D GetOutputSize() const noexcept { return { window_size.x, window_size.y }; }
+
+    virtual void Update(const vortex::Graphics& gfx) override;
+    virtual bool Evaluate(const vortex::Graphics& gfx) override;
 
 private:
-    void Throttle() const
+    void Throttle() const;
+    bool EvaluateAudio();
+    bool EvaluateVideo(const vortex::Graphics& gfx, vortex::DescriptorBuffer& desc_buffer);
+    uint64_t CurrentFrameIndex() const noexcept
     {
-        //std::ignore = _fence.Wait(_fence_value - 1);
+        return (_fence_value - 1) % vortex::max_frames_in_flight;
     }
-    void EvaluateAudio();
 
 private:
     NDISwapchain _swapchain;
@@ -63,12 +69,13 @@ private:
 
     wis::Fence _fence; ///< Fence for synchronization
     uint64_t _fence_value = 1; ///< Current fence value for synchronization
-    uint64_t _fence_values[vortex::max_frames_in_flight] = { 1, 0 }; ///< Current fence value for synchronization
 
     vortex::AudioBuffer _audio_buffer; ///< Audio buffer for storing audio samples (planar float)
     uint64_t _last_audio_pts = 0; ///< Last audio PTS sent to NDI
 
     std::vector<float> _audio_samples;
     bool _resized = false; ///< Flag to indicate if the output has been resized
+
+    vortex::DescriptorBuffer _desc_buffer;
 };
 } // namespace vortex

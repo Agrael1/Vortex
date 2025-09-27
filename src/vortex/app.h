@@ -9,8 +9,10 @@
 #include <vortex/ui/message_dispatch.h>
 #include <vortex/util/ndi/ndi_library.h>
 #include <vortex/util/main_args.h>
+#include <vortex/sync/wall_clock.h>
 #include <vortex/util/term/input.h>
 #include <filesystem>
+#include <fstream>
 
 namespace vortex {
 struct AppExitControl {
@@ -42,7 +44,6 @@ public:
         : _gfx(true)
         , _exit(AppExitControl::GetInstance())
         , _ui_app(CreateUIApp(args.headless))
-        , _descriptor_buffer(_gfx)
     {
         TerminalHandler::Instance().SetInputHandler([](std::string_view line, void* p) {
             return static_cast<App*>(p)->TerminalMessageHandler(line);
@@ -50,11 +51,6 @@ public:
                                                     this);
 
         wis::Result res = wis::success;
-        for (size_t i = 0; i < max_frames_in_flight; ++i) {
-            _command_list[i] = _gfx.GetDevice().CreateCommandList(res, wis::QueueType::Graphics);
-        }
-        fence = _gfx.GetDevice().CreateFence(res);
-
         vortex::UpdateNotifier::External external_observer{
             .observer = this,
             .callback = &App::OnNodeUpdateThunk
@@ -63,7 +59,12 @@ public:
 
         constexpr std::pair<std::string_view, std::string_view> output_values2[]{
             std::pair{ "name", "Vortex Mega Output" },
-            std::pair{ "window_size", "[1920,1080]" }
+            std::pair{ "window_size", "[2000,2000]" }
+        };
+        constexpr std::pair<std::string_view, std::string_view> output_values3[]{
+            std::pair{ "name", "Vortex Mega Output 2" },
+            std::pair{ "window_size", "[1000,2000]" },
+            std::pair{ "framerate", "[30,1]" }
         };
 
         constexpr std::pair<std::string_view, std::string_view> stream_values[]{
@@ -72,43 +73,35 @@ public:
 
         // Test setup of the model
         auto i1 = _model.CreateNode(_gfx, "StreamInput", external_observer, stream_values); // Create a default node for testing
-        auto o1 = _model.CreateNode(_gfx, "NDIOutput", external_observer, output_values2); // Create a default output for testing
+        auto o1 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values3); // Create a default output for testing
+        auto o2 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values2); // Create a default output for testing
 
         _model.SetNodeInfo(i1, "Image 1"); // Set some info for the node
         _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
+        _model.SetNodeInfo(o2, "Output 1"); // Set some info for the output node
 
         _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
-        _model.ConnectNodes(i1, 1, o1, 1); // Connect the audio outputs
+        //_model.ConnectNodes(i1, 1, o1, 1); // Connect the audio outputs
+
+        _model.ConnectNodes(i1, 0, o2, 0); // Connect the nodes in the model
     }
 
 public:
     int Run()
     {
-        int i = 0; // Frame counter
-        int y = 0; // Frame index
         while (!_exit.exit) {
             if (int code = _ui_app.ProcessEvents()) {
                 return code; // Exit requested
             }
-            vortex::PollTerminalInput(); // Process terminal input
 
-            ProcessMessages(); // Process messages from the UI
+            // Process terminal input
+            vortex::PollTerminalInput();
+
+            // Process messages from the UI
+            ProcessMessages();
 
             // Process the model and render the nodes
-            vortex::RenderProbe probe{
-                ._descriptor_buffer = _descriptor_buffer,
-                ._command_list = &_command_list[frame_index],
-                .frame_number = frame_number
-            };
-            _model.TraverseNodes(_gfx, probe); // Traverse the nodes in the model
-
-            std::ignore = _gfx.GetMainQueue().SignalQueue(fence, fence_value);
-
-            frame_index = (frame_index + 1) % max_frames_in_flight;
-            std::ignore = fence.Wait(fence_values[frame_index]);
-            frame_number++;
-
-            fence_values[frame_index] = ++fence_value;
+            _model.TraverseNodes(_gfx); // Traverse the nodes in the model
         }
 
         return 0;
@@ -245,25 +238,14 @@ private:
     vortex::ui::SDLLibrary _sdl;
 
     vortex::Graphics _gfx;
-    vortex::DescriptorBuffer _descriptor_buffer;
     dro::SPSCQueue<CefRefPtr<CefProcessMessage>, 64> _message_queue; ///< Queue for messages from the UI
-
-    wis::CommandList _command_list[max_frames_in_flight]; ///< Command list for recording commands
-    uint32_t _current_frame = 0; ///< Current frame index for command list
-
-    wis::Fence fence;
-    uint64_t fence_value = 1;
-    uint64_t frame_index = 0;
-    uint64_t frame_number = 0;
-    std::array<uint64_t, max_frames_in_flight> fence_values{ 1, 0 };
 
     // CEF client for UI
     vortex::ui::UIApp _ui_app;
-    vortex::graph::GraphModel _model; ///< Model containing nodes and outputs
     vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
+    vortex::graph::GraphModel _model; ///< Model containing nodes and outputs
 
-    int32_t counter = 32; ///< Counter for async calls
-
+    // Message handlers map - this should be a simple map lookup as these are
     // used in hot code, so it should be fast
     std::unordered_map<std::u16string_view, MessageHanlderDispatch> _message_handlers_disp{
         // Coroutines

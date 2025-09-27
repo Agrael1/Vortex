@@ -65,6 +65,7 @@ vortex::ffmpeg::StreamManager::StreamManager(const vortex::Graphics& gfx)
 vortex::ffmpeg::StreamManager::~StreamManager()
 {
     // Stop all IO threads
+    std::unique_lock lock(_streams_mutex);
     for (auto& thread : _io_threads) {
         thread.request_stop();
     }
@@ -214,7 +215,7 @@ bool vortex::ffmpeg::StreamManager::IOProcessStream(vortex::ffmpeg::ManagedStrea
 
         ffmpeg::unique_packet packet;
         bool got_packet = stream.read_queue.try_pop(packet);
-        if (!got_packet) {
+        if (!got_packet || !packet) {
             return false; // No more packets to process right now
         }
 

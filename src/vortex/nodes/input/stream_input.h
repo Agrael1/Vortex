@@ -44,8 +44,8 @@ public:
     }
 
 public:
-    void Update(const vortex::Graphics& gfx, vortex::RenderProbe& probe) override;
-    void Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info = nullptr) override;
+    void Update(const vortex::Graphics& gfx) override;
+    bool Evaluate(const vortex::Graphics& gfx, vortex::RenderProbe& probe, const vortex::RenderPassForwardDesc* output_info = nullptr) override;
 
     vortex::graph::NodeExecution Validate(const vortex::Graphics& gfx, const vortex::RenderProbe& probe)
     {

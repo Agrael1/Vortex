@@ -29,7 +29,7 @@ bool equal(wis::Size2D lhs, wis::Size2D rhs)
     return lhs.width == rhs.width && lhs.height == rhs.height;
 }
 
-TEST_CASE_METHOD(ModelTest, "SortOutputs.Basic", "[optimize]")
+TEST_CASE_METHOD(ModelTest, "OutputScheduling.Basic", "[scheduler]")
 {
     constexpr std::pair<std::string_view, std::string_view> output_values[]{
         std::pair{ "name", "Vortex Mega Output" },
@@ -45,16 +45,14 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.Basic", "[optimize]")
     auto n2 = CreateNode("MockOutput", output_values2);
     REQUIRE(n2 != 0);
 
-    model.SortOutputs(); // Sort outputs should not crash or throw
-
     auto outputs = model.GetOutputs();
     REQUIRE(outputs.size() == 2); // Should have two outputs
-    REQUIRE(equal(outputs[1]->GetOutputSize(), wis::Size2D{ 1920, 1080 })); // Second output should be the smaller one
-    REQUIRE(equal(outputs[0]->GetOutputSize(), wis::Size2D{ 1080, 1920 })); // First output should be the larger one
+    REQUIRE(equal(outputs[0]->GetOutputSize(), wis::Size2D{ 1080, 1920 })); // First output
+    REQUIRE(equal(outputs[1]->GetOutputSize(), wis::Size2D{ 1920, 1080 })); // Second output
 }
 
 
-TEST_CASE_METHOD(ModelTest, "SortOutputs.AspectRatioGrouping", "[optimize]")
+TEST_CASE_METHOD(ModelTest, "OutputScheduling.AspectRatioGrouping", "[scheduler]")
 {
     // Create outputs with different aspect ratios
     constexpr std::pair<std::string_view, std::string_view> square_1080[]{
@@ -84,13 +82,10 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.AspectRatioGrouping", "[optimize]")
     REQUIRE(n3 != 0);
     REQUIRE(n4 != 0);
 
-    model.SortOutputs();
-
     auto outputs = model.GetOutputs();
     REQUIRE(outputs.size() == 4);
 
-    // Check that square outputs are grouped together (aspect ratio ~1.0)
-    // and widescreen outputs are grouped together (aspect ratio ~1.78)
+    // Check that outputs are present and accessible
     auto size1 = outputs[0]->GetOutputSize();
     auto size2 = outputs[1]->GetOutputSize();
     auto size3 = outputs[2]->GetOutputSize();
@@ -102,15 +97,14 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.AspectRatioGrouping", "[optimize]")
     float aspect3 = static_cast<float>(size3.width) / size3.height;
     float aspect4 = static_cast<float>(size4.width) / size4.height;
 
-    // First two should be from the same aspect ratio group
-    REQUIRE(std::abs(aspect1 - aspect2) < 0.2f);
-    // Last two should be from the same aspect ratio group
-    REQUIRE(std::abs(aspect3 - aspect4) < 0.2f);
-    // Different groups should have different aspect ratios
-    REQUIRE(std::abs(aspect1 - aspect3) > 0.2f);
+    // Verify all aspect ratios are valid
+    REQUIRE(aspect1 > 0);
+    REQUIRE(aspect2 > 0);
+    REQUIRE(aspect3 > 0);
+    REQUIRE(aspect4 > 0);
 }
 
-TEST_CASE_METHOD(ModelTest, "SortOutputs.RotatedOutputs", "[optimize]")
+TEST_CASE_METHOD(ModelTest, "OutputScheduling.RotatedOutputs", "[scheduler]")
 {
     // Test portrait vs landscape versions of the same resolution
     constexpr std::pair<std::string_view, std::string_view> landscape[]{
@@ -140,8 +134,6 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.RotatedOutputs", "[optimize]")
     REQUIRE(n3 != 0);
     REQUIRE(n4 != 0);
 
-    model.SortOutputs();
-
     auto outputs = model.GetOutputs();
     REQUIRE(outputs.size() == 4);
 
@@ -167,7 +159,7 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.RotatedOutputs", "[optimize]")
     REQUIRE_FALSE(vortex::graph::GraphModel::AreSizeCompatible(iout3, iout4));
 }
 
-TEST_CASE_METHOD(ModelTest, "SortOutputs.ScaleCompatibility", "[optimize]")
+TEST_CASE_METHOD(ModelTest, "OutputScheduling.ScaleCompatibility", "[scheduler]")
 {
     // Test outputs with different scales but same aspect ratio
     constexpr std::pair<std::string_view, std::string_view> small_hd[]{
@@ -197,8 +189,6 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.ScaleCompatibility", "[optimize]")
     REQUIRE(n3 != 0);
     REQUIRE(n4 != 0);
 
-    model.SortOutputs();
-
     auto outputs = model.GetOutputs();
     REQUIRE(outputs.size() == 4);
 
@@ -220,7 +210,7 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.ScaleCompatibility", "[optimize]")
     REQUIRE_FALSE(vortex::graph::GraphModel::AreSizeCompatible(output2, output4));
 }
 
-TEST_CASE_METHOD(ModelTest, "SortOutputs.CustomResolutions", "[optimize]")
+TEST_CASE_METHOD(ModelTest, "OutputScheduling.CustomResolutions", "[scheduler]")
 {
     // Test unusual/custom resolutions
     constexpr std::pair<std::string_view, std::string_view> ultrawide[]{
@@ -250,8 +240,6 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.CustomResolutions", "[optimize]")
     REQUIRE(n3 != 0);
     REQUIRE(n4 != 0);
 
-    model.SortOutputs();
-
     auto outputs = model.GetOutputs();
     REQUIRE(outputs.size() == 4);
 
@@ -271,9 +259,9 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.CustomResolutions", "[optimize]")
     REQUIRE_FALSE(vortex::graph::GraphModel::AreSizeCompatible(ultrawide_out, square_out));
 }
 
-TEST_CASE_METHOD(ModelTest, "SortOutputs.SequentialCompatibility", "[optimize]")
+TEST_CASE_METHOD(ModelTest, "OutputScheduling.SequentialCompatibility", "[scheduler]")
 {
-    // Test GetNextCompatibleOutput functionality
+    // Test basic scheduling functionality
     constexpr std::pair<std::string_view, std::string_view> hd720[]{
         std::pair{ "name", "720p" },
         std::pair{ "window_size", "[1280,720]" }
@@ -301,16 +289,17 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.SequentialCompatibility", "[optimize]")
     REQUIRE(n3 != 0);
     REQUIRE(n4 != 0);
 
-    model.SortOutputs();
-
     auto outputs = model.GetOutputs();
     REQUIRE(outputs.size() == 4);
+    
+    // Test that scheduler is accessible
+    const auto& scheduler = model.GetOutputScheduler();
+    REQUIRE(scheduler.GetCurrentPTS() >= 0);
 }
 
-TEST_CASE_METHOD(ModelTest, "SortOutputs.EmptyAndInvalidOutputs", "[optimize]")
+TEST_CASE_METHOD(ModelTest, "OutputScheduling.EmptyAndInvalidOutputs", "[scheduler]")
 {
     // Test behavior with no outputs
-    model.SortOutputs();
     auto outputs = model.GetOutputs();
     REQUIRE(outputs.empty());
 
@@ -323,17 +312,12 @@ TEST_CASE_METHOD(ModelTest, "SortOutputs.EmptyAndInvalidOutputs", "[optimize]")
     auto n1 = CreateNode("MockOutput", single_output);
     REQUIRE(n1 != 0);
 
-    model.SortOutputs();
     outputs = model.GetOutputs();
     REQUIRE(outputs.size() == 1);
     REQUIRE(equal(outputs[0]->GetOutputSize(), wis::Size2D{ 1920, 1080 }));
-
-    //// Test GetNextCompatibleOutput with single output
-    //const auto* next = model.GetNextCompatibleOutput(0);
-    //REQUIRE(next == nullptr); // No next output
 }
 
-TEST_CASE_METHOD(ModelTest, "AreSizeCompatible.EdgeCases", "[optimize]")
+TEST_CASE_METHOD(ModelTest, "AreSizeCompatible.EdgeCases", "[scheduler]")
 {
     // Test edge cases for size compatibility
     constexpr std::pair<std::string_view, std::string_view> base_1080[]{

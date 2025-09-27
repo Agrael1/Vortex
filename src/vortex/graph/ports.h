@@ -104,7 +104,6 @@ struct SourceTarget {
 struct Source {
     static constexpr std::size_t dynamic_index = std::numeric_limits<std::size_t>::max(); // Invalid index for sink
     std::unordered_set<SourceTarget, SourceTarget::Hash> targets; // Set of sink descriptions for this source
-    std::bitset<max_outputs> rendered_outputs; // Bitset of rendered outputs (come from optimization)
     SourceType type = SourceType::RenderTexture; // Default source type
 };
 

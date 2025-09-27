@@ -14,8 +14,9 @@ public:
     }
 
     // Override the Evaluate method to perform blending
-    virtual void Evaluate(const vortex::Graphics& gfx, RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
+    virtual bool Evaluate(const vortex::Graphics& gfx, RenderProbe& probe, const RenderPassForwardDesc* output_info = nullptr) override
     {
+        return false; // Placeholder implementation
     }
 };
 } // namespace vortex

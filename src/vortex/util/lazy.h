@@ -17,6 +17,7 @@ void lazy_register_destroy(void* instance, LazyDestroyFunc destroy_func);
 #include <utility>
 #include <concepts>
 #include <optional>
+#include <ranges>
 
 namespace vortex {
 
@@ -39,7 +40,7 @@ public:
     static void DestroyAll()
     {
         auto& registry = GetRegistry();
-        for (auto& [instance, destroy_func] : registry) {
+        for (auto& [instance, destroy_func] : registry | std::views::reverse) {
             if (destroy_func) {
                 destroy_func(instance);
             }

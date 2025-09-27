@@ -99,7 +99,17 @@ PUBLIC
   "src/vortex/ui/message_dispatch.h" 
   "src/vortex/util/bench_clock.h" 
 
- "src/vortex/util/main_args.h"  )
+  "src/vortex/util/term/log_sink.h" 
+  "src/vortex/util/term/log_sink.cpp"
+  "src/vortex/util/term/input.h"
+  "src/vortex/util/term/impl.win32.h" 
+  "src/vortex/util/term/impl.win32.cpp" 
+  "src/vortex/util/term/impl.posix.cpp" 
+  "src/vortex/util/term/shared.h" 
+  "src/vortex/util/term/input.cpp"
+
+  "src/vortex/util/main_args.h"   
+  "src/vortex/nodes/output/window_output.cpp")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
@@ -148,10 +158,9 @@ PRIVATE
   "src/vortex/ui/value.h" 
   "src/vortex/ui/call_handler.h"  
 
-  "src/vortex/util/term/input.h"
 
   "src/vortex/app.h"
- "src/vortex/util/term/impl.win32.h" "src/vortex/util/term/impl.win32.cpp" "src/vortex/util/term/impl.posix.cpp" "src/vortex/util/term/shared.h" "src/vortex/util/term/input.cpp" "src/vortex/util/term/log_sink.h" "src/vortex/util/term/log_sink.cpp")
+  )
 target_compile_options(${PROJECT_NAME} PRIVATE
   $<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
   $<$<CXX_COMPILER_ID:Clang>:-Wno-interference-size>

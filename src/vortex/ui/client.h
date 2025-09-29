@@ -1,10 +1,13 @@
 #pragma once
 #include <vortex/ui/implements.h>
+#include <vortex/util/log.h>
+#include <vortex/util/lib/reflect.h>
 #include <include/cef_client.h>
 #include <unordered_map>
+#include <functional>
 
 namespace vortex::ui {
-class Client : public CefImplements<Client, CefClient, CefLifeSpanHandler, CefDisplayHandler>
+class Client : public CefImplements<Client, CefClient, CefLifeSpanHandler, CefDisplayHandler, CefRenderHandler>
 {
 public:
     using MessageHandler = std::function<bool(CefRefPtr<CefProcessMessage>)>;
@@ -21,6 +24,10 @@ public:
     CefRefPtr<CefDisplayHandler> GetDisplayHandler() override
     {
         return this; // Return this client as the display handler
+    }
+    CefRefPtr<CefRenderHandler> GetRenderHandler() override
+    {
+        return this; // Return this client as the render handler
     }
     CefBrowser* GetBrowser() noexcept
     {
@@ -67,9 +74,24 @@ public:
                                   CefProcessId source_process,
                                   CefRefPtr<CefProcessMessage> message) override
     {
-
         vortex::info("Client::OnProcessMessageReceived: Received message from process {}: {}", reflect::enum_name(source_process), message->GetName().ToString());
         return _message_handler(std::move(message));
+    }
+
+public:
+    void GetViewRect(CefRefPtr<CefBrowser> browser, CefRect& rect) override
+    {
+        // Set a minimal viewport size
+        rect = CefRect(0, 0, 1024, 768);
+    }
+    void OnPaint(CefRefPtr<CefBrowser> browser,
+                 PaintElementType type,
+                 const RectList& dirtyRects,
+                 const void* buffer,
+                 int width,
+                 int height) override
+    {
+        // Do nothing for now
     }
 
 private:

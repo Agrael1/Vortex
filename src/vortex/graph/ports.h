@@ -2,12 +2,27 @@
 #include <limits>
 #include <span>
 #include <array>
+#include <unordered_set>
+#include <vortex/consts.h>
+#include <bitset>
 
 namespace vortex::graph {
 class INode; // Forward declaration of INode
+
 enum class SinkType {
     RenderTexture, // Render texture sink
-    RenderTarget, // Render target sink
+    Audio, // Audio sink
+};
+enum class SourceType {
+    RenderTexture, // Render texture source
+    Audio, // Audio source
+};
+
+enum class RenderStrategy {
+    None, // No rendering
+    Direct, // Direct rendering to target
+    Cache, // Cache output in texture cache
+    Bypass, // Bypass this source entirely
 };
 
 struct Sink {
@@ -60,12 +75,17 @@ struct SourceTarget {
     std::size_t sink_index = 0; // Index of the source in the node
     INode* sink_node = nullptr; // Pointer to the node that is the source
 
-    operator bool() const noexcept
+    constexpr bool operator==(const SourceTarget& other) const noexcept
+    {
+        return sink_node == other.sink_node && sink_index == other.sink_index; // Compare node pointers and indices
+    }
+
+    constexpr explicit operator bool() const noexcept
     {
         return sink_node != nullptr; // Check if the source is valid
     }
 
-    void Reset() noexcept
+    constexpr void Reset() noexcept
     {
         sink_index = 0; // Reset index
         sink_node = nullptr; // Reset node pointer
@@ -84,6 +104,7 @@ struct SourceTarget {
 struct Source {
     static constexpr std::size_t dynamic_index = std::numeric_limits<std::size_t>::max(); // Invalid index for sink
     std::unordered_set<SourceTarget, SourceTarget::Hash> targets; // Set of sink descriptions for this source
+    SourceType type = SourceType::RenderTexture; // Default source type
 };
 
 template<std::size_t N>

@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include <string_view>
 #include <wisdom/generated/api/api.hpp>
+#include <vortex/util/unique_any.h>
 #include <format>
 #include <vortex/util/lib/reflect.h>
 
@@ -32,6 +33,142 @@ std::string flag_names(T flags) noexcept
 } // namespace reflect
 
 template<>
+struct std::formatter<wis::DataFormat> {
+    // Basic parse that simply returns the end of the format string
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        return ctx.begin();
+    }
+    // Format function that outputs DataFormat enum name
+    template<typename FormatContext>
+    auto format(wis::DataFormat format, FormatContext& ctx) const
+    {
+        return std::format_to(ctx.out(), "{}", reflect::enum_name(format));
+    }
+};
+
+template<>
+struct std::formatter<wis::MemoryType> {
+    // Basic parse that simply returns the end of the format string
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        return ctx.begin();
+    }
+    // Format function that outputs MemoryType enum name
+    template<typename FormatContext>
+    auto format(wis::MemoryType memory_type, FormatContext& ctx) const
+    {
+        return std::format_to(ctx.out(), "{}", reflect::enum_name(memory_type));
+    }
+};
+
+template<>
+struct std::formatter<wis::TextureUsage> {
+    // Basic parse that simply returns the end of the format string
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        return ctx.begin();
+    }
+    // Format function that outputs TextureUsage flags
+    template<typename FormatContext>
+    auto format(wis::TextureUsage usage, FormatContext& ctx) const
+    {
+        return std::format_to(ctx.out(), "{}", reflect::flag_names(usage));
+    }
+};
+
+template<>
+struct std::formatter<wis::TextureLayout> {
+    // Basic parse that simply returns the end of the format string
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        return ctx.begin();
+    }
+    // Format function that outputs TextureLayout enum name
+    template<typename FormatContext>
+    auto format(wis::TextureLayout layout, FormatContext& ctx) const
+    {
+        return std::format_to(ctx.out(), "{}", reflect::enum_name(layout));
+    }
+};
+
+template<>
+struct std::formatter<wis::SampleRate> {
+    // Basic parse that simply returns the end of the format string
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        return ctx.begin();
+    }
+    // Format function that outputs SampleCount enum name
+    template<typename FormatContext>
+    auto format(wis::SampleRate sample_count, FormatContext& ctx) const
+    {
+        return std::format_to(ctx.out(), "{}", reflect::enum_name(sample_count));
+    }
+};
+
+template<>
+struct std::formatter<wis::Size3D> {
+    bool use_x_format = false;
+    // Basic parse that simply returns the end of the format string
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+
+        // Parse format specifiers until we hit '}'
+        while (it != ctx.end() && *it != '}') {
+            if (*it == 'x') {
+                use_x_format = true;
+            }
+            ++it;
+        }
+
+        return it; // Should point to '}' or end
+    }
+    // Format function that outputs Size2D fields
+    template<typename FormatContext>
+    auto format(wis::Size3D size, FormatContext& ctx) const
+    {
+        // If the format is {x} we do {}x{}x{} for Size3D
+        if (use_x_format) {
+            return std::format_to(ctx.out(), "{}x{}x{}", size.width, size.height, size.depth_or_layers);
+        }
+        return std::format_to(ctx.out(), "Size(width={}, height={}, depth_or_layers={})",
+                              size.width, size.height, size.depth_or_layers);
+    }
+};
+
+template<>
+struct std::formatter<wis::Size2D> {
+    bool use_x_format = false;
+    // Basic parse that simply returns the end of the format string
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+
+        // Parse format specifiers until we hit '}'
+        while (it != ctx.end() && *it != '}') {
+            if (*it == 'x') {
+                use_x_format = true;
+            }
+            ++it;
+        }
+
+        return it; // Should point to '}' or end
+    }
+    // Format function that outputs Size2D fields
+    template<typename FormatContext>
+    auto format(wis::Size2D size, FormatContext& ctx) const
+    {
+        // If the format is {x} we do {}x{} for Size2D
+        if (use_x_format) {
+            return std::format_to(ctx.out(), "{}x{}", size.width, size.height);
+        }
+        return std::format_to(ctx.out(), "Size(width={}, height={})", size.width, size.height);
+    }
+};
+
+template<>
 struct std::formatter<wis::TextureDesc> {
     // Basic parse that simply returns the end of the format string
     constexpr auto parse(std::format_parse_context& ctx)
@@ -44,18 +181,19 @@ struct std::formatter<wis::TextureDesc> {
     auto format(const wis::TextureDesc& desc, FormatContext& ctx) const
     {
         return std::format_to(ctx.out(),
-                              "TextureDesc(format={}, Size(width={}, height={}{})"
-                              "{}"
-                              ", layout={}{}"
-                              ", usage={})",
-                              reflect::enum_name(desc.format),
-                              desc.size.width,
-                              desc.size.height,
-                              (desc.size.depth_or_layers > 1 ? std::format(", depth={}", desc.size.depth_or_layers) : ""),
-                              (desc.mip_levels > 1 ? std::format(", mip_levels={}", desc.mip_levels) : ""),
-                              reflect::enum_name(desc.layout),
-                              (int(desc.sample_count) > 1 ? std::format(" , sample_count={}", reflect::enum_name(desc.sample_count)) : ""),
-                              reflect::flag_names(desc.usage));
+                              "TextureDesc{{format={},"
+                              "size = {:x},"
+                              //"{}"
+                              //", layout={}{}"
+                              //", usage={})",
+                              "}}",
+                              desc.format,
+                              desc.size
+                              //(desc.mip_levels > 1 ? std::format(", mip_levels={}", desc.mip_levels) : ""),
+                              // desc.layout,
+                              //(int(desc.sample_count) > 1 ? std::format(" , sample_count={}", reflect::enum_name(desc.sample_count)) : ""),
+                              // desc.usage
+        );
     }
 };
 template<>
@@ -102,101 +240,7 @@ struct string_equal : public std::equal_to<std::string_view> {
     using is_transparent = void;
 };
 
-template<typename T, auto Deleter, bool pp = false>
-struct unique_any {
-    static constexpr bool is_pointer = std::is_pointer_v<T>;
-    using ptr_type = std::add_pointer_t<std::remove_pointer_t<T>>;
-    using cptr_type = const ptr_type;
-    using ref_type = std::conditional_t<is_pointer, T, T&>;
-    using cref_type = std::conditional_t<is_pointer, T, const T&>;
-
-
-
-    T data;
-
-    ~unique_any()
-    {
-        clear();
-    }
-
-    unique_any() = default;
-    unique_any(T ptr)
-        : data(ptr) { }
-
-    // Non-copyable.
-    unique_any(const unique_any&) = delete;
-    unique_any& operator=(const unique_any&) = delete;
-
-    // Movable.
-    unique_any(unique_any&& other) noexcept
-        : data(other.data)
-    {
-        other.data = nullptr;
-    }
-    unique_any& operator=(unique_any&& other) noexcept
-    {
-        if (this != std::addressof(other)) {
-            if (data) {
-                clear();
-            }
-            data = other.data;
-            other.data = nullptr;
-        }
-        return *this;
-    }
-
-public:
-    explicit operator bool() const noexcept
-    {
-        return data != nullptr;
-    }
-    decltype(auto) operator&() noexcept
-    {
-        return &data;
-    }
-    decltype(auto) operator&() const noexcept
-    {
-        return &data;
-    }
-    decltype(auto) operator->() noexcept
-    {
-        if constexpr (is_pointer) {
-            return data;
-        } else {
-            return &data;
-        }
-    }
-    cref_type get() const noexcept
-    {
-        return data;
-    }
-    T release() noexcept
-    {
-        T temp = data;
-        data = nullptr;
-        return temp;
-    }
-    void reset(cref_type ptr) noexcept
-    {
-        if (data) {
-            clear();
-        }
-        data = ptr;
-    }
-    void clear() noexcept
-    {
-        if constexpr (pp) {
-            // If Deleter is a pointer to a function, we call it directly.
-            Deleter(&data);
-        } else {
-            // Otherwise, we assume Deleter is a callable object.
-            Deleter(data);
-        }
-    }
-};
-
 using unique_file = unique_any<std::FILE*, std::fclose>;
-
 
 /**
  * Based on boost::hash_combine. Since Boost is licensed under the Boost
@@ -228,9 +272,16 @@ using unique_file = unique_any<std::FILE*, std::fclose>;
  *
  */
 template<class T>
-inline std::size_t hash_combine(std::size_t& seed, const T& v) noexcept(std::is_nothrow_invocable_v<std::hash<T>, T>)
+inline std::size_t hash_combine_one(std::size_t& seed, const T& v) noexcept(std::is_nothrow_invocable_v<std::hash<T>, T>)
 {
     return seed ^= std::hash<T>{}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
-} // namespace vortex
 
+template<typename... Args>
+inline std::size_t hash_combine(Args&&... args) noexcept
+{
+    std::size_t seed = 0;
+    (hash_combine_one(seed, std::forward<Args>(args)), ...);
+    return seed;
+}
+} // namespace vortex

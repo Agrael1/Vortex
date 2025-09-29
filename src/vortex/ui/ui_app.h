@@ -2,6 +2,7 @@
 #include <vortex/ui/client.h>
 #include <vortex/ui/sdl.h>
 #include <vortex/ui/value.h>
+#include <optional>
 
 namespace vortex::ui {
 class UIApp
@@ -12,7 +13,7 @@ class UIApp
     }
     bool EventWatch(SDL_Event& event)
     {
-        if (event.window.windowID == _window.GetID() && event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+        if (event.window.windowID == _window->GetID() && event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
             int width = event.window.data1;
             int height = event.window.data2;
             ResizeCEFBrowser(width, height);
@@ -22,8 +23,13 @@ class UIApp
     }
 
 public:
+    // Headless mode constructor
+    UIApp()
+    {
+        InitializeCEF();
+    }
     UIApp(const char* window_title, int width, int height, bool fullscreen)
-        : _window(window_title, width, height, fullscreen)
+        : _window(std::in_place, window_title, width, height, fullscreen)
     {
         SDL_AddEventWatch(EventWatchThunk, this);
         // Initialize CEF
@@ -73,7 +79,7 @@ public:
             // Add arguments to the message
             if constexpr (size > 0) {
                 size_t i = 0;
-                (value_traits<Args>::add_value(*msg_args, i++, std::forward<Args>(args)), ...);
+                (value_traits<std::remove_reference_t<std::remove_all_extents_t<Args>>>::add_value(*msg_args, i++, std::forward<Args>(args)), ...);
             }
 
             // Send the message
@@ -86,12 +92,27 @@ public:
         SendUIMessage(u"co_return", std::forward<Args>(args)...);
     }
 
+    void ExecuteJavaScript(std::string_view script)
+    {
+        if (!_cef_client) {
+            vortex::error("UIApp::ExecuteJavaScript: CEF client is not initialized.");
+            return;
+        }
+        auto browser = _cef_client->GetBrowser();
+        if (browser) {
+            auto frame = browser->GetMainFrame();
+            if (frame) {
+                frame->ExecuteJavaScript(string_traits::to_cef(script), "", 0);
+            }
+        }
+    }
+
 private:
     void InitializeCEF();
     void ResizeCEFBrowser(int width, int height);
 
 private:
-    SDLWindow _window; ///< SDL window for the application
+    std::optional<SDLWindow> _window; ///< SDL window for the application
     CefRefPtr<Client> _cef_client; ///< CEF client for handling browser events
 };
 } // namespace vortex::ui

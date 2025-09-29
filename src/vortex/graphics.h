@@ -1,8 +1,8 @@
-#include <wisdom/wisdom.hpp>
+#pragma once
 #include <wisdom/wisdom_debug.hpp>
 #include <wisdom/wisdom_descriptor_buffer.hpp>
 #include <wisdom/wisdom_extended_allocation.hpp>
-#include <vortex/util/log.h>
+#include <vortex/util/log_storage.h>
 #include <vortex/platform.h>
 
 namespace vortex {
@@ -34,27 +34,16 @@ class Graphics
 {
 public:
     Graphics(bool debug_extension)
+        : _log(vortex::LogStorage::GetLog(vortex::graphics_log_name))
     {
         CreateDevice(debug_extension);
     }
 
 public:
-    const wis::Device& GetDevice() const noexcept
-    {
-        return _device;
-    }
-    const vortex::PlatformExtension& GetPlatform() const noexcept
-    {
-        return _platform;
-    }
-    const wis::CommandQueue& GetMainQueue() const noexcept
-    {
-        return _main_queue;
-    }
-    const wis::ResourceAllocator& GetAllocator() const noexcept
-    {
-        return _allocator;
-    }
+    const wis::Device& GetDevice() const noexcept { return _device; }
+    const vortex::PlatformExtension& GetPlatform() const noexcept { return _platform; }
+    const wis::CommandQueue& GetMainQueue() const noexcept { return _main_queue; }
+    const wis::ResourceAllocator& GetAllocator() const noexcept { return _allocator; }
     const wis::ExtendedAllocation& GetExtendedAllocation() const noexcept
     {
         return _extended_allocation_ext;
@@ -66,11 +55,23 @@ public:
 
 public:
     wis::Shader LoadShader(std::filesystem::path path) const;
+    void Throttle() const
+    {
+        auto& q = GetMainQueue();
+        std::ignore = q.SignalQueue(_fence, ++_fence_value);
+        std::ignore = _fence.Wait(_fence_value);
+    }
+    void WaitForGPU() const { Throttle(); }
+    void ExecuteCommandLists(std::initializer_list<wis::CommandListView> lists) const
+    {
+        _main_queue.ExecuteCommandLists(lists.begin(), lists.size());
+    }
 
 private:
     void CreateDevice(bool debug_extension);
 
 private:
+    vortex::LogView _log;
     Debug _debug;
     wis::Device _device;
     wis::CommandQueue _main_queue;
@@ -79,6 +80,9 @@ private:
     vortex::PlatformExtension _platform;
     wis::DescriptorBufferExtension _descriptor_buffer_ext;
     wis::ExtendedAllocation _extended_allocation_ext;
+
+    wis::Fence _fence; // Used for throttling (stopping processing, e.g. for resize).
+    mutable uint64_t _fence_value = 0;
 };
 
 } // namespace vortex

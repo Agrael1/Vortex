@@ -2,6 +2,8 @@ include(FetchContent)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 set(CPM_DONT_UPDATE_MODULE_PATH ON)
 set(GET_CPM_FILE "${CMAKE_CURRENT_LIST_DIR}/get_cpm.cmake")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
 
 if (NOT EXISTS ${GET_CPM_FILE})
   file(DOWNLOAD
@@ -12,22 +14,12 @@ endif()
 include(${GET_CPM_FILE})
 
 # Add CPM dependencies here
-# Wisdom
-CPMAddPackage(
-  NAME Wisdom
-  URL https://github.com/Agrael1/Wisdom/releases/download/0.6.11/Wisdom-0.6.11-win64.zip
-  VERSION 0.6.11
+if (WIN32)
+  include(cmake/deps.win32.cmake)
+else()
+  include(cmake/deps.linux.cmake)
+endif()
 
-  OPTIONS
-  "WISDOM_BUILD_TESTS OFF"
-  "WISDOM_BUILD_EXAMPLES OFF"
-  "WISDOM_BUILD_DOCS OFF"
-  "WISDOM_EXPERIMENTAL_CPP_MODULES ON"
-)
-set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${Wisdom_SOURCE_DIR}/lib/cmake/wisdom)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-set(WISDOM_EXPERIMENTAL_CPP_MODULES ON CACHE BOOL "Enable experimental C++ modules support" FORCE)
-find_package(Wisdom 0.6.10 REQUIRED)
 
 # spdlog
 CPMAddPackage(
@@ -35,51 +27,43 @@ CPMAddPackage(
   VERSION 1.15.1 
 )
 
-# FFMPEG
+# frozen
 CPMAddPackage(
-  NAME FFMPEG
-  URL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl-shared.zip
-  VERSION latest
-)
-set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${FFMPEG_SOURCE_DIR})
-set(FFmpeg_INSTALL_PATH ${FFMPEG_SOURCE_DIR})
-
-# SDL3
-CPMAddPackage(
-  NAME SDL3
-  GITHUB_REPOSITORY libsdl-org/SDL
-  GIT_TAG release-3.2.10
-  OPTIONS
-  "SDL_WERROR OFF"
-  "SDL_LEAN_AND_MEAN ON"
+  NAME frozen
+  GITHUB_REPOSITORY serge-sans-paille/frozen
+  GIT_TAG 1.2.0
 )
 
-# Cef
+# utfcpp
 CPMAddPackage(
-  NAME CEF
-  URL https://cef-builds.spotifycdn.com/cef_binary_138.0.15%2Bgd0f1f64%2Bchromium-138.0.7204.50_windows64_minimal.tar.bz2
-  VERSION 138.0.15+gd0f1f64+chromium-138.0.7204.50
-  OPTIONS
-  "USE_SANDBOX OFF"
-  "CEF_RUNTIME_LIBRARY_FLAG /MD"
-)
-target_include_directories(libcef_dll_wrapper PUBLIC
-  "${CEF_SOURCE_DIR}"
-)
-target_link_libraries(libcef_dll_wrapper PUBLIC 
-  "${CEF_SOURCE_DIR}/Release/libcef.lib"
+  NAME utfcpp
+  GITHUB_REPOSITORY nemtrif/utfcpp
+  GIT_TAG v4.0.8
 )
 
-# graaf
+# DirectXMath
 CPMAddPackage(
-  NAME graaf
-  GIT_REPOSITORY https://github.com/bobluppes/graaf.git
-  GIT_TAG main
-  OPTIONS
-  SKIP_TESTS ON
-  SKIP_EXAMPLES ON
-  SKIP_BENCHMARKS ON
+  NAME DirectXMath
+  GITHUB_REPOSITORY microsoft/DirectXMath
+  GIT_TAG apr2025
 )
+add_library(Sal INTERFACE)
+add_library(Sal::Sal ALIAS Sal)
+target_include_directories(Sal INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(DirectXMath INTERFACE Sal)
+
+install(TARGETS Sal EXPORT SalTargets)
+install(EXPORT SalTargets
+  FILE SalTargets.cmake
+  NAMESPACE Sal::
+  DESTINATION lib/cmake/Sal
+)
+
+
+
 
 # NDI SDK
 if (NOT DEFINED ENV{NDI_SDK_DIR})
@@ -112,4 +96,28 @@ else()
       IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
     )
   endif()
+endif()
+
+if (VORTEX_GENERATE_PROPERTIES)
+  # tinyxml2
+  CPMAddPackage(
+    NAME tinyxml2
+    GITHUB_REPOSITORY leethomason/tinyxml2
+    GIT_TAG master
+    OPTIONS
+    "tinyxml2_BUILD_TESTING OFF"
+  )
+endif()
+
+# catch2
+if(VORTEX_BUILD_TESTS)
+  CPMAddPackage(
+    NAME Catch2
+    GITHUB_REPOSITORY catchorg/Catch2
+    GIT_TAG v3.4.0
+    OPTIONS
+    "CATCH_BUILD_TESTING OFF"
+    "CATCH_INSTALL_DOCS OFF"
+  )
+  list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/extras)
 endif()

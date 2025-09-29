@@ -1,5 +1,6 @@
 #pragma once
 #include <SDL3/SDL.h>
+#include <wisdom/wisdom.hpp>
 
 namespace wis {
 struct SwapchainDesc;
@@ -14,7 +15,7 @@ class SDLLibrary
 public:
     SDLLibrary()
     {
-        SDL_Init(SDL_INIT_VIDEO);
+        SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
     }
     ~SDLLibrary()
     {
@@ -57,6 +58,14 @@ public:
         int w = 0, h = 0;
         SDL_GetWindowSizeInPixels(window, &w, &h);
         return { w, h };
+    }
+    void SetTitle(const char* title) noexcept
+    {
+        SDL_SetWindowTitle(window, title);
+    }
+    void SetSize(int width, int height) noexcept
+    {
+        SDL_SetWindowSize(window, width, height);
     }
 
 private:

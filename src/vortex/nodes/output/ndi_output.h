@@ -4,6 +4,7 @@
 #include <vortex/util/ndi/ndi_swapchain.h>
 #include <vortex/audio/audio_buffer.h>
 #include <vortex/gfx/descriptor_buffer.h>
+#include <vortex/gfx/texture_pool.h>
 
 namespace vortex {
 struct RenderProbe;
@@ -77,5 +78,6 @@ private:
     bool _resized = false; ///< Flag to indicate if the output has been resized
 
     vortex::DescriptorBuffer _desc_buffer;
+    vortex::TexturePool _texture_pool;
 };
 } // namespace vortex

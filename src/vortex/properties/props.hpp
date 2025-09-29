@@ -12,62 +12,37 @@
 #include <frozen/string.h>
 
 namespace vortex {
-enum class BlendChannel {
-    All, //<UI name - All Channels:
-    Red, //<UI name - Red:
-    Green, //<UI name - Green:
-    Blue, //<UI name - Blue:
-    Alpha, //<UI name - Alpha:
-    RGB, //<UI name - RGB Only:
-};
-template<>
-struct enum_traits<BlendChannel> {
-    static constexpr std::string_view strings[] = {
-        "All Channels",
-        "Red",
-        "Green",
-        "Blue",
-        "Alpha",
-        "RGB Only",
-    };
-};
 enum class BlendMode {
     Normal, //<UI name - Normal:
     Multiply, //<UI name - Multiply:
     Screen, //<UI name - Screen:
-    Overlay, //<UI name - Overlay:
     Add, //<UI name - Add:
     Subtract, //<UI name - Subtract:
-    Difference, //<UI name - Difference:
     Darken, //<UI name - Darken:
     Lighten, //<UI name - Lighten:
+    Difference, //<UI name - Difference:
+    Overlay, //<UI name - Overlay:
 };
 template<>
 struct enum_traits<BlendMode> {
     static constexpr std::string_view strings[] = {
-        "Normal",
-        "Multiply",
-        "Screen",
-        "Overlay",
-        "Add",
-        "Subtract",
-        "Difference",
-        "Darken",
-        "Lighten",
+        "Normal", "Multiply", "Screen",     "Add",     "Subtract",
+        "Darken", "Lighten",  "Difference", "Overlay",
     };
 };
 struct BlendProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
     static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            { "blend_mode", 0 },
-            { "blend_channel", 1 },
-            { "opacity", 2 },
-            { "clamp_result", 3 },
+            {      "blend_mode", 0 },
+            { "blend_constants", 1 },
+            {    "clamp_result", 2 },
     });
-    BlendMode blend_mode{ BlendMode::Normal }; //<UI attribute - Blend Mode: How to combine the images.
-    BlendChannel blend_channel{ BlendChannel::All }; //<UI attribute - Blend Channel: Which channels to use from source.
-    float opacity{ 1.0 }; //<UI attribute - Opacity: Overall opacity of the blend.
+    BlendMode blend_mode{ BlendMode::Normal }; //<UI attribute - Blend Mode: How to combine the
+                                               //images.
+    DirectX::XMFLOAT4 blend_constants{ 1.0, 1.0, 1.0, 1.0 }; //<UI attribute - Blend Constants:
+                                                             //Constants used in certain blend
+                                                             //modes.
     bool clamp_result{ true }; //<UI attribute - Clamp Result: Clamp output to [0,1] range.
 
 public:
@@ -78,25 +53,18 @@ public:
             NotifyPropertyChange(0);
         }
     }
-    void SetBlendChannel(BlendChannel value, bool notify = false)
+    void SetBlendConstants(DirectX::XMFLOAT4 value, bool notify = false)
     {
-        blend_channel = value;
+        blend_constants = value;
         if (notify) {
             NotifyPropertyChange(1);
-        }
-    }
-    void SetOpacity(float value, bool notify = false)
-    {
-        opacity = value;
-        if (notify) {
-            NotifyPropertyChange(2);
         }
     }
     void SetClampResult(bool value, bool notify = false)
     {
         clamp_result = value;
         if (notify) {
-            NotifyPropertyChange(3);
+            NotifyPropertyChange(2);
         }
     }
 
@@ -107,14 +75,9 @@ public:
         return self.blend_mode;
     }
     template<typename Self>
-    BlendChannel GetBlendChannel(this Self&& self)
+    DirectX::XMFLOAT4 GetBlendConstants(this Self&& self)
     {
-        return self.blend_channel;
-    }
-    template<typename Self>
-    float GetOpacity(this Self&& self)
-    {
-        return self.opacity;
+        return self.blend_constants;
     }
     template<typename Self>
     bool GetClampResult(this Self&& self)
@@ -135,13 +98,12 @@ public:
             self.notifier(0, vortex::reflection_traits<BlendMode>::serialize(self.GetBlendMode()));
             break;
         case 1:
-            self.notifier(1, vortex::reflection_traits<BlendChannel>::serialize(self.GetBlendChannel()));
+            self.notifier(1,
+                          vortex::reflection_traits<DirectX::XMFLOAT4>::serialize(
+                                  self.GetBlendConstants()));
             break;
         case 2:
-            self.notifier(2, vortex::reflection_traits<float>::serialize(self.GetOpacity()));
-            break;
-        case 3:
-            self.notifier(3, vortex::reflection_traits<bool>::serialize(self.GetClampResult()));
+            self.notifier(2, vortex::reflection_traits<bool>::serialize(self.GetClampResult()));
             break;
         default:
             vortex::error("Blend: Invalid property index for notification: {}", index);
@@ -151,25 +113,23 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void
+    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
     {
         switch (index) {
         case 0:
-            if (BlendMode out_value; vortex::reflection_traits<BlendMode>::deserialize(&out_value, value)) {
+            if (BlendMode out_value;
+                vortex::reflection_traits<BlendMode>::deserialize(&out_value, value)) {
                 self.SetBlendMode(out_value, notify);
             }
             break;
         case 1:
-            if (BlendChannel out_value; vortex::reflection_traits<BlendChannel>::deserialize(&out_value, value)) {
-                self.SetBlendChannel(out_value, notify);
+            if (DirectX::XMFLOAT4 out_value;
+                vortex::reflection_traits<DirectX::XMFLOAT4>::deserialize(&out_value, value)) {
+                self.SetBlendConstants(out_value, notify);
             }
             break;
         case 2:
-            if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
-                self.SetOpacity(out_value, notify);
-            }
-            break;
-        case 3:
             if (bool out_value; vortex::reflection_traits<bool>::deserialize(&out_value, value)) {
                 self.SetClampResult(out_value, notify);
             }
@@ -182,11 +142,13 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return std::format("{{ blend_mode: {}, blend_channel: {}, opacity: {}, clamp_result: {}}}",
-                           vortex::reflection_traits<decltype(self.GetBlendMode())>::serialize(self.GetBlendMode()),
-                           vortex::reflection_traits<decltype(self.GetBlendChannel())>::serialize(self.GetBlendChannel()),
-                           vortex::reflection_traits<decltype(self.GetOpacity())>::serialize(self.GetOpacity()),
-                           vortex::reflection_traits<decltype(self.GetClampResult())>::serialize(self.GetClampResult()));
+        return std::format("{{ blend_mode: {}, blend_constants: {}, clamp_result: {}}}",
+                           vortex::reflection_traits<decltype(self.GetBlendMode())>::serialize(
+                                   self.GetBlendMode()),
+                           vortex::reflection_traits<decltype(self.GetBlendConstants())>::serialize(
+                                   self.GetBlendConstants()),
+                           vortex::reflection_traits<decltype(self.GetClampResult())>::serialize(
+                                   self.GetClampResult()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -202,9 +164,9 @@ struct ImageInputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
     static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            { "image_path", 0 },
-            { "image_size", 1 },
-            { "origin", 2 },
+            {  "image_path", 0 },
+            {  "image_size", 1 },
+            {      "origin", 2 },
             { "rotation_2d", 3 },
     });
     std::string image_path{}; //<UI attribute - Image Path: Path to image file.
@@ -274,13 +236,19 @@ public:
         }
         switch (index) {
         case 0:
-            self.notifier(0, vortex::reflection_traits<std::string_view>::serialize(self.GetImagePath()));
+            self.notifier(
+                    0,
+                    vortex::reflection_traits<std::string_view>::serialize(self.GetImagePath()));
             break;
         case 1:
-            self.notifier(1, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetImageSize()));
+            self.notifier(
+                    1,
+                    vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetImageSize()));
             break;
         case 2:
-            self.notifier(2, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetOrigin()));
+            self.notifier(
+                    2,
+                    vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetOrigin()));
             break;
         case 3:
             self.notifier(3, vortex::reflection_traits<float>::serialize(self.GetRotation2d()));
@@ -293,21 +261,25 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void
+    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
     {
         switch (index) {
         case 0:
-            if (std::string_view out_value; vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
+            if (std::string_view out_value;
+                vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
                 self.SetImagePath(out_value, notify);
             }
             break;
         case 1:
-            if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
+            if (DirectX::XMFLOAT2 out_value;
+                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
                 self.SetImageSize(out_value, notify);
             }
             break;
         case 2:
-            if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
+            if (DirectX::XMFLOAT2 out_value;
+                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
                 self.SetOrigin(out_value, notify);
             }
             break;
@@ -324,11 +296,15 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return std::format("{{ image_path: {}, image_size: {}, origin: {}, rotation_2d: {}}}",
-                           vortex::reflection_traits<decltype(self.GetImagePath())>::serialize(self.GetImagePath()),
-                           vortex::reflection_traits<decltype(self.GetImageSize())>::serialize(self.GetImageSize()),
-                           vortex::reflection_traits<decltype(self.GetOrigin())>::serialize(self.GetOrigin()),
-                           vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(self.GetRotation2d()));
+        return std::format(
+                "{{ image_path: {}, image_size: {}, origin: {}, rotation_2d: {}}}",
+                vortex::reflection_traits<decltype(self.GetImagePath())>::serialize(
+                        self.GetImagePath()),
+                vortex::reflection_traits<decltype(self.GetImageSize())>::serialize(
+                        self.GetImageSize()),
+                vortex::reflection_traits<decltype(self.GetOrigin())>::serialize(self.GetOrigin()),
+                vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(
+                        self.GetRotation2d()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -344,14 +320,15 @@ struct StreamInputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
     static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            { "stream_url", 0 },
-            { "stream_size", 1 },
-            { "origin", 2 },
-            { "rotation_2d", 3 },
+            {       "stream_url", 0 },
+            {      "stream_size", 1 },
+            {           "origin", 2 },
+            {      "rotation_2d", 3 },
             { "stream_buffering", 4 },
     });
     std::string stream_url{}; //<UI attribute - Stream URL: URL of the video stream.
-    DirectX::XMFLOAT2 stream_size{}; //<UI attribute - Stream Size: Size of the video stream in pixels.
+    DirectX::XMFLOAT2 stream_size{}; //<UI attribute - Stream Size: Size of the video stream in
+                                     //pixels.
     DirectX::XMFLOAT2 origin{}; //<UI attribute - Origin: Origin (Anchor) point of the stream.
     float rotation_2d{ 0.0 }; //<UI attribute - Rotation (2D): Rotation of the stream in degrees.
     int32_t stream_buffering{ 1000 }; //<UI attribute - Buffering: Buffering time in milliseconds.
@@ -430,19 +407,26 @@ public:
         }
         switch (index) {
         case 0:
-            self.notifier(0, vortex::reflection_traits<std::string_view>::serialize(self.GetStreamUrl()));
+            self.notifier(
+                    0,
+                    vortex::reflection_traits<std::string_view>::serialize(self.GetStreamUrl()));
             break;
         case 1:
-            self.notifier(1, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetStreamSize()));
+            self.notifier(
+                    1,
+                    vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetStreamSize()));
             break;
         case 2:
-            self.notifier(2, vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetOrigin()));
+            self.notifier(
+                    2,
+                    vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetOrigin()));
             break;
         case 3:
             self.notifier(3, vortex::reflection_traits<float>::serialize(self.GetRotation2d()));
             break;
         case 4:
-            self.notifier(4, vortex::reflection_traits<int32_t>::serialize(self.GetStreamBuffering()));
+            self.notifier(4,
+                          vortex::reflection_traits<int32_t>::serialize(self.GetStreamBuffering()));
             break;
         default:
             vortex::error("StreamInput: Invalid property index for notification: {}", index);
@@ -452,21 +436,25 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void
+    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
     {
         switch (index) {
         case 0:
-            if (std::string_view out_value; vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
+            if (std::string_view out_value;
+                vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
                 self.SetStreamUrl(out_value, notify);
             }
             break;
         case 1:
-            if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
+            if (DirectX::XMFLOAT2 out_value;
+                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
                 self.SetStreamSize(out_value, notify);
             }
             break;
         case 2:
-            if (DirectX::XMFLOAT2 out_value; vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
+            if (DirectX::XMFLOAT2 out_value;
+                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
                 self.SetOrigin(out_value, notify);
             }
             break;
@@ -476,7 +464,8 @@ public:
             }
             break;
         case 4:
-            if (int32_t out_value; vortex::reflection_traits<int32_t>::deserialize(&out_value, value)) {
+            if (int32_t out_value;
+                vortex::reflection_traits<int32_t>::deserialize(&out_value, value)) {
                 self.SetStreamBuffering(out_value, notify);
             }
             break;
@@ -488,12 +477,18 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return std::format("{{ stream_url: {}, stream_size: {}, origin: {}, rotation_2d: {}, stream_buffering: {}}}",
-                           vortex::reflection_traits<decltype(self.GetStreamUrl())>::serialize(self.GetStreamUrl()),
-                           vortex::reflection_traits<decltype(self.GetStreamSize())>::serialize(self.GetStreamSize()),
-                           vortex::reflection_traits<decltype(self.GetOrigin())>::serialize(self.GetOrigin()),
-                           vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(self.GetRotation2d()),
-                           vortex::reflection_traits<decltype(self.GetStreamBuffering())>::serialize(self.GetStreamBuffering()));
+        return std::format(
+                "{{ stream_url: {}, stream_size: {}, origin: {}, rotation_2d: {}, "
+                "stream_buffering: {}}}",
+                vortex::reflection_traits<decltype(self.GetStreamUrl())>::serialize(
+                        self.GetStreamUrl()),
+                vortex::reflection_traits<decltype(self.GetStreamSize())>::serialize(
+                        self.GetStreamSize()),
+                vortex::reflection_traits<decltype(self.GetOrigin())>::serialize(self.GetOrigin()),
+                vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(
+                        self.GetRotation2d()),
+                vortex::reflection_traits<decltype(self.GetStreamBuffering())>::serialize(
+                        self.GetStreamBuffering()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -509,13 +504,16 @@ struct WindowOutputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
     static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            { "name", 0 },
+            {        "name", 0 },
             { "window_size", 1 },
-            { "framerate", 2 },
+            {   "framerate", 2 },
     });
-    std::string name{ "Vortex Output Window" }; //<UI attribute - Window Title: Title of the output window.
-    DirectX::XMUINT2 window_size{ 1920, 1080 }; //<UI attribute - Window Size: Resolution of the output window.
-    vortex::ratio32_t framerate{ 60, 1 }; //<UI attribute - Framerate: Framerate of the output window.
+    std::string name{ "Vortex Output Window" }; //<UI attribute - Window Title: Title of the output
+                                                //window.
+    DirectX::XMUINT2 window_size{ 1920, 1080 }; //<UI attribute - Window Size: Resolution of the
+                                                //output window.
+    vortex::ratio32_t framerate{ 60,
+                                 1 }; //<UI attribute - Framerate: Framerate of the output window.
 
 public:
     void SetName(std::string_view value, bool notify = false)
@@ -567,13 +565,18 @@ public:
         }
         switch (index) {
         case 0:
-            self.notifier(0, vortex::reflection_traits<std::string_view>::serialize(self.GetName()));
+            self.notifier(0,
+                          vortex::reflection_traits<std::string_view>::serialize(self.GetName()));
             break;
         case 1:
-            self.notifier(1, vortex::reflection_traits<DirectX::XMUINT2>::serialize(self.GetWindowSize()));
+            self.notifier(
+                    1,
+                    vortex::reflection_traits<DirectX::XMUINT2>::serialize(self.GetWindowSize()));
             break;
         case 2:
-            self.notifier(2, vortex::reflection_traits<vortex::ratio32_t>::serialize(self.GetFramerate()));
+            self.notifier(
+                    2,
+                    vortex::reflection_traits<vortex::ratio32_t>::serialize(self.GetFramerate()));
             break;
         default:
             vortex::error("WindowOutput: Invalid property index for notification: {}", index);
@@ -583,21 +586,25 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void
+    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
     {
         switch (index) {
         case 0:
-            if (std::string_view out_value; vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
+            if (std::string_view out_value;
+                vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
                 self.SetName(out_value, notify);
             }
             break;
         case 1:
-            if (DirectX::XMUINT2 out_value; vortex::reflection_traits<DirectX::XMUINT2>::deserialize(&out_value, value)) {
+            if (DirectX::XMUINT2 out_value;
+                vortex::reflection_traits<DirectX::XMUINT2>::deserialize(&out_value, value)) {
                 self.SetWindowSize(out_value, notify);
             }
             break;
         case 2:
-            if (vortex::ratio32_t out_value; vortex::reflection_traits<vortex::ratio32_t>::deserialize(&out_value, value)) {
+            if (vortex::ratio32_t out_value;
+                vortex::reflection_traits<vortex::ratio32_t>::deserialize(&out_value, value)) {
                 self.SetFramerate(out_value, notify);
             }
             break;
@@ -609,10 +616,13 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return std::format("{{ name: {}, window_size: {}, framerate: {}}}",
-                           vortex::reflection_traits<decltype(self.GetName())>::serialize(self.GetName()),
-                           vortex::reflection_traits<decltype(self.GetWindowSize())>::serialize(self.GetWindowSize()),
-                           vortex::reflection_traits<decltype(self.GetFramerate())>::serialize(self.GetFramerate()));
+        return std::format(
+                "{{ name: {}, window_size: {}, framerate: {}}}",
+                vortex::reflection_traits<decltype(self.GetName())>::serialize(self.GetName()),
+                vortex::reflection_traits<decltype(self.GetWindowSize())>::serialize(
+                        self.GetWindowSize()),
+                vortex::reflection_traits<decltype(self.GetFramerate())>::serialize(
+                        self.GetFramerate()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -628,13 +638,15 @@ struct NDIOutputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
     static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            { "name", 0 },
+            {        "name", 0 },
             { "window_size", 1 },
-            { "framerate", 2 },
+            {   "framerate", 2 },
     });
     std::string name{ "Vortex NDI Output" }; //<UI attribute - NDI Name: Name of the NDI stream.
-    DirectX::XMUINT2 window_size{ 1920, 1080 }; //<UI attribute - Window Size: Resolution of the output window.
-    vortex::ratio32_t framerate{ 60, 1 }; //<UI attribute - Framerate: Framerate of the output window.
+    DirectX::XMUINT2 window_size{ 1920, 1080 }; //<UI attribute - Window Size: Resolution of the
+                                                //output window.
+    vortex::ratio32_t framerate{ 60,
+                                 1 }; //<UI attribute - Framerate: Framerate of the output window.
 
 public:
     void SetName(std::string_view value, bool notify = false)
@@ -686,13 +698,18 @@ public:
         }
         switch (index) {
         case 0:
-            self.notifier(0, vortex::reflection_traits<std::string_view>::serialize(self.GetName()));
+            self.notifier(0,
+                          vortex::reflection_traits<std::string_view>::serialize(self.GetName()));
             break;
         case 1:
-            self.notifier(1, vortex::reflection_traits<DirectX::XMUINT2>::serialize(self.GetWindowSize()));
+            self.notifier(
+                    1,
+                    vortex::reflection_traits<DirectX::XMUINT2>::serialize(self.GetWindowSize()));
             break;
         case 2:
-            self.notifier(2, vortex::reflection_traits<vortex::ratio32_t>::serialize(self.GetFramerate()));
+            self.notifier(
+                    2,
+                    vortex::reflection_traits<vortex::ratio32_t>::serialize(self.GetFramerate()));
             break;
         default:
             vortex::error("NDIOutput: Invalid property index for notification: {}", index);
@@ -702,21 +719,25 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void
+    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
     {
         switch (index) {
         case 0:
-            if (std::string_view out_value; vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
+            if (std::string_view out_value;
+                vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
                 self.SetName(out_value, notify);
             }
             break;
         case 1:
-            if (DirectX::XMUINT2 out_value; vortex::reflection_traits<DirectX::XMUINT2>::deserialize(&out_value, value)) {
+            if (DirectX::XMUINT2 out_value;
+                vortex::reflection_traits<DirectX::XMUINT2>::deserialize(&out_value, value)) {
                 self.SetWindowSize(out_value, notify);
             }
             break;
         case 2:
-            if (vortex::ratio32_t out_value; vortex::reflection_traits<vortex::ratio32_t>::deserialize(&out_value, value)) {
+            if (vortex::ratio32_t out_value;
+                vortex::reflection_traits<vortex::ratio32_t>::deserialize(&out_value, value)) {
                 self.SetFramerate(out_value, notify);
             }
             break;
@@ -728,10 +749,13 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return std::format("{{ name: {}, window_size: {}, framerate: {}}}",
-                           vortex::reflection_traits<decltype(self.GetName())>::serialize(self.GetName()),
-                           vortex::reflection_traits<decltype(self.GetWindowSize())>::serialize(self.GetWindowSize()),
-                           vortex::reflection_traits<decltype(self.GetFramerate())>::serialize(self.GetFramerate()));
+        return std::format(
+                "{{ name: {}, window_size: {}, framerate: {}}}",
+                vortex::reflection_traits<decltype(self.GetName())>::serialize(self.GetName()),
+                vortex::reflection_traits<decltype(self.GetWindowSize())>::serialize(
+                        self.GetWindowSize()),
+                vortex::reflection_traits<decltype(self.GetFramerate())>::serialize(
+                        self.GetFramerate()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)

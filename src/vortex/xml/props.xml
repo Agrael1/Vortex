@@ -1,34 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <registry>
   <!-- Enums -->
-  <enum name="BlendChannel">
-    <value name="All" ui_name="All Channels" ui_desc="Use all RGBA channels."/>
-    <value name="Red" ui_name="Red" ui_desc="Use only red channel."/>
-    <value name="Green" ui_name="Green" ui_desc="Use only green channel."/>
-    <value name="Blue" ui_name="Blue" ui_desc="Use only blue channel."/>
-    <value name="Alpha" ui_name="Alpha" ui_desc="Use only alpha channel."/>
-    <!--<value name="Luminance" ui_name="Luminance" ui_desc="Convert to luminance and use that."/>  TODO: Add Support-->
-     <value name="RGB" ui_name="RGB Only" ui_desc="Use RGB channels, ignore alpha."/>
-  </enum>
-
   <enum name="BlendMode">
     <value name="Normal" ui_name="Normal" ui_desc="Standard alpha blending."/>
     <value name="Multiply" ui_name="Multiply" ui_desc="Multiply colors together."/>
     <value name="Screen" ui_name="Screen" ui_desc="Screen blend mode."/>
-    <value name="Overlay" ui_name="Overlay" ui_desc="Combines multiply and screen."/>
     <value name="Add" ui_name="Add" ui_desc="Additive blending."/>
     <value name="Subtract" ui_name="Subtract" ui_desc="Subtractive blending."/>
-    <value name="Difference" ui_name="Difference" ui_desc="Absolute difference."/>
     <value name="Darken" ui_name="Darken" ui_desc="Select darker color."/>
     <value name="Lighten" ui_name="Lighten" ui_desc="Select lighter color."/>
+    <value name="Difference" ui_name="Difference" ui_desc="Absolute difference."/>
+    <value name="Overlay" ui_name="Overlay" ui_desc="Combines multiply and screen."/>
   </enum>
 
   <!-- Filter nodes -->
   
   <node name="Blend">
     <property name="blend_mode" type="BlendMode" default="BlendMode::Normal" ui_name="Blend Mode" ui_desc="How to combine the images."/>
-    <property name="blend_channel" type="BlendChannel" default="BlendChannel::All" ui_name="Blend Channel" ui_desc="Which channels to use from source."/>
-    <property name="opacity" type="f32" default="1.0" min="0.0" max="1.0" ui_name="Opacity" ui_desc="Overall opacity of the blend."/>
+		<property name="blend_constants" type="color" default="1.0,1.0,1.0,1.0" ui_name="Blend Constants" ui_desc="Constants used in certain blend modes."/>
     <property name="clamp_result" type="bool" default="true" ui_name="Clamp Result" ui_desc="Clamp output to [0,1] range."/>
   </node>
 

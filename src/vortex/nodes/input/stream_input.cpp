@@ -243,7 +243,7 @@ bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx,
     sampler_table.WriteSampler(0, _lazy_data.uget()._sampler);
 
     wis::RenderPassRenderTargetDesc target_desc{
-        .target = output_info->_current_rt_view,
+        .target = output_info->current_rt_view,
         .load_op = wis::LoadOperation::Clear,
         .store_op = wis::StoreOperation::Store,
         .clear_value = { 0.f, 0.f, 0.f, 1.f }  // Clear to transparent black
@@ -261,18 +261,14 @@ bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx,
     cmd_list.SetPipelineState(_lazy_data.uget()._pipeline_state);
     cmd_list.SetRootSignature(root);
     cmd_list.RSSetScissor(
-            { 0, 0, int(output_info->_output_size.width), int(output_info->_output_size.height) });
+            { 0, 0, int(output_info->output_size.width), int(output_info->output_size.height) });
     cmd_list.RSSetViewport({ 0.f,
                              0.f,
-                             float(output_info->_output_size.width),
-                             float(output_info->_output_size.height),
+                             float(output_info->output_size.width),
+                             float(output_info->output_size.height),
                              0.f,
                              1.f });
     cmd_list.IASetPrimitiveTopology(wis::PrimitiveTopology::TriangleList);
-    std::array<DescriptorTableOffset, 2> offsets = {
-        DescriptorTableOffset{ .descriptor_table_offset = 0, .is_sampler_table = false }, // Texture
-        DescriptorTableOffset{ .descriptor_table_offset = 0,  .is_sampler_table = true }  // Sampler
-    };
     desc_table.BindOffset(gfx, cmd_list, root, 0);
     sampler_table.BindOffset(gfx, cmd_list, root, 1);
     // Draw a quad that covers the viewport

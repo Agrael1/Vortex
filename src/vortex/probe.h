@@ -3,6 +3,7 @@
 #include <vector>
 #include <vortex/util/rational.h>
 #include <vortex/gfx/descriptor_buffer.h>
+#include <vortex/gfx/texture_pool.h>
 
 struct SDL_AudioStream;
 
@@ -11,14 +12,13 @@ struct RenderProbe
 {
     vortex::DescriptorBufferView descriptor_buffer;
     vortex::DescriptorBufferView sampler_buffer;
+    vortex::TexturePool& texture_pool; // Texture for rendering
 
     wis::CommandList* command_list = nullptr; // Command list for recording commands
-    wis::Size2D output_size; // Useful for different render targets
     uint64_t frame_number = 0;
 
-    vortex::ratio32_t output_framerate = { 60, 1 }; // Default 60 FPS
-
     // PTS timing information (90kHz timebase)
+    vortex::ratio32_t output_framerate = { 60, 1 }; // Default 60 FPS
     uint64_t current_pts = 0;     // Current presentation timestamp
     uint64_t target_pts = 0;      // Target presentation timestamp for this frame
 };
@@ -34,8 +34,7 @@ struct AudioProbe {
 };
 
 struct RenderPassForwardDesc {
-    wis::RenderTargetView _current_rt_view;
-    const wis::Texture* _current_rt_texture; // Must be in RT mode
-    wis::Size2D _output_size; // Viewport
+    wis::RenderTargetView current_rt_view;
+    wis::Size2D output_size; // Viewport
 };
 } // namespace vortex

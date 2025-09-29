@@ -5,6 +5,11 @@ vortex::WindowOutput::WindowOutput(const vortex::Graphics& gfx, SerializedProper
     : ImplClass(props)
     , _window(name.data(), int(window_size.x), int(window_size.y), false)
     , _desc_buffer(gfx, 64, 8)
+    , _texture_pool(gfx,
+                    {
+                            .format = format,
+                            .size = { window_size.x, window_size.y }
+})
 {
     wis::Result result = wis::success;
     auto& device = gfx.GetDevice();
@@ -124,13 +129,13 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx)
 
     // Pass to the sink nodes for post-order processing
     RenderPassForwardDesc desc{
-        ._current_rt_view = _render_targets[_frame_index],
-        ._current_rt_texture = &_textures[_frame_index],
-        ._output_size = { window_size.x, window_size.y }
+        .current_rt_view = _render_targets[_frame_index],
+        .output_size = { window_size.x, window_size.y }
     };
     vortex::RenderProbe probe{
         .descriptor_buffer = _desc_buffer.DescBufferView(_frame_index),
         .sampler_buffer = _desc_buffer.SamplerBufferView(_frame_index),
+        .texture_pool = _texture_pool,
         .command_list = &_command_lists[_frame_index],
         .frame_number = _frame_index,
     };
@@ -178,6 +183,7 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx)
 
     // Present the swapchain after rendering (non-blocking for window)
     Present(gfx);
+    _texture_pool.SwapFrame(); // Swap the texture pool frame
 
     // Window output doesn't block, so return true immediately
     return true;

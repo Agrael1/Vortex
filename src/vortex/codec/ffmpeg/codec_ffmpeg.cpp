@@ -179,7 +179,8 @@ vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesyst
         auto& ext_alloc = gfx.GetExtendedAllocation();
         wis::TextureDesc desc{
             .format = wis::DataFormat::RGBA8Unorm,
-            .size = { static_cast<uint32_t>(final_frame->width), static_cast<uint32_t>(final_frame->height) },
+            .size = { static_cast<uint32_t>(final_frame->linesize[0]/4),
+                     static_cast<uint32_t>(final_frame->height) },
             .usage = wis::TextureUsage::HostCopy | wis::TextureUsage::ShaderResource
         };
 
@@ -195,7 +196,9 @@ vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesyst
         // Copy frame data to texture
         wis::TextureRegion frame_region{
             .offset = { 0, 0, 0 },
-            .size = { static_cast<uint32_t>(final_frame->width), static_cast<uint32_t>(final_frame->height), 1 },
+            .size = { static_cast<uint32_t>(final_frame->linesize[0]/4),
+                       static_cast<uint32_t>(final_frame->height),
+                       1 },
             .mip = 0,
             .array_layer = 0,
             .format = wis::DataFormat::RGBA8Unorm

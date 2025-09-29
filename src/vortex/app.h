@@ -20,10 +20,7 @@ struct AppExitControl {
     AppExitControl() = default;
     AppExitControl(const AppExitControl&) = delete;
 
-    static void Exit()
-    {
-        GetInstance().exit.store(true, std::memory_order::relaxed);
-    }
+    static void Exit() { GetInstance().exit.store(true, std::memory_order::relaxed); }
 
     static AppExitControl& GetInstance()
     {
@@ -45,45 +42,70 @@ public:
         , _exit(AppExitControl::GetInstance())
         , _ui_app(CreateUIApp(args.headless))
     {
-        TerminalHandler::Instance().SetInputHandler([](std::string_view line, void* p) {
-            return static_cast<App*>(p)->TerminalMessageHandler(line);
-        },
-                                                    this);
+        TerminalHandler::Instance().SetInputHandler(
+                [](std::string_view line, void* p) {
+                    return static_cast<App*>(p)->TerminalMessageHandler(line);
+                },
+                this);
 
         wis::Result res = wis::success;
-        vortex::UpdateNotifier::External external_observer{
-            .observer = this,
-            .callback = &App::OnNodeUpdateThunk
-        };
-        _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) { return UIMessageHandler(std::move(args)); });
+        vortex::UpdateNotifier::External external_observer{ .observer = this,
+                                                            .callback = &App::OnNodeUpdateThunk };
+        _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) {
+            return UIMessageHandler(std::move(args));
+        });
 
         constexpr std::pair<std::string_view, std::string_view> output_values2[]{
-            std::pair{ "name", "Vortex Mega Output" },
-            std::pair{ "window_size", "[2000,2000]" }
+            std::pair{        "name", "Vortex Mega Output" },
+            std::pair{ "window_size",        "[2000,2000]" }
         };
         constexpr std::pair<std::string_view, std::string_view> output_values3[]{
-            std::pair{ "name", "Vortex Mega Output 2" },
-            std::pair{ "window_size", "[1000,2000]" },
-            std::pair{ "framerate", "[30,1]" }
+            std::pair{        "name", "Vortex Mega Output 2" },
+            std::pair{ "window_size",          "[1000,2000]" },
+            std::pair{   "framerate",               "[30,1]" }
         };
 
         constexpr std::pair<std::string_view, std::string_view> stream_values[]{
             std::pair{ "stream_url", "rtp://127.0.0.1:1234" },
         };
+        constexpr std::pair<std::string_view, std::string_view> image_values[]{
+            std::pair{ "image_path", "ui/HDR.jpg" },
+        };
+        constexpr std::pair<std::string_view, std::string_view> image_values2[]{
+            std::pair{ "image_path", "ui/Watermark.png" },
+        };
 
         // Test setup of the model
-        auto i1 = _model.CreateNode(_gfx, "StreamInput", external_observer, stream_values); // Create a default node for testing
-        auto o1 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values3); // Create a default output for testing
-        auto o2 = _model.CreateNode(_gfx, "WindowOutput", external_observer, output_values2); // Create a default output for testing
+        //auto i1 = _model.CreateNode(_gfx,
+        //                            "StreamInput",
+        //                            external_observer,
+        //                            stream_values); // Create a default node for testing
+        //auto o1 = _model.CreateNode(_gfx,
+        //                            "WindowOutput",
+        //                            external_observer,
+        //                            output_values3); // Create a default output for testing
+        auto o2 = _model.CreateNode(_gfx,
+                                    "WindowOutput",
+                                    external_observer,
+                                    output_values2); // Create a default output for testing
+        auto b1 = _model.CreateNode(_gfx, "Blend", external_observer);
+        auto i2 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values);
+        auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
 
-        _model.SetNodeInfo(i1, "Image 1"); // Set some info for the node
-        _model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
+        //_model.SetNodeInfo(i1, "Stream 1"); // Set some info for the node
+        _model.SetNodeInfo(i2, "Image 1"); // Set some info for the node
+        _model.SetNodeInfo(i3, "Image 2"); // Set some info for the node
+        //_model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
         _model.SetNodeInfo(o2, "Output 1"); // Set some info for the output node
 
-        _model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
+        //_model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
         //_model.ConnectNodes(i1, 1, o1, 1); // Connect the audio outputs
 
-        _model.ConnectNodes(i1, 0, o2, 0); // Connect the nodes in the model
+        // Blend 2 images
+        _model.ConnectNodes(i2, 0, b1, 0); // Connect the nodes in the model
+        _model.ConnectNodes(i3, 0, b1, 1); // Connect the nodes in the model
+
+        _model.ConnectNodes(b1, 0, o2, 0); // Connect the nodes in the model
     }
 
 public:
@@ -118,7 +140,9 @@ private:
             if (!_message_queue.try_pop(message)) {
                 break; // No more messages to process
             }
-            std::invoke(_message_handlers_disp[message->GetName().c_str()], *this, *message->GetArgumentList()); // Call the appropriate handler
+            std::invoke(_message_handlers_disp[message->GetName().c_str()],
+                        *this,
+                        *message->GetArgumentList()); // Call the appropriate handler
         }
     }
     bool UIMessageHandler(CefRefPtr<CefProcessMessage> message) noexcept
@@ -127,7 +151,8 @@ private:
             return false; // Invalid message
         }
         auto message_name = message->GetName();
-        if (auto it = _message_handlers_disp.find(message_name.c_str()); it != _message_handlers_disp.end()) {
+        if (auto it = _message_handlers_disp.find(message_name.c_str());
+            it != _message_handlers_disp.end()) {
             _message_queue.emplace(std::move(message)); // Add message to the queue
             return true; // Message handled
         }
@@ -155,7 +180,8 @@ private:
             if (std::filesystem::exists(path) && std::filesystem::is_regular_file(path)) {
                 std::ifstream file(path);
                 if (file) {
-                    std::string script((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+                    std::string script((std::istreambuf_iterator<char>(file)),
+                                       std::istreambuf_iterator<char>());
                     _ui_app.ExecuteJavaScript(script);
                     return true; // Message handled
                 }
@@ -184,21 +210,30 @@ private:
     {
         _model.SetNodeProperty(node_ptr, uint32_t(index), value); // Set the property in the model
     }
-    auto CreateNode(std::string value) -> uintptr_t
-    {
-        return _model.CreateNode(_gfx, value);
-    }
+    auto CreateNode(std::string value) -> uintptr_t { return _model.CreateNode(_gfx, value); }
     void RemoveNode(uintptr_t node_ptr)
     {
         _model.RemoveNode(node_ptr); // Delete the node with the specified ID
     }
-    bool ConnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
+    bool ConnectNodes(uintptr_t node_ptr_left,
+                      int32_t output_index,
+                      uintptr_t node_ptr_right,
+                      int32_t input_index)
     {
-        return _model.ConnectNodes(node_ptr_left, output_index, node_ptr_right, input_index); // Connect the nodes in the model
+        return _model.ConnectNodes(node_ptr_left,
+                                   output_index,
+                                   node_ptr_right,
+                                   input_index); // Connect the nodes in the model
     }
-    void DisconnectNodes(uintptr_t node_ptr_left, int32_t output_index, uintptr_t node_ptr_right, int32_t input_index)
+    void DisconnectNodes(uintptr_t node_ptr_left,
+                         int32_t output_index,
+                         uintptr_t node_ptr_right,
+                         int32_t input_index)
     {
-        _model.DisconnectNodes(node_ptr_left, output_index, node_ptr_right, input_index); // Disconnect the nodes in the model
+        _model.DisconnectNodes(node_ptr_left,
+                               output_index,
+                               node_ptr_right,
+                               input_index); // Disconnect the nodes in the model
     }
     void SetNodeInfo(uintptr_t node_ptr, std::string info)
     {
@@ -207,7 +242,10 @@ private:
 
 private:
     // Thunk for node update observer
-    static void OnNodeUpdateThunk(void* observer, uintptr_t node, uint32_t property_index, std::string_view value)
+    static void OnNodeUpdateThunk(void* observer,
+                                  uintptr_t node,
+                                  uint32_t property_index,
+                                  std::string_view value)
     {
         std::bit_cast<App*>(observer)->OnNodeUpdate(node, property_index, value);
     }
@@ -238,7 +276,8 @@ private:
     vortex::ui::SDLLibrary _sdl;
 
     vortex::Graphics _gfx;
-    dro::SPSCQueue<CefRefPtr<CefProcessMessage>, 64> _message_queue; ///< Queue for messages from the UI
+    dro::SPSCQueue<CefRefPtr<CefProcessMessage>, 64> _message_queue; ///< Queue for messages from
+                                                                     ///< the UI
 
     // CEF client for UI
     vortex::ui::UIApp _ui_app;
@@ -249,16 +288,16 @@ private:
     // used in hot code, so it should be fast
     std::unordered_map<std::u16string_view, MessageHanlderDispatch> _message_handlers_disp{
         // Coroutines
-        { u"GetNodeTypesAsync", ui::MessageDispatch<&App::GetNodeTypes>::Dispatch },
-        { u"CreateNodeAsync", ui::MessageDispatch<&App::CreateNode>::Dispatch },
+        {      u"GetNodeTypesAsync",      ui::MessageDispatch<&App::GetNodeTypes>::Dispatch },
+        {        u"CreateNodeAsync",        ui::MessageDispatch<&App::CreateNode>::Dispatch },
         { u"GetNodePropertiesAsync", ui::MessageDispatch<&App::GetNodeProperties>::Dispatch },
 
         // Immediate calls (fire and forget)
-        { u"RemoveNode", ui::MessageDispatch<&App::RemoveNode>::Dispatch },
-        { u"ConnectNodes", ui::MessageDispatch<&App::ConnectNodes>::Dispatch },
-        { u"DisconnectNodes", ui::MessageDispatch<&App::DisconnectNodes>::Dispatch },
-        { u"SetNodeInfo", ui::MessageDispatch<&App::SetNodeInfo>::Dispatch },
-        { u"SetNodeProperty", ui::MessageDispatch<&App::SetNodeProperty>::Dispatch }
+        {             u"RemoveNode",        ui::MessageDispatch<&App::RemoveNode>::Dispatch },
+        {           u"ConnectNodes",      ui::MessageDispatch<&App::ConnectNodes>::Dispatch },
+        {        u"DisconnectNodes",   ui::MessageDispatch<&App::DisconnectNodes>::Dispatch },
+        {            u"SetNodeInfo",       ui::MessageDispatch<&App::SetNodeInfo>::Dispatch },
+        {        u"SetNodeProperty",   ui::MessageDispatch<&App::SetNodeProperty>::Dispatch }
     };
 
 private:

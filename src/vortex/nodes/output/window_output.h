@@ -3,6 +3,7 @@
 #include <wisdom/wisdom.hpp>
 #include <vortex/graph/interfaces.h>
 #include <vortex/gfx/descriptor_buffer.h>
+#include <vortex/gfx/texture_pool.h>
 #include <vortex/probe.h>
 #include <vortex/properties/props.hpp>
 #include <vortex/util/lazy.h>
@@ -64,5 +65,6 @@ public:
     bool _resized = false; ///< Flag to indicate if the window has been resized
 
     vortex::DescriptorBuffer _desc_buffer; ///< Descriptor buffer for the output
+    vortex::TexturePool _texture_pool; ///< Texture pool for the output
 };
 } // namespace vortex

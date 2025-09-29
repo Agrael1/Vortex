@@ -28,22 +28,21 @@ public:
     {
         assert(info.size_bytes % info.table_alignment_bytes == 0 &&
                "Table must be aligned!"); // Must be aligned
-        assert(info.size_bytes > 0 && "Size must be greater than 0!");
     }
 
 public:
-    DescriptorBufferView SuballocateTable(uint32_t desc_count) const noexcept
+    DescriptorBufferView SuballocateTable(uint32_t desc_count) noexcept
     {
         DescriptorBufferInfo info = _info;
         info.size_bytes = wis::aligned_size(desc_count * info.descriptor_size_bytes,
                                             info.table_alignment_bytes);
-        return DescriptorBufferView(_desc_buffer, info);
-    }
-    DescriptorBufferView OffsetTable(uint32_t offset_bytes) const noexcept
-    {
-        DescriptorBufferInfo info = _info;
-        info.offset_bytes += offset_bytes;
-        info.size_bytes -= offset_bytes;
+
+        assert(_info.size_bytes >= info.size_bytes &&
+               "Not enough space in the descriptor buffer!");
+
+        // Advance current offset
+        _info.offset_bytes += info.size_bytes;
+        _info.size_bytes -= info.size_bytes;
         return DescriptorBufferView(_desc_buffer, info);
     }
     operator bool() const noexcept { return _desc_buffer != nullptr && _info.size_bytes > 0; }

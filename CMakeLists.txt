@@ -61,6 +61,7 @@ PUBLIC
   "src/vortex/nodes/input/stream_input.cpp"
   "src/vortex/nodes/filter/composition.h"
   "src/vortex/nodes/filter/blend.h"
+  "src/vortex/nodes/filter/blend.cpp"
   "src/vortex/nodes/node_registry.h"
  
   "src/vortex/codec/ffmpeg/types.h" 
@@ -109,7 +110,7 @@ PUBLIC
   "src/vortex/util/term/input.cpp"
 
   "src/vortex/util/main_args.h"   
-  "src/vortex/nodes/output/window_output.cpp")
+  "src/vortex/nodes/output/window_output.cpp" )
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
@@ -174,25 +175,25 @@ add_custom_command(TARGET ui POST_BUILD
   $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui
 )
 
-#if (VORTEX_GENERATE_PROPERTIES)
-#  add_custom_target(properties)
-#  set(PROP_FILES 
-#    "${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/xml/props.xml"
-#  )
-#  target_sources(properties
-#    PRIVATE ${PROP_FILES}
-#  )
-#
-#  # Generate the properties file
-#  foreach (PROP_FILE ${PROP_FILES})
-#    get_filename_component(PROP_NAME ${PROP_FILE} NAME_WE)
-#    add_custom_command(TARGET properties PRE_BUILD
-#      COMMAND $<TARGET_FILE:generator> ${PROP_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/properties/${PROP_NAME}.hpp
-#      COMMENT "Generating properties for ${PROP_NAME}"
-#    )
-#  endforeach()
-#  add_dependencies(${PROJECT_NAME} properties)
-#endif()
+if (VORTEX_GENERATE_PROPERTIES)
+  add_custom_target(properties)
+  set(PROP_FILES 
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/xml/props.xml"
+  )
+  target_sources(properties
+    PRIVATE ${PROP_FILES}
+  )
+
+  # Generate the properties file
+  foreach (PROP_FILE ${PROP_FILES})
+    get_filename_component(PROP_NAME ${PROP_FILE} NAME_WE)
+    add_custom_command(TARGET properties PRE_BUILD
+      COMMAND $<TARGET_FILE:prop_generator> ${PROP_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/properties/${PROP_NAME}.hpp
+      COMMENT "Generating properties for ${PROP_NAME}"
+    )
+  endforeach()
+  #add_dependencies(${PROJECT_NAME} properties)
+endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23

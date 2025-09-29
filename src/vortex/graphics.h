@@ -40,22 +40,10 @@ public:
     }
 
 public:
-    const wis::Device& GetDevice() const noexcept
-    {
-        return _device;
-    }
-    const vortex::PlatformExtension& GetPlatform() const noexcept
-    {
-        return _platform;
-    }
-    const wis::CommandQueue& GetMainQueue() const noexcept
-    {
-        return _main_queue;
-    }
-    const wis::ResourceAllocator& GetAllocator() const noexcept
-    {
-        return _allocator;
-    }
+    const wis::Device& GetDevice() const noexcept { return _device; }
+    const vortex::PlatformExtension& GetPlatform() const noexcept { return _platform; }
+    const wis::CommandQueue& GetMainQueue() const noexcept { return _main_queue; }
+    const wis::ResourceAllocator& GetAllocator() const noexcept { return _allocator; }
     const wis::ExtendedAllocation& GetExtendedAllocation() const noexcept
     {
         return _extended_allocation_ext;
@@ -73,10 +61,7 @@ public:
         std::ignore = q.SignalQueue(_fence, ++_fence_value);
         std::ignore = _fence.Wait(_fence_value);
     }
-    void WaitForGPU() const
-    {
-        Throttle();
-    }
+    void WaitForGPU() const { Throttle(); }
     void ExecuteCommandLists(std::initializer_list<wis::CommandListView> lists) const
     {
         _main_queue.ExecuteCommandLists(lists.begin(), lists.size());

@@ -1,129 +1,136 @@
 #pragma once
+#include <vortex/util/log_storage.h>
 #include <vortex/util/common.h>
+#include <vortex/consts.h>
+#include <wisdom/wisdom.hpp>
+#include <unordered_map>
+#include <vector>
 
 namespace vortex {
-struct RenderTargetRequest {
-    wis::Size2D size;
-    wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // For now assume RGBA8
+class Graphics;
+struct OutputTextureDesc {
+    wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Format of the texture (e.g.,
+                                                          // RGBA8Unorm)
+    wis::Size2D size; // 99% is a 2D texture
 
-    // Comparison operators for hash map usage
-    bool operator==(const RenderTargetRequest& other) const noexcept
+    bool operator==(const OutputTextureDesc& other) const noexcept
     {
-        return std::memcmp(this, &other, sizeof(RenderTargetRequest)) == 0;
+        return format == other.format && size.width == other.size.width &&
+                size.height == other.size.height;
     }
 };
 
 class TexturePool
 {
+    static constexpr size_t initial_texture_count = 2; // Initial number of textures to allocate
+private:
+    void ReleaseTexture(size_t index) noexcept
+    {
+        if (index < _current_ptr->size()) {
+            _current_ptr->at(index).in_use = false;
+        }
+    }
+    wis::TextureView GetTextureView(size_t index) noexcept
+    {
+        if (index < _current_ptr->size()) {
+            return (*_current_ptr)[index].texture;
+        }
+        return wis::TextureView{};
+    }
+    wis::RenderTargetView GetRTV(size_t index) noexcept
+    {
+        if (index < _current_ptr->size()) {
+            return (*_current_ptr)[index].rtv;
+        }
+        return wis::RenderTargetView{};
+    }
+    wis::ShaderResourceView GetSRV(size_t index) noexcept
+    {
+        if (index < _current_ptr->size()) {
+            return (*_current_ptr)[index].srv;
+        }
+        return wis::ShaderResourceView{};
+    }
 
+public:
+    struct UseTexture {
+        wis::Texture texture; // The texture to use
+        wis::RenderTarget rtv; // Render target view for the texture
+        wis::ShaderResource srv; // Shader resource view for the texture
+        bool in_use = false; // Whether the texture is currently in use
+    };
+    struct UseTextureView {
+        friend class TexturePool;
+
+    private:
+        UseTextureView(size_t index, TexturePool& parent) noexcept
+            : texture_index(index)
+            , parent_entry(parent)
+        {
+        }
+
+    public:
+        ~UseTextureView() noexcept { parent_entry.ReleaseTexture(texture_index); }
+        operator bool() const noexcept { return texture_index != npos; }
+
+    public:
+        wis::TextureView GetTexture() const noexcept
+        {
+            return parent_entry.GetTextureView(texture_index);
+        }
+        wis::ShaderResourceView GetSRV() const noexcept
+        {
+            return parent_entry.GetSRV(texture_index);
+        }
+        wis::RenderTargetView GetRTV() const noexcept { return parent_entry.GetRTV(texture_index); }
+
+    private:
+        static constexpr std::size_t npos = std::numeric_limits<std::size_t>::max();
+        std::size_t texture_index = npos; // Index of the texture in the pool
+        TexturePool& parent_entry; // Reference to the parent entry
+    };
+
+public:
+    TexturePool() = default;
+    TexturePool(const vortex::Graphics& gfx, const OutputTextureDesc& desc) noexcept
+        : _desc(desc)
+    {
+        AllocateTextures(gfx, initial_texture_count);
+    }
+
+public:
+    void SwapFrame() noexcept
+    {
+        _current_ptr = &_textures[(_current_ptr - _textures + 1) % max_frames_in_flight];
+    }
+    bool AllocateTextures(const vortex::Graphics& gfx, size_t count) noexcept;
+    const OutputTextureDesc& GetDesc() const noexcept { return _desc; }
+    bool ReallocateIfNeeded(const vortex::Graphics& gfx,
+                            const OutputTextureDesc& new_desc) noexcept;
+
+    UseTextureView AcquireTexture(const vortex::Graphics& gfx) noexcept
+    {
+        auto& textures = *_current_ptr;
+        for (size_t i = 0; i < textures.size(); ++i) {
+            if (!textures[i].in_use) {
+                textures[i].in_use = true;
+                return UseTextureView(i, *this);
+            }
+        }
+        // Allocate a new texture if none are available
+        bool succ = AllocateTextures(gfx, 1);
+        if (succ && !textures.empty()) {
+            textures.back().in_use = true;
+            return UseTextureView(textures.size() - 1, *this);
+        }
+        return UseTextureView(UseTextureView::npos, *this);
+    }
+
+private:
+    OutputTextureDesc _desc;
+    std::vector<UseTexture> _textures[vortex::max_frames_in_flight];
+    std::vector<UseTexture>* _current_ptr = _textures; // Pointer to the current frame's texture
+                                                       // list
+    vortex::LogView _log = vortex::LogStorage::GetLog(vortex::graphics_log_name);
 };
 } // namespace vortex
-
-// #include <vortex/gfx/texture.h>
-// #include <vortex/util/common.h>
-// #include <wisdom/wisdom.hpp>
-// #include <unordered_map>
-// #include <vector>
-// #include <memory>
-//
-// namespace vortex {
-// class Graphics;
-//
-//// Render Target will always be 2D textures, so we can simplify the request
-// struct RenderTargetRequest {
-//     wis::Size2D size;
-//     wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // For now assume RGBA8
-//
-//     // Comparison operators for hash map usage
-//     bool operator==(const RenderTargetRequest& other) const noexcept
-//     {
-//         return std::memcmp(this, &other, sizeof(RenderTargetRequest)) == 0;
-//     }
-// };
-//
-//
-////// Texture storage manages a pool of textures for efficient allocation
-////class TextureStorage
-////{
-////public:
-////    TextureStorage() = default;
-////    explicit TextureStorage(const vortex::Graphics& gfx);
-////
-////    // Request a texture with the given specifications
-////    // Returns a handle that manages the texture lifetime
-////    TextureHandle RequestTexture(const TextureRequest& request);
-////
-////    // Get statistics about texture usage
-////    struct Statistics {
-////        size_t total_textures_created = 0;
-////        size_t active_allocations = 0;
-////        size_t available_in_pool = 0;
-////        size_t memory_usage_bytes = 0;
-////    };
-////    Statistics GetStatistics() const;
-////
-////    // Clean up unused textures (call periodically to free memory)
-////    void Cleanup(uint32_t frames_unused_threshold = 60);
-////
-////    // Clear all textures (useful for shutdown)
-////    void Clear();
-////
-////    // Called each frame to update frame counter for cleanup
-////    void OnFrameEnd() { ++_current_frame; }
-////
-////private:
-////    friend class TextureHandle;
-////
-////    // Internal texture entry
-////    struct TextureEntry {
-////        vortex::Texture2D texture;
-////        uint32_t last_used_frame = 0;
-////        bool in_use = false;
-////    };
-////
-////    // Return a texture to the pool
-////    void ReturnTexture(const TextureRequest& request, vortex::Texture2D texture);
-////
-////    // Create a new texture
-////    vortex::Texture2D CreateTexture(const TextureRequest& request);
-////
-////    const vortex::Graphics* _graphics = nullptr;
-////
-////    // Pool of textures organized by request type
-////    std::unordered_map<TextureRequest, std::vector<std::unique_ptr<TextureEntry>>> _texture_pools;
-////
-////    // Statistics
-////    mutable Statistics _stats;
-////    uint32_t _current_frame = 0;
-////};
-////
-////} // namespace vortex
-//
-namespace std {
-// Formatter for TextureRequest (requires reflection header to be included where used)
-template<>
-struct std::formatter<vortex::RenderTargetRequest> {
-    constexpr auto parse(std::format_parse_context& ctx)
-    {
-        return ctx.begin();
-    }
-
-    template<typename FormatContext>
-    auto format(const vortex::RenderTargetRequest& req, FormatContext& ctx) const
-    {
-        return std::format_to(ctx.out(),
-                              "TextureRequest({:x}, format={})",
-                              req.size,
-                              req.format);
-    }
-};
-// Hash specialization for TextureRequest
-template<>
-struct hash<vortex::RenderTargetRequest> {
-    std::size_t operator()(const vortex::RenderTargetRequest& req) const noexcept
-    {
-        // Simple hash combination
-        return vortex::hash_combine(req.size.width, req.size.height, static_cast<uint32_t>(req.format));
-    }
-};
-} // namespace std

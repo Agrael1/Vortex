@@ -5,6 +5,7 @@
 #include <string>
 #include <filesystem>
 #include <optional>
+#include <any>
 #include <vortex/util/reflection.h>
 #include <vortex/util/log.h>
 #include <DirectXMath.h>
@@ -141,6 +142,32 @@ public:
             break; // Invalid index, cannot set property
         }
     }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (auto out_value = std::any_cast<BlendMode>(value)) {
+                self.SetBlendMode(*out_value, notify);
+            }
+            break;
+        case 1:
+            if (auto out_value = std::any_cast<DirectX::XMFLOAT4>(value)) {
+                self.SetBlendConstants(*out_value, notify);
+            }
+            break;
+        case 2:
+            if (auto out_value = std::any_cast<bool>(value)) {
+                self.SetClampResult(*out_value, notify);
+            }
+            break;
+        default:
+            vortex::error("Blend: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
     template<typename Self>
     std::string Serialize(this Self& self)
     {
@@ -216,6 +243,22 @@ public:
             if (int32_t out_value;
                 vortex::reflection_traits<int32_t>::deserialize(&out_value, value)) {
                 self.SetInputIndex(out_value, notify);
+            }
+            break;
+        default:
+            vortex::error("Select: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (auto out_value = std::any_cast<int32_t>(value)) {
+                self.SetInputIndex(*out_value, notify);
             }
             break;
         default:
@@ -368,6 +411,37 @@ public:
         case 3:
             if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
                 self.SetRotation2d(out_value, notify);
+            }
+            break;
+        default:
+            vortex::error("ImageInput: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (auto out_value = std::any_cast<std::string_view>(value)) {
+                self.SetImagePath(*out_value, notify);
+            }
+            break;
+        case 1:
+            if (auto out_value = std::any_cast<DirectX::XMFLOAT2>(value)) {
+                self.SetImageSize(*out_value, notify);
+            }
+            break;
+        case 2:
+            if (auto out_value = std::any_cast<DirectX::XMFLOAT2>(value)) {
+                self.SetOrigin(*out_value, notify);
+            }
+            break;
+        case 3:
+            if (auto out_value = std::any_cast<float>(value)) {
+                self.SetRotation2d(*out_value, notify);
             }
             break;
         default:
@@ -558,6 +632,42 @@ public:
             break; // Invalid index, cannot set property
         }
     }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (auto out_value = std::any_cast<std::string_view>(value)) {
+                self.SetStreamUrl(*out_value, notify);
+            }
+            break;
+        case 1:
+            if (auto out_value = std::any_cast<DirectX::XMFLOAT2>(value)) {
+                self.SetStreamSize(*out_value, notify);
+            }
+            break;
+        case 2:
+            if (auto out_value = std::any_cast<DirectX::XMFLOAT2>(value)) {
+                self.SetOrigin(*out_value, notify);
+            }
+            break;
+        case 3:
+            if (auto out_value = std::any_cast<float>(value)) {
+                self.SetRotation2d(*out_value, notify);
+            }
+            break;
+        case 4:
+            if (auto out_value = std::any_cast<int32_t>(value)) {
+                self.SetStreamBuffering(*out_value, notify);
+            }
+            break;
+        default:
+            vortex::error("StreamInput: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
     template<typename Self>
     std::string Serialize(this Self& self)
     {
@@ -699,6 +809,32 @@ public:
             break; // Invalid index, cannot set property
         }
     }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (auto out_value = std::any_cast<std::string_view>(value)) {
+                self.SetName(*out_value, notify);
+            }
+            break;
+        case 1:
+            if (auto out_value = std::any_cast<DirectX::XMUINT2>(value)) {
+                self.SetWindowSize(*out_value, notify);
+            }
+            break;
+        case 2:
+            if (auto out_value = std::any_cast<vortex::ratio32_t>(value)) {
+                self.SetFramerate(*out_value, notify);
+            }
+            break;
+        default:
+            vortex::error("WindowOutput: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
     template<typename Self>
     std::string Serialize(this Self& self)
     {
@@ -827,6 +963,32 @@ public:
             if (vortex::ratio32_t out_value;
                 vortex::reflection_traits<vortex::ratio32_t>::deserialize(&out_value, value)) {
                 self.SetFramerate(out_value, notify);
+            }
+            break;
+        default:
+            vortex::error("NDIOutput: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (auto out_value = std::any_cast<std::string_view>(value)) {
+                self.SetName(*out_value, notify);
+            }
+            break;
+        case 1:
+            if (auto out_value = std::any_cast<DirectX::XMUINT2>(value)) {
+                self.SetWindowSize(*out_value, notify);
+            }
+            break;
+        case 2:
+            if (auto out_value = std::any_cast<vortex::ratio32_t>(value)) {
+                self.SetFramerate(*out_value, notify);
             }
             break;
         default:

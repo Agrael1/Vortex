@@ -113,7 +113,7 @@ PUBLIC
   "src/vortex/util/term/input.cpp"
 
   "src/vortex/util/main_args.h"   
-  "src/vortex/nodes/output/window_output.cpp" )
+  "src/vortex/nodes/output/window_output.cpp"  "src/vortex/util/interp/interpolation.h" "src/vortex/util/interp/easing.h" "src/vortex/util/interp/vector.h")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES

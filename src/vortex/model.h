@@ -2,6 +2,7 @@
 #include <vortex/graph/interfaces.h>
 #include <vortex/graph/connection.h>
 #include <vortex/graph/output_scheduler.h>
+#include <vortex/sync/timeline.h>
 #include <vortex/probe.h>
 #include <atomic>
 #include <unordered_set>
@@ -45,6 +46,9 @@ public:
             return; // No output is ready to be evaluated this frame
         }
 
+        // Evaluate properties based on the current timeline
+
+
         // Evaluate the output node
         output->Evaluate(gfx, pts);
     }
@@ -78,7 +82,7 @@ private:
     void ProcessUpdates(const vortex::Graphics& gfx)
     {
         for (auto* node : _dirty_nodes) {
-            node->Update(gfx); // Update the node with the graphics context and probe
+            node->Update(gfx); // Update the node with the graphics context
         }
     }
 
@@ -186,5 +190,6 @@ private:
 
     std::vector<IOutput*> _outputs;
     OutputScheduler _output_scheduler; ///< Frame-rate aware output scheduler
+    sync::Timeline _timeline; ///< Timeline for synchronization
 };
 } // namespace vortex::graph

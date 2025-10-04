@@ -2,6 +2,7 @@
 #include <vortex/app.h>
 #include <vortex/ui/cef/app.h>
 #include <vortex/util/log_storage.h>
+#include <vortex/util/interp/interpolation.h>
 
 
 int EntryMain(std::span<std::string_view> args, CefRefPtr<vortex::ui::VortexCefApp> cef_app)

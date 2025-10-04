@@ -27,4 +27,5 @@ set_target_properties(${PROJECT_NAME}
 target_compile_definitions(${PROJECT_NAME} 
 	PRIVATE
 		CLANG_FORMAT_EXECUTABLE="${CLANG_FORMAT_EXECUTABLE}"
+		DEFAULT_PROPERTY_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../src/vortex/properties/"
 )

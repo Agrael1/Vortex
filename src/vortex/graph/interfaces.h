@@ -71,10 +71,17 @@ struct alignas(16) INode {
 struct IOutput : public INode {
     virtual vortex::ratio32_t GetOutputFPS() const noexcept = 0; ///< Get the output FPS
     virtual wis::Size2D GetOutputSize() const noexcept = 0; ///< Get the output size
-    virtual bool Evaluate(const vortex::Graphics& gfx)
+    virtual bool Evaluate(const vortex::Graphics& gfx, int64_t pts)
     {
         return false;
     };
+    
+    // PTS timing information (90kHz timebase)
+    void SetBasePTS(uint64_t pts) noexcept { _base_pts = pts; }
+    int64_t GetBasePTS() const noexcept { return _base_pts; }
+
+private:
+    int64_t _base_pts = invalid_pts; // Base PTS for the output node
 };
 
 // Factory for creating nodes

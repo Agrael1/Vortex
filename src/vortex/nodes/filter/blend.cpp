@@ -8,8 +8,8 @@ static constexpr wis::BlendAttachmentDesc blend_descs[]{
      .src_color_blend = wis::BlendFactor::SrcAlpha,
      .dst_color_blend = wis::BlendFactor::InvSrcAlpha,
      .color_blend_op = wis::BlendOp::Add,
-     .src_alpha_blend = wis::BlendFactor::One,
-     .dst_alpha_blend = wis::BlendFactor::Zero,
+     .src_alpha_blend = wis::BlendFactor::Zero,
+     .dst_alpha_blend = wis::BlendFactor::One,
      .alpha_blend_op = wis::BlendOp::Add,
      .color_write_mask = wis::ColorComponents::All },
     // Multiply - Multiply colors together
@@ -17,17 +17,17 @@ static constexpr wis::BlendAttachmentDesc blend_descs[]{
      .src_color_blend = wis::BlendFactor::DestColor,
      .dst_color_blend = wis::BlendFactor::Zero,
      .color_blend_op = wis::BlendOp::Add,
-     .src_alpha_blend = wis::BlendFactor::One,
-     .dst_alpha_blend = wis::BlendFactor::Zero,
+     .src_alpha_blend = wis::BlendFactor::Zero,
+     .dst_alpha_blend = wis::BlendFactor::One,
      .alpha_blend_op = wis::BlendOp::Add,
      .color_write_mask = wis::ColorComponents::All },
-    // Screen - Screen blend mode (1 - (1-src) * (1-dst))
+    // Screen - Screen blend mode
     { .blend_enable = true,
      .src_color_blend = wis::BlendFactor::InvDestColor,
      .dst_color_blend = wis::BlendFactor::One,
      .color_blend_op = wis::BlendOp::Add,
-     .src_alpha_blend = wis::BlendFactor::One,
-     .dst_alpha_blend = wis::BlendFactor::Zero,
+     .src_alpha_blend = wis::BlendFactor::Zero,
+     .dst_alpha_blend = wis::BlendFactor::One,
      .alpha_blend_op = wis::BlendOp::Add,
      .color_write_mask = wis::ColorComponents::All },
     // Add - Additive blending
@@ -35,8 +35,8 @@ static constexpr wis::BlendAttachmentDesc blend_descs[]{
      .src_color_blend = wis::BlendFactor::One,
      .dst_color_blend = wis::BlendFactor::One,
      .color_blend_op = wis::BlendOp::Add,
-     .src_alpha_blend = wis::BlendFactor::One,
-     .dst_alpha_blend = wis::BlendFactor::Zero,
+     .src_alpha_blend = wis::BlendFactor::Zero,
+     .dst_alpha_blend = wis::BlendFactor::One,
      .alpha_blend_op = wis::BlendOp::Add,
      .color_write_mask = wis::ColorComponents::All },
     // Subtract - Subtractive blending (dst - src)
@@ -44,8 +44,8 @@ static constexpr wis::BlendAttachmentDesc blend_descs[]{
      .src_color_blend = wis::BlendFactor::One,
      .dst_color_blend = wis::BlendFactor::One,
      .color_blend_op = wis::BlendOp::RevSubtract,
-     .src_alpha_blend = wis::BlendFactor::One,
-     .dst_alpha_blend = wis::BlendFactor::Zero,
+     .src_alpha_blend = wis::BlendFactor::Zero,
+     .dst_alpha_blend = wis::BlendFactor::One,
      .alpha_blend_op = wis::BlendOp::Add,
      .color_write_mask = wis::ColorComponents::All },
     // Darken - Select darker color using Min operation
@@ -53,8 +53,8 @@ static constexpr wis::BlendAttachmentDesc blend_descs[]{
      .src_color_blend = wis::BlendFactor::One,
      .dst_color_blend = wis::BlendFactor::One,
      .color_blend_op = wis::BlendOp::Min,
-     .src_alpha_blend = wis::BlendFactor::One,
-     .dst_alpha_blend = wis::BlendFactor::Zero,
+     .src_alpha_blend = wis::BlendFactor::Zero,
+     .dst_alpha_blend = wis::BlendFactor::One,
      .alpha_blend_op = wis::BlendOp::Add,
      .color_write_mask = wis::ColorComponents::All },
     // Lighten - Select lighter color using Max operation
@@ -62,8 +62,8 @@ static constexpr wis::BlendAttachmentDesc blend_descs[]{
      .src_color_blend = wis::BlendFactor::One,
      .dst_color_blend = wis::BlendFactor::One,
      .color_blend_op = wis::BlendOp::Max,
-     .src_alpha_blend = wis::BlendFactor::One,
-     .dst_alpha_blend = wis::BlendFactor::Zero,
+     .src_alpha_blend = wis::BlendFactor::Zero,
+     .dst_alpha_blend = wis::BlendFactor::One,
      .alpha_blend_op = wis::BlendOp::Add,
      .color_write_mask = wis::ColorComponents::All }
 };

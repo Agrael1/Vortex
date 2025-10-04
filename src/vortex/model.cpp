@@ -165,7 +165,6 @@ bool vortex::graph::GraphModel::ConnectNodes(
         // Remove the target from the source
         auto prev_target_sources = target_sink.source_node->GetSources();
         prev_target_sources[target_sink.source_index].targets.erase(SourceTarget{ uint32_t(input_index), to_node });
-        _optimize_probe.MarkNodeDirty(target_sink.source_node); // Mark the source node as dirty
     }
 
     target_sink.source_node = from_node; // Set the source node for the sink
@@ -174,11 +173,6 @@ bool vortex::graph::GraphModel::ConnectNodes(
     target_source.targets.emplace(uint32_t(input_index), to_node); // Add the target to the source
 
     UpdateIfStatic(to_node);
-
-    // Mark nodes for optimization
-    _optimize_probe.MarkNodeDirty(from_node);
-    _optimize_probe.MarkNodeDirty(to_node);
-    _optimization_dirty = true;
     return true; // Connection successful
 }
 
@@ -226,11 +220,6 @@ void vortex::graph::GraphModel::DisconnectNodes(
     target_source.targets.erase(SourceTarget{ uint32_t(input_index), to_node }); // Remove the target from the source
 
     UpdateIfStatic(to_node); // Update the right node if it was static
-
-    // Mark nodes for optimization
-    _optimize_probe.MarkNodeDirty(from_node);
-    _optimize_probe.MarkNodeDirty(to_node);
-    _optimization_dirty = true;
 }
 
 void vortex::graph::GraphModel::SetNodeInfo(uintptr_t node_ptr, std::string info)
@@ -238,4 +227,9 @@ void vortex::graph::GraphModel::SetNodeInfo(uintptr_t node_ptr, std::string info
     if (auto* node = GetNode(node_ptr)) {
         node->SetInfo(std::move(info));
     }
+}
+
+void vortex::graph::GraphModel::Play() 
+{
+    _output_scheduler.Play();
 }

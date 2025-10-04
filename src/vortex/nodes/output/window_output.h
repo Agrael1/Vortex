@@ -45,7 +45,7 @@ public:
     virtual vortex::ratio32_t GetOutputFPS() const noexcept { return GetFramerate(); }
     virtual wis::Size2D GetOutputSize() const noexcept { return { window_size.x, window_size.y }; }
     virtual void Update(const vortex::Graphics& gfx) override;
-    virtual bool Evaluate(const vortex::Graphics& gfx) override;
+    virtual bool Evaluate(const vortex::Graphics& gfx, int64_t pts) override;
 
 private:
     vortex::ui::SDLWindow _window;

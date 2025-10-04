@@ -113,8 +113,10 @@ public:
 
 public:
     template<typename Self>
-    void
-    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
@@ -149,6 +151,84 @@ public:
                                    self.GetBlendConstants()),
                            vortex::reflection_traits<decltype(self.GetClampResult())>::serialize(
                                    self.GetClampResult()));
+    }
+    template<typename Self>
+    bool Deserialize(this Self& self, SerializedProperties values, bool notify)
+    {
+        for (auto&& [k, v] : values) {
+            size_t index = self.property_map.at(k);
+            self.SetPropertyStub(index, v, notify);
+        }
+        return true;
+    }
+};
+struct SelectProperties {
+    UpdateNotifier notifier; // Callback for property change notifications
+public:
+    static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
+            { "input_index", 0 },
+    });
+    int32_t input_index{ 0 }; //<UI attribute - Input Index: Index of the input to select.
+
+public:
+    void SetInputIndex(int32_t value, bool notify = false)
+    {
+        input_index = value;
+        if (notify) {
+            NotifyPropertyChange(0);
+        }
+    }
+
+public:
+    template<typename Self>
+    int32_t GetInputIndex(this Self&& self)
+    {
+        return self.input_index;
+    }
+
+public:
+    template<typename Self>
+    void NotifyPropertyChange(this Self&& self, uint32_t index)
+    {
+        if (!self.notifier) {
+            vortex::error("Select: Notifier callback is not set.");
+            return; // No notifier set, cannot notify
+        }
+        switch (index) {
+        case 0:
+            self.notifier(0, vortex::reflection_traits<int32_t>::serialize(self.GetInputIndex()));
+            break;
+        default:
+            vortex::error("Select: Invalid property index for notification: {}", index);
+            break;
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (int32_t out_value;
+                vortex::reflection_traits<int32_t>::deserialize(&out_value, value)) {
+                self.SetInputIndex(out_value, notify);
+            }
+            break;
+        default:
+            vortex::error("Select: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+    template<typename Self>
+    std::string Serialize(this Self& self)
+    {
+        return std::format("{{ input_index: {}}}",
+                           vortex::reflection_traits<decltype(self.GetInputIndex())>::serialize(
+                                   self.GetInputIndex()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -261,8 +341,10 @@ public:
 
 public:
     template<typename Self>
-    void
-    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
@@ -436,8 +518,10 @@ public:
 
 public:
     template<typename Self>
-    void
-    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
@@ -586,8 +670,10 @@ public:
 
 public:
     template<typename Self>
-    void
-    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
@@ -719,8 +805,10 @@ public:
 
 public:
     template<typename Self>
-    void
-    SetPropertyStub(this Self&& self, uint32_t index, std::string_view value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:

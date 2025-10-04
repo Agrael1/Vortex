@@ -1,7 +1,6 @@
 #pragma once
 #include <vortex/graph/interfaces.h>
 #include <vortex/graph/connection.h>
-#include <vortex/graph/optimize_probe.h>
 #include <vortex/graph/output_scheduler.h>
 #include <vortex/probe.h>
 #include <atomic>
@@ -22,6 +21,7 @@ public: // Model API
     bool ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
     void DisconnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
     void SetNodeInfo(uintptr_t node_ptr, std::string info);
+    void Play();
 
 public:
     INode* GetNode(uintptr_t node_ptr) const
@@ -40,13 +40,13 @@ public:
         ProcessUpdates(gfx);
 
         // Get the next output to evaluate based on scheduling
-        IOutput* output = _output_scheduler.GetNextReadyOutput();
+        auto[output, pts] = _output_scheduler.GetNextReadyOutput();
         if (!output) {
             return; // No output is ready to be evaluated this frame
         }
 
         // Evaluate the output node
-        output->Evaluate(gfx);
+        output->Evaluate(gfx, pts);
     }
 
     void PrintGraph() const
@@ -77,12 +77,6 @@ public:
 private:
     void ProcessUpdates(const vortex::Graphics& gfx)
     {
-        // Optimize the graph if needed
-        if (_optimization_dirty) {
-            _optimize_probe.PropagateOutputs(_outputs); // Optimize the graph using the probe
-            _optimization_dirty = false; // Reset the optimization dirty flag
-        }
-
         for (auto* node : _dirty_nodes) {
             node->Update(gfx); // Update the node with the graphics context and probe
         }
@@ -191,9 +185,6 @@ private:
     std::unordered_set<INode*> _dirty_nodes; ///< Set of nodes that have pending property updates
 
     std::vector<IOutput*> _outputs;
-
-    OptimizeProbe _optimize_probe;
     OutputScheduler _output_scheduler; ///< Frame-rate aware output scheduler
-    bool _optimization_dirty = true;
 };
 } // namespace vortex::graph

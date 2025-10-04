@@ -38,12 +38,14 @@ PUBLIC
   "src/vortex/gfx/texture_pool.cpp"
   "src/vortex/gfx/texture_pool.h"
  
-  "src/vortex/graph/optimize_probe.h" 
-  "src/vortex/graph/optimize_probe.cpp"
+   
+  
   "src/vortex/graph/ports.h" 
   "src/vortex/graph/connection.h" 
   "src/vortex/graph/interfaces.h" 
   "src/vortex/graph/node_factory.h" 
+  "src/vortex/graph/output_scheduler.h" 
+  "src/vortex/graph/output_scheduler.cpp"
  
   "src/vortex/util/lib/SPSC-Queue.h" 
   "src/vortex/util/reflection.h" 
@@ -62,6 +64,7 @@ PUBLIC
   "src/vortex/nodes/filter/composition.h"
   "src/vortex/nodes/filter/blend.h"
   "src/vortex/nodes/filter/blend.cpp"
+  "src/vortex/nodes/filter/select.h"
   "src/vortex/nodes/node_registry.h"
  
   "src/vortex/codec/ffmpeg/types.h" 

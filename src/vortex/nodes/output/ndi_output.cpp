@@ -91,9 +91,9 @@ void vortex::NDIOutput::Update(const vortex::Graphics& gfx)
     }
 }
 
-bool vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx)
+bool vortex::NDIOutput::Evaluate(const vortex::Graphics& gfx, int64_t pts)
 {
-    bool video = EvaluateVideo(gfx, _desc_buffer);
+    bool video = EvaluateVideo(gfx, _desc_buffer, pts);
     bool audio = EvaluateAudio();
 
     // Return true if either video or audio was processed
@@ -149,7 +149,8 @@ bool vortex::NDIOutput::EvaluateAudio()
 }
 
 bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx,
-                                      vortex::DescriptorBuffer& desc_buffer)
+                                      vortex::DescriptorBuffer& desc_buffer,
+                                      int64_t pts)
 {
     wis::Result result = wis::success;
 
@@ -165,11 +166,18 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx,
         return false; // No video sink connected
     }
 
-    RenderProbe probe{ .descriptor_buffer = desc_buffer.DescBufferView(frame_index),
-                       .sampler_buffer = desc_buffer.SamplerBufferView(frame_index),
-                       .texture_pool = _texture_pool,
-                       .command_list = &_command_lists[frame_index],
-                       .output_framerate = GetFramerate() };
+    RenderProbe probe{
+        .descriptor_buffer = desc_buffer.DescBufferView(frame_index),
+        .sampler_buffer = desc_buffer.SamplerBufferView(frame_index),
+        .texture_pool = _texture_pool,
+        .command_list = &_command_lists[frame_index],
+        .frame_number = frame_index,
+        .output_framerate = GetFramerate(),
+
+        // PTS timing information
+        .current_pts = pts,
+        .output_base_pts = GetBasePTS(),
+    };
 
     // Pass to the sink nodes for post-order processing
     RenderPassForwardDesc desc{

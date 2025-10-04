@@ -66,7 +66,7 @@ public:
         };
 
         constexpr std::pair<std::string_view, std::string_view> stream_values[]{
-            std::pair{ "stream_url", "rtp://127.0.0.1:1234" },
+            std::pair{ "stream_url", "rtp://192.168.100.5:6970" },
         };
         constexpr std::pair<std::string_view, std::string_view> image_values[]{
             std::pair{ "image_path", "ui/HDR.jpg" },
@@ -74,35 +74,38 @@ public:
         constexpr std::pair<std::string_view, std::string_view> image_values2[]{
             std::pair{ "image_path", "ui/Watermark.png" },
         };
+        constexpr std::pair<std::string_view, std::string_view> image_values3[]{
+            std::pair{ "blend_mode", "0" },
+        };
 
         // Test setup of the model
-        //auto i1 = _model.CreateNode(_gfx,
-        //                            "StreamInput",
-        //                            external_observer,
-        //                            stream_values); // Create a default node for testing
+        auto i1 = _model.CreateNode(_gfx,
+                                    "StreamInput",
+                                    external_observer,
+                                    stream_values); // Create a default node for testing
         //auto o1 = _model.CreateNode(_gfx,
         //                            "WindowOutput",
         //                            external_observer,
         //                            output_values3); // Create a default output for testing
         auto o2 = _model.CreateNode(_gfx,
-                                    "WindowOutput",
+                                    "NDIOutput",
                                     external_observer,
                                     output_values2); // Create a default output for testing
-        auto b1 = _model.CreateNode(_gfx, "Blend", external_observer);
+        auto b1 = _model.CreateNode(_gfx, "Blend", external_observer, image_values3);
         auto i2 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values);
         auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
 
-        //_model.SetNodeInfo(i1, "Stream 1"); // Set some info for the node
+        _model.SetNodeInfo(i1, "Stream 1"); // Set some info for the node
         _model.SetNodeInfo(i2, "Image 1"); // Set some info for the node
         _model.SetNodeInfo(i3, "Image 2"); // Set some info for the node
         //_model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
         _model.SetNodeInfo(o2, "Output 1"); // Set some info for the output node
 
         //_model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
-        //_model.ConnectNodes(i1, 1, o1, 1); // Connect the audio outputs
+        _model.ConnectNodes(i1, 1, o2, 1); // Connect the audio outputs
 
         // Blend 2 images
-        _model.ConnectNodes(i2, 0, b1, 0); // Connect the nodes in the model
+        _model.ConnectNodes(i1, 0, b1, 0); // Connect the nodes in the model
         _model.ConnectNodes(i3, 0, b1, 1); // Connect the nodes in the model
 
         _model.ConnectNodes(b1, 0, o2, 0); // Connect the nodes in the model
@@ -111,6 +114,7 @@ public:
 public:
     int Run()
     {
+        _model.Play(); // Start the model processing
         while (!_exit.exit) {
             if (int code = _ui_app.ProcessEvents()) {
                 return code; // Exit requested

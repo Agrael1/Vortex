@@ -2,12 +2,16 @@
 #include <vortex/graph/interfaces.h>
 #include <vortex/properties/props.hpp>
 
-namespace vortex::graph {
+namespace vortex {
 // Blend node is a filter that blends colors with a specified factor or a mask.
 class Select : public vortex::graph::FilterImpl<Select, SelectProperties, 2, 1>
 {
 public:
-    Select(const vortex::Graphics& gfx, SerializedProperties props);
+    Select(const vortex::Graphics& gfx, SerializedProperties props)
+        : ImplClass(props)
+    {
+
+    }
 
 public:
     // Override the Evaluate method to perform blending

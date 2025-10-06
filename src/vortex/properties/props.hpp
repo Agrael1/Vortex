@@ -1,14 +1,7 @@
 // Generated properties from props.xml
 #pragma once
 
-#include <cstdint>
-#include <string>
-#include <filesystem>
-#include <optional>
-#include <any>
-#include <vortex/util/reflection.h>
-#include <vortex/util/log.h>
-#include <DirectXMath.h>
+#include <vortex/properties/type_traits.h>
 #include <frozen/unordered_map.h>
 #include <frozen/string.h>
 
@@ -34,10 +27,12 @@ struct enum_traits<BlendMode> {
 struct BlendProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
-    static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            {      "blend_mode", 0 },
-            { "blend_constants", 1 },
-            {    "clamp_result", 2 },
+    static constexpr auto
+            property_map = frozen::make_unordered_map<frozen::string,
+                                                      std::pair<uint32_t, PropertyType>>({
+                    {      "blend_mode",   { 0, PropertyType::I32 } },
+                    { "blend_constants", { 1, PropertyType::Color } },
+                    {    "clamp_result",  { 2, PropertyType::Bool } },
     });
     BlendMode blend_mode{ BlendMode::Normal }; //<UI attribute - Blend Mode: How to combine the
                                                //images.
@@ -145,23 +140,20 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         const PropertyValue& value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
-            if (auto out_value = std::any_cast<BlendMode>(value)) {
-                self.SetBlendMode(*out_value, notify);
-            }
+            self.SetBlendMode(static_cast<BlendMode>(std::get<int32_t>(value)), notify);
             break;
         case 1:
-            if (auto out_value = std::any_cast<DirectX::XMFLOAT4>(value)) {
-                self.SetBlendConstants(*out_value, notify);
-            }
+            self.SetBlendConstants(std::get<DirectX::XMFLOAT4>(value), notify);
             break;
         case 2:
-            if (auto out_value = std::any_cast<bool>(value)) {
-                self.SetClampResult(*out_value, notify);
-            }
+            self.SetClampResult(std::get<bool>(value), notify);
             break;
         default:
             vortex::error("Blend: Invalid property index: {}", index);
@@ -183,7 +175,7 @@ public:
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
     {
         for (auto&& [k, v] : values) {
-            size_t index = self.property_map.at(k);
+            uint32_t index = self.property_map.at(k).first;
             self.SetPropertyStub(index, v, notify);
         }
         return true;
@@ -192,8 +184,10 @@ public:
 struct SelectProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
-    static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            { "input_index", 0 },
+    static constexpr auto
+            property_map = frozen::make_unordered_map<frozen::string,
+                                                      std::pair<uint32_t, PropertyType>>({
+                    { "input_index", { 0, PropertyType::I32 } },
     });
     int32_t input_index{ 0 }; //<UI attribute - Input Index: Index of the input to select.
 
@@ -253,13 +247,14 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         const PropertyValue& value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
-            if (auto out_value = std::any_cast<int32_t>(value)) {
-                self.SetInputIndex(*out_value, notify);
-            }
+            self.SetInputIndex(std::get<int32_t>(value), notify);
             break;
         default:
             vortex::error("Select: Invalid property index: {}", index);
@@ -277,7 +272,7 @@ public:
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
     {
         for (auto&& [k, v] : values) {
-            size_t index = self.property_map.at(k);
+            uint32_t index = self.property_map.at(k).first;
             self.SetPropertyStub(index, v, notify);
         }
         return true;
@@ -286,11 +281,13 @@ public:
 struct ImageInputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
-    static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            {  "image_path", 0 },
-            {  "image_size", 1 },
-            {      "origin", 2 },
-            { "rotation_2d", 3 },
+    static constexpr auto
+            property_map = frozen::make_unordered_map<frozen::string,
+                                                      std::pair<uint32_t, PropertyType>>({
+                    {  "image_path",  { 0, PropertyType::Path } },
+                    {  "image_size",  { 1, PropertyType::Size } },
+                    {      "origin", { 2, PropertyType::Point } },
+                    { "rotation_2d",   { 3, PropertyType::F32 } },
     });
     std::string image_path{}; //<UI attribute - Image Path: Path to image file.
     DirectX::XMFLOAT2 image_size{}; //<UI attribute - Image Size: Size of the image in pixels.
@@ -421,28 +418,23 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         const PropertyValue& value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
-            if (auto out_value = std::any_cast<std::string_view>(value)) {
-                self.SetImagePath(*out_value, notify);
-            }
+            self.SetImagePath(std::get<std::string>(value), notify);
             break;
         case 1:
-            if (auto out_value = std::any_cast<DirectX::XMFLOAT2>(value)) {
-                self.SetImageSize(*out_value, notify);
-            }
+            self.SetImageSize(std::get<DirectX::XMFLOAT2>(value), notify);
             break;
         case 2:
-            if (auto out_value = std::any_cast<DirectX::XMFLOAT2>(value)) {
-                self.SetOrigin(*out_value, notify);
-            }
+            self.SetOrigin(std::get<DirectX::XMFLOAT2>(value), notify);
             break;
         case 3:
-            if (auto out_value = std::any_cast<float>(value)) {
-                self.SetRotation2d(*out_value, notify);
-            }
+            self.SetRotation2d(std::get<float>(value), notify);
             break;
         default:
             vortex::error("ImageInput: Invalid property index: {}", index);
@@ -466,7 +458,7 @@ public:
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
     {
         for (auto&& [k, v] : values) {
-            size_t index = self.property_map.at(k);
+            uint32_t index = self.property_map.at(k).first;
             self.SetPropertyStub(index, v, notify);
         }
         return true;
@@ -475,12 +467,14 @@ public:
 struct StreamInputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
-    static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            {       "stream_url", 0 },
-            {      "stream_size", 1 },
-            {           "origin", 2 },
-            {      "rotation_2d", 3 },
-            { "stream_buffering", 4 },
+    static constexpr auto
+            property_map = frozen::make_unordered_map<frozen::string,
+                                                      std::pair<uint32_t, PropertyType>>({
+                    {       "stream_url", { 0, PropertyType::U8string } },
+                    {      "stream_size",     { 1, PropertyType::Size } },
+                    {           "origin",    { 2, PropertyType::Point } },
+                    {      "rotation_2d",      { 3, PropertyType::F32 } },
+                    { "stream_buffering",      { 4, PropertyType::I32 } },
     });
     std::string stream_url{}; //<UI attribute - Stream URL: URL of the video stream.
     DirectX::XMFLOAT2 stream_size{}; //<UI attribute - Stream Size: Size of the video stream in
@@ -635,33 +629,26 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         const PropertyValue& value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
-            if (auto out_value = std::any_cast<std::string_view>(value)) {
-                self.SetStreamUrl(*out_value, notify);
-            }
+            self.SetStreamUrl(std::get<std::string>(value), notify);
             break;
         case 1:
-            if (auto out_value = std::any_cast<DirectX::XMFLOAT2>(value)) {
-                self.SetStreamSize(*out_value, notify);
-            }
+            self.SetStreamSize(std::get<DirectX::XMFLOAT2>(value), notify);
             break;
         case 2:
-            if (auto out_value = std::any_cast<DirectX::XMFLOAT2>(value)) {
-                self.SetOrigin(*out_value, notify);
-            }
+            self.SetOrigin(std::get<DirectX::XMFLOAT2>(value), notify);
             break;
         case 3:
-            if (auto out_value = std::any_cast<float>(value)) {
-                self.SetRotation2d(*out_value, notify);
-            }
+            self.SetRotation2d(std::get<float>(value), notify);
             break;
         case 4:
-            if (auto out_value = std::any_cast<int32_t>(value)) {
-                self.SetStreamBuffering(*out_value, notify);
-            }
+            self.SetStreamBuffering(std::get<int32_t>(value), notify);
             break;
         default:
             vortex::error("StreamInput: Invalid property index: {}", index);
@@ -688,7 +675,7 @@ public:
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
     {
         for (auto&& [k, v] : values) {
-            size_t index = self.property_map.at(k);
+            uint32_t index = self.property_map.at(k).first;
             self.SetPropertyStub(index, v, notify);
         }
         return true;
@@ -697,10 +684,12 @@ public:
 struct WindowOutputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
-    static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            {        "name", 0 },
-            { "window_size", 1 },
-            {   "framerate", 2 },
+    static constexpr auto
+            property_map = frozen::make_unordered_map<frozen::string,
+                                                      std::pair<uint32_t, PropertyType>>({
+                    {        "name", { 0, PropertyType::U8string } },
+                    { "window_size",    { 1, PropertyType::Sizeu } },
+                    {   "framerate",      { 2, PropertyType::I32 } },
     });
     std::string name{ "Vortex Output Window" }; //<UI attribute - Window Title: Title of the output
                                                 //window.
@@ -812,23 +801,20 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         const PropertyValue& value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
-            if (auto out_value = std::any_cast<std::string_view>(value)) {
-                self.SetName(*out_value, notify);
-            }
+            self.SetName(std::get<std::string>(value), notify);
             break;
         case 1:
-            if (auto out_value = std::any_cast<DirectX::XMUINT2>(value)) {
-                self.SetWindowSize(*out_value, notify);
-            }
+            self.SetWindowSize(std::get<DirectX::XMUINT2>(value), notify);
             break;
         case 2:
-            if (auto out_value = std::any_cast<vortex::ratio32_t>(value)) {
-                self.SetFramerate(*out_value, notify);
-            }
+            self.SetFramerate(static_cast<vortex::ratio32_t>(std::get<int32_t>(value)), notify);
             break;
         default:
             vortex::error("WindowOutput: Invalid property index: {}", index);
@@ -850,7 +836,7 @@ public:
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
     {
         for (auto&& [k, v] : values) {
-            size_t index = self.property_map.at(k);
+            uint32_t index = self.property_map.at(k).first;
             self.SetPropertyStub(index, v, notify);
         }
         return true;
@@ -859,10 +845,12 @@ public:
 struct NDIOutputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
-    static constexpr auto property_map = frozen::make_unordered_map<frozen::string, int>({
-            {        "name", 0 },
-            { "window_size", 1 },
-            {   "framerate", 2 },
+    static constexpr auto
+            property_map = frozen::make_unordered_map<frozen::string,
+                                                      std::pair<uint32_t, PropertyType>>({
+                    {        "name", { 0, PropertyType::U8string } },
+                    { "window_size",    { 1, PropertyType::Sizeu } },
+                    {   "framerate",      { 2, PropertyType::I32 } },
     });
     std::string name{ "Vortex NDI Output" }; //<UI attribute - NDI Name: Name of the NDI stream.
     DirectX::XMUINT2 window_size{ 1920, 1080 }; //<UI attribute - Window Size: Resolution of the
@@ -973,23 +961,20 @@ public:
 
 public:
     template<typename Self>
-    void SetPropertyStub(this Self&& self, uint32_t index, std::any value, bool notify = false)
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         const PropertyValue& value,
+                         bool notify = false)
     {
         switch (index) {
         case 0:
-            if (auto out_value = std::any_cast<std::string_view>(value)) {
-                self.SetName(*out_value, notify);
-            }
+            self.SetName(std::get<std::string>(value), notify);
             break;
         case 1:
-            if (auto out_value = std::any_cast<DirectX::XMUINT2>(value)) {
-                self.SetWindowSize(*out_value, notify);
-            }
+            self.SetWindowSize(std::get<DirectX::XMUINT2>(value), notify);
             break;
         case 2:
-            if (auto out_value = std::any_cast<vortex::ratio32_t>(value)) {
-                self.SetFramerate(*out_value, notify);
-            }
+            self.SetFramerate(static_cast<vortex::ratio32_t>(std::get<int32_t>(value)), notify);
             break;
         default:
             vortex::error("NDIOutput: Invalid property index: {}", index);
@@ -1011,7 +996,7 @@ public:
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
     {
         for (auto&& [k, v] : values) {
-            size_t index = self.property_map.at(k);
+            uint32_t index = self.property_map.at(k).first;
             self.SetPropertyStub(index, v, notify);
         }
         return true;

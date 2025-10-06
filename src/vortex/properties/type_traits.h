@@ -9,7 +9,7 @@
 #include <vortex/util/reflection.h>
 #include <vortex/util/log.h>
 #include <DirectXMath.h>
-#include <any>
+#include <variant>
 
 namespace vortex {
 enum class PropertyType {
@@ -48,6 +48,31 @@ enum class PropertyType {
     Point,
     Matrix,
 };
+
+using PropertyValue = std::variant<std::monostate, // index 0: empty state
+                                   bool,
+                                   DirectX::XMUINT4,
+                                   uint16_t,
+                                   int8_t,
+                                   DirectX::XMFLOAT3,
+                                   uint64_t,
+                                   uint8_t,
+                                   DirectX::XMUINT2,
+                                   uint32_t,
+                                   DirectX::XMFLOAT2,
+                                   int16_t,
+                                   int32_t,
+                                   int64_t,
+                                   float,
+                                   double,
+                                   DirectX::XMFLOAT4,
+                                   DirectX::XMINT2,
+                                   DirectX::XMINT3,
+                                   DirectX::XMINT4,
+                                   DirectX::XMUINT3,
+                                   std::string,
+                                   std::wstring,
+                                   DirectX::XMFLOAT4X4>;
 template<PropertyType T>
 struct type_traits;
 
@@ -296,6 +321,7 @@ decltype(auto) bridge(PropertyType type, Args&&... args)
         break;
     default:
         vortex::warn("Unsupported CefValueType: {}", reflect::enum_name(type));
+        return Exec<PropertyType::Void>{}(std::forward<Args>(args)...);
     }
 }
 

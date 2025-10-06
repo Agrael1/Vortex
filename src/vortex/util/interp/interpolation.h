@@ -92,7 +92,7 @@ struct interpolate_property {
     using traits = interpolation_traits<typename type_traits<type>::type>;
 };
 template<>
-struct interpolate_property<PropertyType::Void> {
+struct interpolate_property<vortex::PropertyType::Void> {
     using traits = interpolation_traits<void>;
 };
 template<>
@@ -116,9 +116,16 @@ template<PropertyType type>
 struct interpolate_property_executor {
     using traits = typename interpolate_property<type>::traits;
     using value_type = typename type_traits<type>::type;
-    static value_type operator()(const value_type& from, const value_type& to, float t)
+    static PropertyValue operator()(const PropertyValue& from, const PropertyValue& to, float t)
     {
-        return traits::interpolate(from, to, t);
+        return traits::interpolate(std::get<value_type>(from), std::get<value_type>(to), t);
+    }
+};
+template<>
+struct interpolate_property_executor<PropertyType::Void> {
+    static PropertyValue operator()(const PropertyValue& from, const PropertyValue& to, float t)
+    {
+        return {};
     }
 };
 

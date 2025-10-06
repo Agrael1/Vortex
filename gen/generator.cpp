@@ -2,11 +2,13 @@
 #include <string>
 #include <format>
 #include <unordered_map>
+#include <unordered_set>
 #include <tinyxml2.h>
 #include <iostream>
 #include <filesystem>
 #include <span>
 #include <bitset>
+#include <ranges>
 
 constexpr inline std::string_view clang_format_exe = CLANG_FORMAT_EXECUTABLE;
 void FormatFile(std::filesystem::path file)
@@ -67,14 +69,7 @@ public:
         }
         ofs << std::format("// Generated properties from {}\n#pragma once\n\n",
                            xml_file_path.filename().string());
-        ofs << "#include <cstdint>\n"
-            << "#include <string>\n"
-            << "#include <filesystem>\n"
-            << "#include <optional>\n"
-            << "#include <any>\n"
-            << "#include <vortex/util/reflection.h>\n"
-            << "#include <vortex/util/log.h>\n"
-            << "#include <DirectXMath.h>\n"
+        ofs << "#include <vortex/properties/type_traits.h>\n"
             << "#include <frozen/unordered_map.h>\n"
             << "#include <frozen/string.h>\n\n";
 
@@ -117,7 +112,7 @@ public:
 
         std::string frozen_hash = std::format(
                 "static constexpr auto property_map = frozen::make_unordered_map<frozen::string, "
-                "int>({{\n",
+                "std::pair<uint32_t, PropertyType>>({{\n",
                 name);
 
         uint32_t prop_count = 0;
@@ -137,13 +132,18 @@ public:
                 throw std::runtime_error("Property missing 'name' or 'type' attribute.");
             }
 
-            property_names.push_back(prop_name);
-            frozen_hash += std::format("    {{\"{}\", {}}},\n", prop_name, prop_count);
-
             // Check if the type is a standard type
             std::string_view prop_type_trsf;
             auto it = standard_types.find(prop_type);
             prop_type_trsf = it != standard_types.end() ? it->second : prop_type;
+            bool is_standard_type = it != standard_types.end();
+
+            property_names.push_back(prop_name);
+            frozen_hash += std::format("    {{\"{}\", {{{},PropertyType::{}}}}},\n",
+                                       prop_name,
+                                       prop_count,
+                                       is_standard_type ? to_pascal_case(it->first) : "I32");
+
 
             default_value = default_value ? default_value : "";
             ui_description = ui_description ? ui_description : "";
@@ -226,12 +226,23 @@ public:
                     transform_type,
                     transform_type,
                     pascal_prop_name);
-            set_property_stub_any += std::format(
-                    "case {}: if (auto out_value = std::any_cast<{}>(value)) {{"
-                    "self.Set{}(*out_value, notify); }}break;",
-                    prop_count,
-                    transform_type,
-                    pascal_prop_name);
+
+            if (is_standard_type) {
+                set_property_stub_any += std::format(
+                        "case {}:self.Set{}(std::get<{}>(value), notify);break;",
+                        prop_count,
+                        pascal_prop_name,
+                        prop_type_trsf);
+            } else {
+                // Most probably enum, custom types are not supported with variants
+                set_property_stub_any += std::format(
+                        "case {}: self.Set{}(static_cast<{}>(std::get<int32_t>(value)), notify);"
+                        "break;",
+                        prop_count,
+                        pascal_prop_name,
+                        prop_type_trsf);
+            }
+
             prop_count++;
         }
         frozen_hash += "});\n";
@@ -287,7 +298,7 @@ public:
         aclass += "\npublic:\n";
         aclass += std::format(
                 "template<typename Self>void SetPropertyStub(this Self&& self,uint32_t index, "
-                "std::any value, bool notify = false) {{\n"
+                "const PropertyValue& value, bool notify = false) {{\n"
                 "    switch (index) {{\n"
                 "{}"
                 "    default:\n"
@@ -366,7 +377,7 @@ public:
         deserialize_code +=
                 "bool Deserialize(this Self& self, SerializedProperties values, bool notify) {\n";
         deserialize_code += "    for (auto &&[k,v] : values) {\n";
-        deserialize_code += "        size_t index = self.property_map.at(k);\n";
+        deserialize_code += "        uint32_t index = self.property_map.at(k).first;\n";
         deserialize_code += "        self.SetPropertyStub(index, v, notify);\n";
         deserialize_code += "}\nreturn true;}\n";
         return serialize_code + deserialize_code;
@@ -384,11 +395,6 @@ public:
         type_enum += "};\n";
         return type_enum;
     }
-    std::string GenerateTypeMap()
-    {
-        std::string type_map;
-        return type_map;
-    }
     void GenerateTypeTraits(std::filesystem::path output_file)
     {
         std::ofstream ofs(output_file);
@@ -404,9 +410,33 @@ public:
             << "#include <vortex/util/reflection.h>\n"
             << "#include <vortex/util/log.h>\n"
             << "#include <DirectXMath.h>\n"
-            << "#include <any>\n\n";
+            << "#include <variant>\n\n";
         ofs << "namespace vortex {\n";
         ofs << GenerateTypeEnum();
+
+        // Create a variant type
+        ofs << "\nusing PropertyValue = std::variant<\n";
+        ofs << "    std::monostate, // index 0: empty state\n";
+
+        // Get unique types only
+        std::string type_variant;
+        std::unordered_set<std::string_view> unique_types;
+        for (const auto& [key, val] : standard_types) {
+            if (key != "void") {
+                unique_types.insert(val);
+            }
+        }
+
+        for (const auto& val : unique_types) {
+            std::format_to(std::back_inserter(type_variant), "    {},\n", val);
+        }
+        // Remove last comma and newline
+        if (!type_variant.empty()) {
+            type_variant.erase(type_variant.size() - 2);
+        }
+        ofs << type_variant;
+        ofs << ">;\n";
+
         ofs << "template<PropertyType T> struct type_traits;\n\n";
         for (const auto& [key, val] : standard_types) {
             ofs << std::format(
@@ -420,11 +450,14 @@ public:
         ofs << "decltype(auto) bridge(PropertyType type, Args&&...args) {\n";
         ofs << "    switch(type) {\n";
         for (const auto& [key, val] : standard_types) {
-            ofs << std::format("        case PropertyType::{}: return Exec<PropertyType::{}>{{}}(std::forward<Args>(args)...); break;\n",
+            ofs << std::format("        case PropertyType::{}: return "
+                               "Exec<PropertyType::{}>{{}}(std::forward<Args>(args)...); break;\n",
                                to_pascal_case(key),
                                to_pascal_case(key));
         }
-        ofs << "        default: vortex::warn(\"Unsupported CefValueType: {}\", reflect::enum_name(type));\n";
+        ofs << "        default: vortex::warn(\"Unsupported CefValueType: {}\", "
+               "reflect::enum_name(type));\n";
+        ofs << "return Exec<PropertyType::Void>{}(std::forward<Args>(args)...);";
         ofs << "    }\n";
         ofs << "}\n";
         ofs << "\n} // namespace vortex\n";

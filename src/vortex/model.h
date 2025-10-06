@@ -2,6 +2,7 @@
 #include <vortex/graph/interfaces.h>
 #include <vortex/graph/connection.h>
 #include <vortex/graph/output_scheduler.h>
+#include <vortex/anim/animation.h>
 #include <vortex/sync/timeline.h>
 #include <vortex/probe.h>
 #include <atomic>
@@ -15,12 +16,24 @@ public:
     GraphModel() = default;
 
 public: // Model API
-    auto CreateNode(const vortex::Graphics& gfx, std::string_view node_name, UpdateNotifier::External updater = {}, SerializedProperties values = {}) -> uintptr_t;
+    auto CreateNode(const vortex::Graphics& gfx,
+                    std::string_view node_name,
+                    UpdateNotifier::External updater = {},
+                    SerializedProperties values = {}) -> uintptr_t;
     void RemoveNode(uintptr_t node_ptr);
-    void SetNodeProperty(uintptr_t node_ptr, uint32_t index, std::string_view value, bool notify_ui = false);
+    void SetNodeProperty(uintptr_t node_ptr,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify_ui = false);
     auto GetNodeProperties(uintptr_t node_ptr) const -> std::string;
-    bool ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
-    void DisconnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
+    bool ConnectNodes(uintptr_t node_ptr_from,
+                      int32_t output_index,
+                      uintptr_t node_ptr_to,
+                      int32_t input_index);
+    void DisconnectNodes(uintptr_t node_ptr_from,
+                         int32_t output_index,
+                         uintptr_t node_ptr_to,
+                         int32_t input_index);
     void SetNodeInfo(uintptr_t node_ptr, std::string info);
     void Play();
 
@@ -41,13 +54,13 @@ public:
         ProcessUpdates(gfx);
 
         // Get the next output to evaluate based on scheduling
-        auto[output, pts] = _output_scheduler.GetNextReadyOutput();
+        auto [output, pts] = _output_scheduler.GetNextReadyOutput();
         if (!output) {
             return; // No output is ready to be evaluated this frame
         }
 
         // Evaluate properties based on the current timeline
-
+        _animation_manager.EvaluateAtPTS(pts);
 
         // Evaluate the output node
         output->Evaluate(gfx, pts);
@@ -57,12 +70,18 @@ public:
     {
         std::string out = "Graph Model:\n";
         for (const auto& [node_ptr, node] : _nodes) {
-            std::format_to(std::back_inserter(out), "Node: {} (Info: {})\n", node_ptr, node->GetInfo());
+            std::format_to(std::back_inserter(out),
+                           "Node: {} (Info: {})\n",
+                           node_ptr,
+                           node->GetInfo());
         }
         for (const auto& connection : _connections) {
-            std::format_to(std::back_inserter(out), "Connection: {} -> {} ({} -> {})\n",
-                           connection.from_node->GetInfo(), connection.to_node->GetInfo(),
-                           connection.from_index, connection.to_index);
+            std::format_to(std::back_inserter(out),
+                           "Connection: {} -> {} ({} -> {})\n",
+                           connection.from_node->GetInfo(),
+                           connection.to_node->GetInfo(),
+                           connection.from_index,
+                           connection.to_index);
         }
         vortex::info(out);
     }
@@ -73,10 +92,9 @@ public:
     }
 
     // Get the output scheduler for external access
-    const OutputScheduler& GetOutputScheduler() const noexcept
-    {
-        return _output_scheduler;
-    }
+    const OutputScheduler& GetOutputScheduler() const noexcept { return _output_scheduler; }
+
+    anim::AnimationSystem& GetAnimationManager() noexcept { return _animation_manager; }
 
 private:
     void ProcessUpdates(const vortex::Graphics& gfx)
@@ -190,6 +208,6 @@ private:
 
     std::vector<IOutput*> _outputs;
     OutputScheduler _output_scheduler; ///< Frame-rate aware output scheduler
-    sync::Timeline _timeline; ///< Timeline for synchronization
+    anim::AnimationSystem _animation_manager; ///< Animation manager for property animations
 };
 } // namespace vortex::graph

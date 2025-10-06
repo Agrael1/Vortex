@@ -232,4 +232,5 @@ void vortex::graph::GraphModel::SetNodeInfo(uintptr_t node_ptr, std::string info
 void vortex::graph::GraphModel::Play() 
 {
     _output_scheduler.Play();
+    _animation_manager.Play(_output_scheduler.GetCurrentPTS());
 }

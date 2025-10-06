@@ -93,22 +93,32 @@ public:
                                     output_values2); // Create a default output for testing
         auto b1 = _model.CreateNode(_gfx, "Blend", external_observer, image_values3);
         auto i2 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values);
-        auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
+        //auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
+        auto s1 = _model.CreateNode(_gfx, "Select", external_observer);
 
         _model.SetNodeInfo(i1, "Stream 1"); // Set some info for the node
         _model.SetNodeInfo(i2, "Image 1"); // Set some info for the node
-        _model.SetNodeInfo(i3, "Image 2"); // Set some info for the node
+        //_model.SetNodeInfo(i3, "Image 2"); // Set some info for the node
         //_model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
         _model.SetNodeInfo(o2, "Output 1"); // Set some info for the output node
 
         //_model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
-        _model.ConnectNodes(i1, 1, o2, 1); // Connect the audio outputs
+        //_model.ConnectNodes(i1, 1, o2, 1); // Connect the audio outputs
+
+        _model.ConnectNodes(i1, 0, s1, 0); // Connect the nodes in the model
+        _model.ConnectNodes(i2, 0, s1, 1); // Connect the nodes in the model
 
         // Blend 2 images
-        _model.ConnectNodes(i1, 0, b1, 0); // Connect the nodes in the model
-        _model.ConnectNodes(i3, 0, b1, 1); // Connect the nodes in the model
+        //_model.ConnectNodes(i1, 0, b1, 0); // Connect the nodes in the model
+        //_model.ConnectNodes(i3, 0, b1, 1); // Connect the nodes in the model
 
-        _model.ConnectNodes(b1, 0, o2, 0); // Connect the nodes in the model
+        _model.ConnectNodes(s1, 0, o2, 0); // Connect the nodes in the model
+
+        // Animate
+        auto animation = _model.GetAnimationManager().AddClip(_model.GetNode(s1));
+        auto track = animation->AddPropertyTrack("input_index");
+        track->AddKeyframe({ .time_from_start = 2 * 90000, .value = 1 });
+        track->SetPreKeyframeBehavior(vortex::anim::PreKeyframeBehavior::Hold);
     }
 
 public:

@@ -2,6 +2,7 @@
 #include <vortex/graph/node_factory.h>
 #include <vortex/graph/ports.h>
 #include <vortex/util/reflection.h>
+#include <vortex/properties/type_traits.h>
 
 namespace vortex {
 class Graphics; // Forward declaration of Graphics class
@@ -51,9 +52,15 @@ struct alignas(16) INode {
         return EvaluationStrategy::Static; // Default evaluation strategy
     }
     virtual void SetProperty(uint32_t index, std::string_view value, bool notify = false) { }
+    virtual void SetProperty(uint32_t index, const PropertyValue& value, bool notify = false) { }
     virtual std::string GetProperties() const
     {
         return ""; // Default implementation returns empty string
+    }
+    virtual std::pair<uint32_t, PropertyType> GetPropertyDesc(std::string_view name) const
+    {
+        return { invalid_property_index,
+                 PropertyType::Void }; // Default implementation returns invalid index
     }
 
     virtual std::string_view GetInfo() const noexcept { return ""; }
@@ -71,11 +78,8 @@ struct alignas(16) INode {
 struct IOutput : public INode {
     virtual vortex::ratio32_t GetOutputFPS() const noexcept = 0; ///< Get the output FPS
     virtual wis::Size2D GetOutputSize() const noexcept = 0; ///< Get the output size
-    virtual bool Evaluate(const vortex::Graphics& gfx, int64_t pts)
-    {
-        return false;
-    };
-    
+    virtual bool Evaluate(const vortex::Graphics& gfx, int64_t pts) { return false; };
+
     // PTS timing information (90kHz timebase)
     void SetBasePTS(uint64_t pts) noexcept { _base_pts = pts; }
     int64_t GetBasePTS() const noexcept { return _base_pts; }
@@ -148,9 +152,29 @@ public:
     {
         static_cast<CRTP*>(this)->SetPropertyStub(index, value, notify);
     }
+    virtual void SetProperty(uint32_t index,
+                             const PropertyValue& value,
+                             bool notify = false) override
+    {
+        static_cast<CRTP*>(this)->SetPropertyStub(index, value, notify);
+    }
     virtual std::string GetProperties() const override
     {
         return static_cast<const CRTP*>(this)->Serialize(); // Serialize properties to string
+    }
+    virtual std::pair<uint32_t, PropertyType> GetPropertyDesc(std::string_view name) const override
+    {
+        if constexpr (requires { Properties::property_map; }) {
+            auto it = Properties::property_map.find(name);
+            if (it != Properties::property_map.end()) {
+                return it->second; // Return the index if found
+            }
+            return { invalid_property_index,
+                     PropertyType::Void }; // Return invalid index if not found
+        } else {
+            return { invalid_property_index,
+                     PropertyType::Void }; // Return invalid index if property_map is not defined
+        }
     }
 
     virtual std::string_view GetInfo() const noexcept override { return _info; }

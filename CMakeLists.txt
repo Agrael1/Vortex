@@ -98,8 +98,10 @@ PUBLIC
   "src/vortex/util/interprocess_lock.cpp" 
   "src/vortex/nodes/output/ndi_output.cpp" 
   "src/vortex/audio/audio_buffer.h" 
-  "src/vortex/util/byte_ring.h"  
   "src/vortex/audio/audio_resampler.h" 
+  "src/vortex/util/byte_ring.h"  
+  "src/vortex/anim/animation.h" 
+  "src/vortex/anim/animation.cpp" 
   "src/vortex/ui/message_dispatch.h" 
   "src/vortex/util/bench_clock.h" 
 
@@ -113,7 +115,11 @@ PUBLIC
   "src/vortex/util/term/input.cpp"
 
   "src/vortex/util/main_args.h"   
-  "src/vortex/nodes/output/window_output.cpp"  "src/vortex/util/interp/interpolation.h" "src/vortex/util/interp/easing.h" "src/vortex/util/interp/vector.h")
+  "src/vortex/nodes/output/window_output.cpp"
+  "src/vortex/util/interp/interpolation.h" 
+  "src/vortex/util/interp/easing.h" 
+  "src/vortex/util/interp/vector.h"
+ "src/vortex/anim/keyframe.h" "src/vortex/anim/keyframe.cpp" "src/vortex/anim/property_track.h" "src/vortex/anim/property_track.cpp" "src/vortex/anim/animation_clip.h" "src/vortex/anim/animation_clip.cpp")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES

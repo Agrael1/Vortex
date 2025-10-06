@@ -119,7 +119,7 @@ PUBLIC
   "src/vortex/util/interp/interpolation.h" 
   "src/vortex/util/interp/easing.h" 
   "src/vortex/util/interp/vector.h"
- "src/vortex/anim/keyframe.h" "src/vortex/anim/keyframe.cpp" "src/vortex/anim/property_track.h" "src/vortex/anim/property_track.cpp" "src/vortex/anim/animation_clip.h" "src/vortex/anim/animation_clip.cpp")
+ "src/vortex/anim/keyframe.h" "src/vortex/anim/keyframe.cpp" "src/vortex/anim/property_track.h" "src/vortex/anim/property_track.cpp" "src/vortex/anim/animation_clip.h" "src/vortex/anim/animation_clip.cpp" "src/vortex/util/deserialize.h")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
@@ -135,6 +135,7 @@ target_link_libraries(VortexLib
     SDL3::SDL3
     NDI::NDI
     utf8cpp
+    nlohmann_json::nlohmann_json
     
     FFmpeg::FFmpeg
     frozen::frozen-headers

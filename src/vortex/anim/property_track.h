@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/anim/keyframe.h>
 
+
 namespace vortex::anim {
 class PropertyTrack
 {
@@ -16,6 +17,8 @@ public:
 
 public: // Track API
     void AddKeyframe(const Keyframe& keyframe) { keyframes.AddKeyframe(keyframe); }
+    bool AddKeyframe(std::string_view keyframe_json);
+    bool Deserialize(std::string_view track_json);
     void RemoveKeyframe(size_t index) { keyframes.RemoveKeyframe(index); }
     bool HasKeyframes() const { return !keyframes.IsEmpty(); }
 
@@ -43,6 +46,7 @@ private:
     PostKeyframeBehavior post_behavior = PostKeyframeBehavior::Hold;
     PropertyValue default_value;
 };
+
 
 // --------------------------------------------------------------
 // Inline implementations

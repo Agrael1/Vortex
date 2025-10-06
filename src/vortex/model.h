@@ -25,6 +25,10 @@ public: // Model API
                          uint32_t index,
                          std::string_view value,
                          bool notify_ui = false);
+    void SetNodePropertyByName(uintptr_t node_ptr,
+                               std::string_view name,
+                               std::string_view value,
+                               bool notify_ui = false);
     auto GetNodeProperties(uintptr_t node_ptr) const -> std::string;
     bool ConnectNodes(uintptr_t node_ptr_from,
                       int32_t output_index,
@@ -35,6 +39,13 @@ public: // Model API
                          uintptr_t node_ptr_to,
                          int32_t input_index);
     void SetNodeInfo(uintptr_t node_ptr, std::string info);
+    auto CreateAnimation(uintptr_t node_ptr) -> uintptr_t;
+    void RemoveAnimation(uintptr_t animation_ptr);
+    auto AddPropertyTrack(uintptr_t animation_ptr,
+                          std::string_view property_name,
+                          std::string_view keyframes_json) -> uintptr_t;
+    void AddKeyframe(uintptr_t track_ptr, std::string_view keyframes_json);
+    void RemoveKeyframe(uintptr_t track_ptr, uint32_t keyframe_index);
     void Play();
 
 public:

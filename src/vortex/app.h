@@ -83,17 +83,17 @@ public:
                                     "StreamInput",
                                     external_observer,
                                     stream_values); // Create a default node for testing
-        //auto o1 = _model.CreateNode(_gfx,
-        //                            "WindowOutput",
-        //                            external_observer,
-        //                            output_values3); // Create a default output for testing
+        // auto o1 = _model.CreateNode(_gfx,
+        //                             "WindowOutput",
+        //                             external_observer,
+        //                             output_values3); // Create a default output for testing
         auto o2 = _model.CreateNode(_gfx,
                                     "NDIOutput",
                                     external_observer,
                                     output_values2); // Create a default output for testing
         auto b1 = _model.CreateNode(_gfx, "Blend", external_observer, image_values3);
         auto i2 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values);
-        //auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
+        // auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
         auto s1 = _model.CreateNode(_gfx, "Select", external_observer);
 
         _model.SetNodeInfo(i1, "Stream 1"); // Set some info for the node
@@ -115,10 +115,9 @@ public:
         _model.ConnectNodes(s1, 0, o2, 0); // Connect the nodes in the model
 
         // Animate
-        auto animation = _model.GetAnimationManager().AddClip(_model.GetNode(s1));
-        auto track = animation->AddPropertyTrack("input_index");
-        track->AddKeyframe({ .time_from_start = 2 * 90000, .value = 1 });
-        track->SetPreKeyframeBehavior(vortex::anim::PreKeyframeBehavior::Hold);
+        auto animation = _model.CreateAnimation(s1);
+        auto track = _model.AddPropertyTrack(animation, "input_index", {});
+        _model.AddKeyframe(track, R"({ "time_from_start" : 180000, "value" : 1 })");
     }
 
 public:
@@ -224,6 +223,10 @@ private:
     {
         _model.SetNodeProperty(node_ptr, uint32_t(index), value); // Set the property in the model
     }
+    void SetNodePropertyByName(uintptr_t node_ptr, std::string name, std::string value)
+    {
+        _model.SetNodePropertyByName(node_ptr, name, value); // Set the property in the model
+    }
     auto CreateNode(std::string value) -> uintptr_t { return _model.CreateNode(_gfx, value); }
     void RemoveNode(uintptr_t node_ptr)
     {
@@ -253,6 +256,22 @@ private:
     {
         _model.SetNodeInfo(node_ptr, info); // Set the node info in the model
     }
+    auto CreateAnimation(uintptr_t node_ptr) -> uintptr_t
+    {
+        return _model.CreateAnimation(node_ptr);
+    }
+    void RemoveAnimation(uintptr_t animation_ptr) { _model.RemoveAnimation(animation_ptr); }
+    auto AddPropertyTrack(uintptr_t animation_ptr,
+                          std::string property_name,
+                          std::string keyframes_json = {}) -> uintptr_t
+    {
+        return _model.AddPropertyTrack(animation_ptr, property_name, keyframes_json);
+    }
+    void AddKeyframe(uintptr_t track_ptr, std::string keyframes_json)
+    {
+        _model.AddKeyframe(track_ptr, keyframes_json);
+    }
+    void Play() { _model.Play(); }
 
 private:
     // Thunk for node update observer
@@ -302,16 +321,22 @@ private:
     // used in hot code, so it should be fast
     std::unordered_map<std::u16string_view, MessageHanlderDispatch> _message_handlers_disp{
         // Coroutines
-        {      u"GetNodeTypesAsync",      ui::MessageDispatch<&App::GetNodeTypes>::Dispatch },
-        {        u"CreateNodeAsync",        ui::MessageDispatch<&App::CreateNode>::Dispatch },
-        { u"GetNodePropertiesAsync", ui::MessageDispatch<&App::GetNodeProperties>::Dispatch },
+        {      u"GetNodeTypesAsync",          ui::MessageDispatch<&App::GetNodeTypes>::Dispatch },
+        {        u"CreateNodeAsync",            ui::MessageDispatch<&App::CreateNode>::Dispatch },
+        { u"GetNodePropertiesAsync",     ui::MessageDispatch<&App::GetNodeProperties>::Dispatch },
+        {   u"CreateAnimationAsync",       ui::MessageDispatch<&App::CreateAnimation>::Dispatch },
+        {  u"AddPropertyTrackAsync",      ui::MessageDispatch<&App::AddPropertyTrack>::Dispatch },
 
         // Immediate calls (fire and forget)
-        {             u"RemoveNode",        ui::MessageDispatch<&App::RemoveNode>::Dispatch },
-        {           u"ConnectNodes",      ui::MessageDispatch<&App::ConnectNodes>::Dispatch },
-        {        u"DisconnectNodes",   ui::MessageDispatch<&App::DisconnectNodes>::Dispatch },
-        {            u"SetNodeInfo",       ui::MessageDispatch<&App::SetNodeInfo>::Dispatch },
-        {        u"SetNodeProperty",   ui::MessageDispatch<&App::SetNodeProperty>::Dispatch }
+        {             u"RemoveNode",            ui::MessageDispatch<&App::RemoveNode>::Dispatch },
+        {           u"ConnectNodes",          ui::MessageDispatch<&App::ConnectNodes>::Dispatch },
+        {        u"DisconnectNodes",       ui::MessageDispatch<&App::DisconnectNodes>::Dispatch },
+        {            u"SetNodeInfo",           ui::MessageDispatch<&App::SetNodeInfo>::Dispatch },
+        {        u"SetNodeProperty",       ui::MessageDispatch<&App::SetNodeProperty>::Dispatch },
+        {  u"SetNodePropertyByName", ui::MessageDispatch<&App::SetNodePropertyByName>::Dispatch },
+        {        u"RemoveAnimation",       ui::MessageDispatch<&App::RemoveAnimation>::Dispatch },
+        {            u"AddKeyframe",           ui::MessageDispatch<&App::AddKeyframe>::Dispatch },
+        {                   u"Play",                  ui::MessageDispatch<&App::Play>::Dispatch },
     };
 
 private:

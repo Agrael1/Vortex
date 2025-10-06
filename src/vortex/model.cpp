@@ -9,11 +9,10 @@ static bool CompatiblePorts(const Source& source, const Sink& sink) noexcept
             (source.type == SourceType::Audio && sink.type == SinkType::Audio);
 }
 
-auto vortex::graph::GraphModel::CreateNode(
-        const vortex::Graphics& gfx,
-        std::string_view node_name,
-        UpdateNotifier::External updater,
-        SerializedProperties values) -> uintptr_t
+auto vortex::graph::GraphModel::CreateNode(const vortex::Graphics& gfx,
+                                           std::string_view node_name,
+                                           UpdateNotifier::External updater,
+                                           SerializedProperties values) -> uintptr_t
 {
     auto node = NodeFactory::CreateNode(node_name, gfx, updater, values);
     if (!node) {
@@ -21,7 +20,8 @@ auto vortex::graph::GraphModel::CreateNode(
         return 0; // Return 0 if node creation failed
     }
     if (node->GetType() == NodeType::Output) {
-        auto& out = _outputs.emplace_back(static_cast<IOutput*>(node.get())); // Add to outputs if it's an output node
+        auto& out = _outputs.emplace_back(
+                static_cast<IOutput*>(node.get())); // Add to outputs if it's an output node
         _output_scheduler.AddOutput(out);
     }
 
@@ -58,7 +58,8 @@ void vortex::graph::GraphModel::RemoveNode(uintptr_t node_ptr)
         _connections.erase(connection_to_remove); // Remove all connections to this node
 
         // Remove the source from the sink
-        sink.source_node->GetSources()[sink.source_index].targets.erase(SourceTarget{ uint32_t(i), node });
+        sink.source_node->GetSources()[sink.source_index].targets.erase(
+                SourceTarget{ uint32_t(i), node });
     }
 
     auto sources = node->GetSources();
@@ -93,15 +94,26 @@ void vortex::graph::GraphModel::RemoveNode(uintptr_t node_ptr)
     _nodes.erase(it); // Remove the node from the graph
 }
 
-void vortex::graph::GraphModel::SetNodeProperty(
-        uintptr_t node_ptr,
-        uint32_t index,
-        std::string_view value,
-        bool notify_ui)
+void vortex::graph::GraphModel::SetNodeProperty(uintptr_t node_ptr,
+                                                uint32_t index,
+                                                std::string_view value,
+                                                bool notify_ui)
 {
     if (auto* node = GetNode(node_ptr)) {
-        UpdateIfStatic(node); // Update the node if it is static, dynamic nodes update every frame
         node->SetProperty(index, value, notify_ui);
+        UpdateIfStatic(node); // Update the node if it is static, dynamic nodes update every frame
+    }
+}
+
+void vortex::graph::GraphModel::SetNodePropertyByName(uintptr_t node_ptr,
+                                                      std::string_view name,
+                                                      std::string_view value,
+                                                      bool notify_ui)
+{
+    if (auto* node = GetNode(node_ptr)) {
+        auto [index, type] = node->GetPropertyDesc(name);
+        node->SetProperty(index, value, notify_ui);
+        UpdateIfStatic(node); // Update the node if it is static, dynamic nodes update every frame
     }
 }
 
@@ -113,11 +125,10 @@ auto vortex::graph::GraphModel::GetNodeProperties(uintptr_t node_ptr) const -> s
     return "{}"; // Return empty string if node not found
 }
 
-bool vortex::graph::GraphModel::ConnectNodes(
-        uintptr_t node_ptr_from,
-        int32_t output_index,
-        uintptr_t node_ptr_to,
-        int32_t input_index)
+bool vortex::graph::GraphModel::ConnectNodes(uintptr_t node_ptr_from,
+                                             int32_t output_index,
+                                             uintptr_t node_ptr_to,
+                                             int32_t input_index)
 {
     auto* from_node = GetNode(node_ptr_from);
     auto* to_node = GetNode(node_ptr_to);
@@ -139,20 +150,29 @@ bool vortex::graph::GraphModel::ConnectNodes(
     // Check port compatibility
     if (!CompatiblePorts(from_sources[output_index], to_sinks[input_index])) {
         vortex::error("Incompatible port types: {} (output {}) -> {} (input {})",
-                      from_node->GetInfo(), output_index,
-                      to_node->GetInfo(), input_index);
+                      from_node->GetInfo(),
+                      output_index,
+                      to_node->GetInfo(),
+                      input_index);
         return false; // Incompatible port types, cannot connect
     }
     vortex::info("Connecting nodes: {} (output {}) -> {} (input {})",
-                 from_node->GetInfo(), output_index,
-                 to_node->GetInfo(), input_index);
+                 from_node->GetInfo(),
+                 output_index,
+                 to_node->GetInfo(),
+                 input_index);
 
     // Create a connection and add it to the graph
-    auto&& [it, succ] = _connections.emplace(from_node, to_node, uint32_t(output_index), uint32_t(input_index));
+    auto&& [it, succ] = _connections.emplace(from_node,
+                                             to_node,
+                                             uint32_t(output_index),
+                                             uint32_t(input_index));
     if (!succ) {
         vortex::warn("Connection already exists: {} -> {} ({} -> {})",
-                     from_node->GetInfo(), to_node->GetInfo(),
-                     output_index, input_index);
+                     from_node->GetInfo(),
+                     to_node->GetInfo(),
+                     output_index,
+                     input_index);
         return false; // Connection already exists
     }
 
@@ -160,11 +180,17 @@ bool vortex::graph::GraphModel::ConnectNodes(
     auto& target_sink = to_sinks[input_index];
     auto& target_source = from_sources[output_index];
     if (target_sink) {
-        vortex::warn("Overwriting existing connection at input index {} on node {}", input_index, to_node->GetInfo());
-        _connections.erase(Connection{ target_sink.source_node, to_node, uint32_t(target_sink.source_index), uint32_t(input_index) }); // Remove existing connection
+        vortex::warn("Overwriting existing connection at input index {} on node {}",
+                     input_index,
+                     to_node->GetInfo());
+        _connections.erase(Connection{ target_sink.source_node,
+                                       to_node,
+                                       uint32_t(target_sink.source_index),
+                                       uint32_t(input_index) }); // Remove existing connection
         // Remove the target from the source
         auto prev_target_sources = target_sink.source_node->GetSources();
-        prev_target_sources[target_sink.source_index].targets.erase(SourceTarget{ uint32_t(input_index), to_node });
+        prev_target_sources[target_sink.source_index].targets.erase(
+                SourceTarget{ uint32_t(input_index), to_node });
     }
 
     target_sink.source_node = from_node; // Set the source node for the sink
@@ -176,11 +202,10 @@ bool vortex::graph::GraphModel::ConnectNodes(
     return true; // Connection successful
 }
 
-void vortex::graph::GraphModel::DisconnectNodes(
-        uintptr_t node_ptr_from,
-        int32_t output_index,
-        uintptr_t node_ptr_to,
-        int32_t input_index)
+void vortex::graph::GraphModel::DisconnectNodes(uintptr_t node_ptr_from,
+                                                int32_t output_index,
+                                                uintptr_t node_ptr_to,
+                                                int32_t input_index)
 {
     auto* from_node = GetNode(node_ptr_from);
     auto* to_node = GetNode(node_ptr_to);
@@ -199,17 +224,24 @@ void vortex::graph::GraphModel::DisconnectNodes(
         return; // Invalid input index
     }
     vortex::info("Disconnecting nodes: {} (output {}) -> {} (input {})",
-                 from_node->GetInfo(), output_index,
-                 to_node->GetInfo(), input_index);
+                 from_node->GetInfo(),
+                 output_index,
+                 to_node->GetInfo(),
+                 input_index);
     // Remove the connection from the graph
-    Connection connection_to_remove{ from_node, to_node, uint32_t(output_index), uint32_t(input_index) };
+    Connection connection_to_remove{ from_node,
+                                     to_node,
+                                     uint32_t(output_index),
+                                     uint32_t(input_index) };
     auto it = _connections.find(connection_to_remove);
     if (it != _connections.end()) {
         _connections.erase(it); // Remove the connection if it exists
     } else {
         vortex::warn("Connection does not exist: {} -> {} ({} -> {})",
-                     from_node->GetInfo(), to_node->GetInfo(),
-                     output_index, input_index);
+                     from_node->GetInfo(),
+                     to_node->GetInfo(),
+                     output_index,
+                     input_index);
         return; // Connection does not exist
     }
     // Reset the sink and source to remove the connection
@@ -217,7 +249,8 @@ void vortex::graph::GraphModel::DisconnectNodes(
     target_sink.Reset(); // Reset the sink
 
     auto& target_source = left_sources[output_index];
-    target_source.targets.erase(SourceTarget{ uint32_t(input_index), to_node }); // Remove the target from the source
+    target_source.targets.erase(
+            SourceTarget{ uint32_t(input_index), to_node }); // Remove the target from the source
 
     UpdateIfStatic(to_node); // Update the right node if it was static
 }
@@ -229,7 +262,68 @@ void vortex::graph::GraphModel::SetNodeInfo(uintptr_t node_ptr, std::string info
     }
 }
 
-void vortex::graph::GraphModel::Play() 
+auto vortex::graph::GraphModel::CreateAnimation(uintptr_t node_ptr) -> uintptr_t
+{
+    if (auto* node = GetNode(node_ptr)) {
+        auto animation = _animation_manager.AddClip(node);
+        return std::bit_cast<uintptr_t>(animation); // Return the pointer to the animation clip
+    }
+    return 0; // Return 0 if node not found
+}
+
+void vortex::graph::GraphModel::RemoveAnimation(uintptr_t animation_ptr)
+{
+    auto* animation = std::bit_cast<anim::AnimationClip*>(animation_ptr);
+    _animation_manager.RemoveClip(animation); // Remove the animation clip
+}
+
+auto vortex::graph::GraphModel::AddPropertyTrack(uintptr_t animation_ptr,
+                                                 std::string_view property_name,
+                                                 std::string_view keyframes_json) -> uintptr_t
+{
+    auto* animation = std::bit_cast<anim::AnimationClip*>(animation_ptr);
+    if (!animation) {
+        vortex::error("Invalid animation pointer: {}", animation_ptr);
+        return 0; // Invalid animation pointer
+    }
+    auto* track = animation->AddPropertyTrack(property_name);
+    if (!track) {
+        vortex::error("Failed to add property track for property: {}", property_name);
+        return 0; // Failed to add property track
+    }
+
+    if (!keyframes_json.empty() && !track->Deserialize(keyframes_json)) {
+        vortex::error("Failed to deserialize keyframes for property: {}", property_name);
+        animation->RemovePropertyTrack(track); // Remove the track if deserialization failed
+        return 0; // Deserialization failed
+    }
+    return std::bit_cast<uintptr_t>(track); // Return the pointer to the property track
+}
+
+void vortex::graph::GraphModel::AddKeyframe(uintptr_t track_ptr, std::string_view keyframes_json) 
+{
+    auto* track = std::bit_cast<anim::PropertyTrack*>(track_ptr);
+    if (!track) {
+        vortex::error("Invalid track pointer: {}", track_ptr);
+        return; // Invalid track pointer
+    }
+    if (!track->AddKeyframe(keyframes_json)) {
+        vortex::error("Failed to deserialize keyframes: {}", keyframes_json);
+        return; // Deserialization failed
+    }
+}
+
+void vortex::graph::GraphModel::RemoveKeyframe(uintptr_t track_ptr, uint32_t keyframe_index) 
+{
+    auto* track = std::bit_cast<anim::PropertyTrack*>(track_ptr);
+    if (!track) {
+        vortex::error("Invalid track pointer: {}", track_ptr);
+        return; // Invalid track pointer
+    }
+    track->RemoveKeyframe(keyframe_index); // Remove the keyframe at the specified index
+}
+
+void vortex::graph::GraphModel::Play()
 {
     _output_scheduler.Play();
     _animation_manager.Play(_output_scheduler.GetCurrentPTS());

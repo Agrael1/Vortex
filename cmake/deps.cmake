@@ -41,6 +41,13 @@ CPMAddPackage(
   GIT_TAG v4.0.8
 )
 
+# json
+CPMAddPackage(
+    NAME nlohmann_json
+    GITHUB_REPOSITORY nlohmann/json
+    GIT_TAG v3.12.0
+)
+
 # DirectXMath
 CPMAddPackage(
   NAME DirectXMath

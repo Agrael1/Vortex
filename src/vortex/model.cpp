@@ -92,6 +92,9 @@ void vortex::graph::GraphModel::RemoveNode(uintptr_t node_ptr)
         }
     }
     _nodes.erase(it); // Remove the node from the graph
+
+    // Remove any animations associated with the node
+    _animation_manager.RemoveClips(node);
 }
 
 void vortex::graph::GraphModel::SetNodeProperty(uintptr_t node_ptr,
@@ -273,8 +276,8 @@ auto vortex::graph::GraphModel::CreateAnimation(uintptr_t node_ptr) -> uintptr_t
 
 void vortex::graph::GraphModel::RemoveAnimation(uintptr_t animation_ptr)
 {
-    auto* animation = std::bit_cast<anim::AnimationClip*>(animation_ptr);
-    _animation_manager.RemoveClip(animation); // Remove the animation clip
+    auto* anim = std::bit_cast<anim::AnimationClip*>(animation_ptr);
+    _animation_manager.RemoveClip(anim); // Remove the animation clip
 }
 
 auto vortex::graph::GraphModel::AddPropertyTrack(uintptr_t animation_ptr,

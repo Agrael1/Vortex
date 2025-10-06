@@ -34,6 +34,7 @@ public:
     auto GetDuration() const -> int64_t { return _clip_duration; }
     auto GetStartTime() const -> int64_t { return _start_time; }
     auto GetState() const -> AnimationState { return _state; }
+    auto GetTargetNode() const -> vortex::graph::INode* { return _target_node; }
 
     // Animation control
     void Play(int64_t current_pts = -1);

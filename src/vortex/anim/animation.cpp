@@ -26,6 +26,20 @@ void AnimationSystem::RemoveClip(AnimationClip* clip)
     clips.erase(clip_id);
 }
 
+void AnimationSystem::RemoveClips(graph::INode* node) 
+{
+    if (!node) {
+        return;
+    }
+    for (auto it = clips.begin(); it != clips.end(); ) {
+        if (it->second->GetTargetNode() == node) {
+            it = clips.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void AnimationSystem::Play(int64_t start_pts)
 {
     for (auto& [id, clip] : clips) {

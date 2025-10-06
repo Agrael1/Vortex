@@ -11,6 +11,7 @@ class AnimationSystem
 public:
     auto AddClip(graph::INode* node) -> AnimationClip*;
     void RemoveClip(AnimationClip* clip);
+    void RemoveClips(graph::INode* node);
 
     void Play(int64_t start_pts);
     void Pause(int64_t current_pts);

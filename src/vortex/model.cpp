@@ -330,4 +330,10 @@ void vortex::graph::GraphModel::Play()
 {
     _output_scheduler.Play();
     _animation_manager.Play(_output_scheduler.GetCurrentPTS());
+    _playing = true;
+}
+void vortex::graph::GraphModel::Stop()
+{
+    _animation_manager.Stop();
+    _playing = false;
 }

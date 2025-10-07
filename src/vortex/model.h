@@ -47,6 +47,7 @@ public: // Model API
     void AddKeyframe(uintptr_t track_ptr, std::string_view keyframes_json);
     void RemoveKeyframe(uintptr_t track_ptr, uint32_t keyframe_index);
     void Play();
+    void Stop();
 
 public:
     INode* GetNode(uintptr_t node_ptr) const
@@ -63,6 +64,11 @@ public:
     {
         // Process all pending updates before rendering
         ProcessUpdates(gfx);
+
+        // Early out if no nodes or outputs or not playing
+        if (_outputs.empty() || !_playing) {
+            return; // No nodes or outputs to process
+        }
 
         // Get the next output to evaluate based on scheduling
         auto [output, pts] = _output_scheduler.GetNextReadyOutput();
@@ -220,5 +226,6 @@ private:
     std::vector<IOutput*> _outputs;
     OutputScheduler _output_scheduler; ///< Frame-rate aware output scheduler
     anim::AnimationSystem _animation_manager; ///< Animation manager for property animations
+    bool _playing = false; ///< Whether the model is currently playing
 };
 } // namespace vortex::graph

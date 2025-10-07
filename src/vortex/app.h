@@ -55,75 +55,75 @@ public:
             return UIMessageHandler(std::move(args));
         });
 
-        constexpr std::pair<std::string_view, std::string_view> output_values2[]{
-            std::pair{        "name", "Vortex Mega Output" },
-            std::pair{ "window_size",        "[2000,2000]" }
-        };
-        constexpr std::pair<std::string_view, std::string_view> output_values3[]{
-            std::pair{        "name", "Vortex Mega Output 2" },
-            std::pair{ "window_size",          "[1000,2000]" },
-            std::pair{   "framerate",               "[30,1]" }
-        };
+        //constexpr std::pair<std::string_view, std::string_view> output_values2[]{
+        //    std::pair{        "name", "Vortex Mega Output" },
+        //    std::pair{ "window_size",        "[2000,2000]" }
+        //};
+        //constexpr std::pair<std::string_view, std::string_view> output_values3[]{
+        //    std::pair{        "name", "Vortex Mega Output 2" },
+        //    std::pair{ "window_size",          "[1000,2000]" },
+        //    std::pair{   "framerate",               "[30,1]" }
+        //};
 
-        constexpr std::pair<std::string_view, std::string_view> stream_values[]{
-            std::pair{ "stream_url", "rtp://192.168.100.5:6970" },
-        };
-        constexpr std::pair<std::string_view, std::string_view> image_values[]{
-            std::pair{ "image_path", "ui/HDR.jpg" },
-        };
-        constexpr std::pair<std::string_view, std::string_view> image_values2[]{
-            std::pair{ "image_path", "ui/Watermark.png" },
-        };
-        constexpr std::pair<std::string_view, std::string_view> image_values3[]{
-            std::pair{ "blend_mode", "0" },
-        };
+        //constexpr std::pair<std::string_view, std::string_view> stream_values[]{
+        //    std::pair{ "stream_url", "rtp://192.168.100.5:6970" },
+        //};
+        //constexpr std::pair<std::string_view, std::string_view> image_values[]{
+        //    std::pair{ "image_path", "ui/HDR.jpg" },
+        //};
+        //constexpr std::pair<std::string_view, std::string_view> image_values2[]{
+        //    std::pair{ "image_path", "ui/Watermark.png" },
+        //};
+        //constexpr std::pair<std::string_view, std::string_view> image_values3[]{
+        //    std::pair{ "blend_mode", "0" },
+        //};
 
-        // Test setup of the model
-        auto i1 = _model.CreateNode(_gfx,
-                                    "StreamInput",
-                                    external_observer,
-                                    stream_values); // Create a default node for testing
-        // auto o1 = _model.CreateNode(_gfx,
-        //                             "WindowOutput",
-        //                             external_observer,
-        //                             output_values3); // Create a default output for testing
-        auto o2 = _model.CreateNode(_gfx,
-                                    "NDIOutput",
-                                    external_observer,
-                                    output_values2); // Create a default output for testing
-        auto b1 = _model.CreateNode(_gfx, "Blend", external_observer, image_values3);
-        auto i2 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values);
-        // auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
-        auto s1 = _model.CreateNode(_gfx, "Select", external_observer);
+        //// Test setup of the model
+        //auto i1 = _model.CreateNode(_gfx,
+        //                            "StreamInput",
+        //                            external_observer,
+        //                            stream_values); // Create a default node for testing
+        //// auto o1 = _model.CreateNode(_gfx,
+        ////                             "WindowOutput",
+        ////                             external_observer,
+        ////                             output_values3); // Create a default output for testing
+        //auto o2 = _model.CreateNode(_gfx,
+        //                            "NDIOutput",
+        //                            external_observer,
+        //                            output_values2); // Create a default output for testing
+        //auto b1 = _model.CreateNode(_gfx, "Blend", external_observer, image_values3);
+        //auto i2 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values);
+        //// auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
+        //auto s1 = _model.CreateNode(_gfx, "Select", external_observer);
 
-        _model.SetNodeInfo(i1, "Stream 1"); // Set some info for the node
-        _model.SetNodeInfo(i2, "Image 1"); // Set some info for the node
-        //_model.SetNodeInfo(i3, "Image 2"); // Set some info for the node
-        //_model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
-        _model.SetNodeInfo(o2, "Output 1"); // Set some info for the output node
+        //_model.SetNodeInfo(i1, "Stream 1"); // Set some info for the node
+        //_model.SetNodeInfo(i2, "Image 1"); // Set some info for the node
+        ////_model.SetNodeInfo(i3, "Image 2"); // Set some info for the node
+        ////_model.SetNodeInfo(o1, "Output 0"); // Set some info for the output node
+        //_model.SetNodeInfo(o2, "Output 1"); // Set some info for the output node
 
-        //_model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
-        //_model.ConnectNodes(i1, 1, o2, 1); // Connect the audio outputs
+        ////_model.ConnectNodes(i1, 0, o1, 0); // Connect the nodes in the model
+        ////_model.ConnectNodes(i1, 1, o2, 1); // Connect the audio outputs
 
-        _model.ConnectNodes(i1, 0, s1, 0); // Connect the nodes in the model
-        _model.ConnectNodes(i2, 0, s1, 1); // Connect the nodes in the model
+        //_model.ConnectNodes(i1, 0, s1, 0); // Connect the nodes in the model
+        //_model.ConnectNodes(i2, 0, s1, 1); // Connect the nodes in the model
 
-        // Blend 2 images
-        //_model.ConnectNodes(i1, 0, b1, 0); // Connect the nodes in the model
-        //_model.ConnectNodes(i3, 0, b1, 1); // Connect the nodes in the model
+        //// Blend 2 images
+        ////_model.ConnectNodes(i1, 0, b1, 0); // Connect the nodes in the model
+        ////_model.ConnectNodes(i3, 0, b1, 1); // Connect the nodes in the model
 
-        _model.ConnectNodes(s1, 0, o2, 0); // Connect the nodes in the model
+        //_model.ConnectNodes(s1, 0, o2, 0); // Connect the nodes in the model
 
-        // Animate
-        auto animation = _model.CreateAnimation(s1);
-        auto track = _model.AddPropertyTrack(animation, "input_index", {});
-        _model.AddKeyframe(track, R"({ "time_from_start" : 180000, "value" : 1 })");
+        //// Animate
+        //auto animation = _model.CreateAnimation(s1);
+        //auto track = _model.AddPropertyTrack(animation, "input_index", {});
+        //_model.AddKeyframe(track, R"({ "time_from_start" : 180000, "value" : 1 })");
     }
 
 public:
     int Run()
     {
-        _model.Play(); // Start the model processing
+        //_model.Play(); // Start the model processing
         while (!_exit.exit) {
             if (int code = _ui_app.ProcessEvents()) {
                 return code; // Exit requested
@@ -188,6 +188,31 @@ private:
 
         // Execute file
         if (line.starts_with("execf ")) {
+            static bool init_done = false;
+            if (!init_done) {
+                _ui_app.ExecuteJavaScript(R"(
+                    const Vortex = new Proxy({}, {
+    get(target, methodName) {
+        const methodStr = String(methodName);
+
+        // If method ends with 'Async', use vortexCallAsync
+        if (methodStr.endsWith('Async')) {
+            return function (...args) {
+                return vortexCallAsync(methodName, ...args);
+            };
+        }
+
+        // Return a function that calls vortexCall
+        return function (...args) {
+            return vortexCall(methodName, ...args);
+        };
+    }
+});
+                )");
+
+                init_done = true;
+            }
+
             auto filename = line.substr(6);
             std::filesystem::path path = filename;
             if (std::filesystem::exists(path) && std::filesystem::is_regular_file(path)) {
@@ -272,6 +297,7 @@ private:
         _model.AddKeyframe(track_ptr, keyframes_json);
     }
     void Play() { _model.Play(); }
+    void Stop() { _model.Stop(); }
 
 private:
     // Thunk for node update observer
@@ -337,6 +363,7 @@ private:
         {        u"RemoveAnimation",       ui::MessageDispatch<&App::RemoveAnimation>::Dispatch },
         {            u"AddKeyframe",           ui::MessageDispatch<&App::AddKeyframe>::Dispatch },
         {                   u"Play",                  ui::MessageDispatch<&App::Play>::Dispatch },
+        {                   u"Stop",                  ui::MessageDispatch<&App::Stop>::Dispatch },
     };
 
 private:

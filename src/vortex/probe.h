@@ -19,13 +19,11 @@ struct RenderProbe
 
     // PTS timing information (90kHz timebase)
     vortex::ratio32_t output_framerate = { 60, 1 }; // Default 60 FPS
-    uint64_t current_pts = 0;     // Current presentation timestamp
-    uint64_t target_pts = 0;      // Target presentation timestamp for this frame
+    int64_t current_pts = invalid_pts;     // Current presentation timestamp
+    int64_t output_base_pts = invalid_pts; // Target presentation timestamp for this frame
 };
 
 struct AudioProbe {
-    constexpr inline static uint64_t invalid_pts = 0x8000000000000000ull;
-
     std::vector<float> audio_data; // Audio data for this frame
     uint32_t audio_sample_rate = 48000; // Default 48 kHz
     uint32_t audio_channels = 2; // Default stereo

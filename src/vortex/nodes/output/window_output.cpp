@@ -119,7 +119,7 @@ void vortex::WindowOutput::Update(const vortex::Graphics& gfx)
     }
 }
 
-bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx)
+bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, int64_t pts)
 {
     auto sink = _sinks.sinks[0];
 
@@ -138,6 +138,11 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx)
         .texture_pool = _texture_pool,
         .command_list = &_command_lists[_frame_index],
         .frame_number = _frame_index,
+        .output_framerate = GetFramerate(),
+
+        // PTS timing information (90kHz timebase)
+        .current_pts = pts,
+        .output_base_pts = GetBasePTS(),
     };
 
     // Barrier to ensure the render target is ready for rendering

@@ -52,12 +52,14 @@ public:
     virtual wis::Size2D GetOutputSize() const noexcept { return { window_size.x, window_size.y }; }
 
     virtual void Update(const vortex::Graphics& gfx) override;
-    virtual bool Evaluate(const vortex::Graphics& gfx) override;
+    virtual bool Evaluate(const vortex::Graphics& gfx, int64_t pts) override;
 
 private:
     void Throttle() const;
     bool EvaluateAudio();
-    bool EvaluateVideo(const vortex::Graphics& gfx, vortex::DescriptorBuffer& desc_buffer);
+    bool EvaluateVideo(const vortex::Graphics& gfx,
+                       vortex::DescriptorBuffer& desc_buffer,
+                       int64_t pts);
     uint64_t CurrentFrameIndex() const noexcept
     {
         return (_fence_value - 1) % vortex::max_frames_in_flight;

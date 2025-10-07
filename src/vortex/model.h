@@ -1,8 +1,9 @@
 #pragma once
 #include <vortex/graph/interfaces.h>
 #include <vortex/graph/connection.h>
-#include <vortex/graph/optimize_probe.h>
 #include <vortex/graph/output_scheduler.h>
+#include <vortex/anim/animation.h>
+#include <vortex/sync/timeline.h>
 #include <vortex/probe.h>
 #include <atomic>
 #include <unordered_set>
@@ -15,13 +16,38 @@ public:
     GraphModel() = default;
 
 public: // Model API
-    auto CreateNode(const vortex::Graphics& gfx, std::string_view node_name, UpdateNotifier::External updater = {}, SerializedProperties values = {}) -> uintptr_t;
+    auto CreateNode(const vortex::Graphics& gfx,
+                    std::string_view node_name,
+                    UpdateNotifier::External updater = {},
+                    SerializedProperties values = {}) -> uintptr_t;
     void RemoveNode(uintptr_t node_ptr);
-    void SetNodeProperty(uintptr_t node_ptr, uint32_t index, std::string_view value, bool notify_ui = false);
+    void SetNodeProperty(uintptr_t node_ptr,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify_ui = false);
+    void SetNodePropertyByName(uintptr_t node_ptr,
+                               std::string_view name,
+                               std::string_view value,
+                               bool notify_ui = false);
     auto GetNodeProperties(uintptr_t node_ptr) const -> std::string;
-    bool ConnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
-    void DisconnectNodes(uintptr_t node_ptr_from, int32_t output_index, uintptr_t node_ptr_to, int32_t input_index);
+    bool ConnectNodes(uintptr_t node_ptr_from,
+                      int32_t output_index,
+                      uintptr_t node_ptr_to,
+                      int32_t input_index);
+    void DisconnectNodes(uintptr_t node_ptr_from,
+                         int32_t output_index,
+                         uintptr_t node_ptr_to,
+                         int32_t input_index);
     void SetNodeInfo(uintptr_t node_ptr, std::string info);
+    auto CreateAnimation(uintptr_t node_ptr) -> uintptr_t;
+    void RemoveAnimation(uintptr_t animation_ptr);
+    auto AddPropertyTrack(uintptr_t animation_ptr,
+                          std::string_view property_name,
+                          std::string_view keyframes_json) -> uintptr_t;
+    void AddKeyframe(uintptr_t track_ptr, std::string_view keyframes_json);
+    void RemoveKeyframe(uintptr_t track_ptr, uint32_t keyframe_index);
+    void Play();
+    void Stop();
 
 public:
     INode* GetNode(uintptr_t node_ptr) const
@@ -39,26 +65,40 @@ public:
         // Process all pending updates before rendering
         ProcessUpdates(gfx);
 
+        // Early out if no nodes or outputs or not playing
+        if (_outputs.empty() || !_playing) {
+            return; // No nodes or outputs to process
+        }
+
         // Get the next output to evaluate based on scheduling
-        IOutput* output = _output_scheduler.GetNextReadyOutput();
+        auto [output, pts] = _output_scheduler.GetNextReadyOutput();
         if (!output) {
             return; // No output is ready to be evaluated this frame
         }
 
+        // Evaluate properties based on the current timeline
+        _animation_manager.EvaluateAtPTS(pts);
+
         // Evaluate the output node
-        output->Evaluate(gfx);
+        output->Evaluate(gfx, pts);
     }
 
     void PrintGraph() const
     {
         std::string out = "Graph Model:\n";
         for (const auto& [node_ptr, node] : _nodes) {
-            std::format_to(std::back_inserter(out), "Node: {} (Info: {})\n", node_ptr, node->GetInfo());
+            std::format_to(std::back_inserter(out),
+                           "Node: {} (Info: {})\n",
+                           node_ptr,
+                           node->GetInfo());
         }
         for (const auto& connection : _connections) {
-            std::format_to(std::back_inserter(out), "Connection: {} -> {} ({} -> {})\n",
-                           connection.from_node->GetInfo(), connection.to_node->GetInfo(),
-                           connection.from_index, connection.to_index);
+            std::format_to(std::back_inserter(out),
+                           "Connection: {} -> {} ({} -> {})\n",
+                           connection.from_node->GetInfo(),
+                           connection.to_node->GetInfo(),
+                           connection.from_index,
+                           connection.to_index);
         }
         vortex::info(out);
     }
@@ -69,22 +109,15 @@ public:
     }
 
     // Get the output scheduler for external access
-    const OutputScheduler& GetOutputScheduler() const noexcept
-    {
-        return _output_scheduler;
-    }
+    const OutputScheduler& GetOutputScheduler() const noexcept { return _output_scheduler; }
+
+    anim::AnimationSystem& GetAnimationManager() noexcept { return _animation_manager; }
 
 private:
     void ProcessUpdates(const vortex::Graphics& gfx)
     {
-        // Optimize the graph if needed
-        if (_optimization_dirty) {
-            _optimize_probe.PropagateOutputs(_outputs); // Optimize the graph using the probe
-            _optimization_dirty = false; // Reset the optimization dirty flag
-        }
-
         for (auto* node : _dirty_nodes) {
-            node->Update(gfx); // Update the node with the graphics context and probe
+            node->Update(gfx); // Update the node with the graphics context
         }
     }
 
@@ -191,9 +224,8 @@ private:
     std::unordered_set<INode*> _dirty_nodes; ///< Set of nodes that have pending property updates
 
     std::vector<IOutput*> _outputs;
-
-    OptimizeProbe _optimize_probe;
     OutputScheduler _output_scheduler; ///< Frame-rate aware output scheduler
-    bool _optimization_dirty = true;
+    anim::AnimationSystem _animation_manager; ///< Animation manager for property animations
+    bool _playing = false; ///< Whether the model is currently playing
 };
 } // namespace vortex::graph

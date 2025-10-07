@@ -3,7 +3,6 @@
 #include <vortex/ui/cef/app.h>
 #include <vortex/util/log_storage.h>
 
-
 int EntryMain(std::span<std::string_view> args, CefRefPtr<vortex::ui::VortexCefApp> cef_app)
 try {
     bool debug = true;
@@ -12,11 +11,9 @@ try {
     vortex::LogStorage log_storage;
 
     // Make a default log for UI / CEF
-    vortex::LogOptions options_cef{
-        .name = vortex::ui_log_name,
-        .pattern_prefix = "vortex.cef",
-        .output_file_path = debug ? "" : "logs/vortex.cef.log"
-    };
+    vortex::LogOptions options_cef{ .name = vortex::ui_log_name,
+                                    .pattern_prefix = "vortex.cef",
+                                    .output_file_path = debug ? "" : "logs/vortex.cef.log" };
     vortex::LogView log_ui = log_storage.CreateLog(options_cef, true);
 
     // Initialize CEF subprocess
@@ -52,7 +49,8 @@ int main(int argc, char* argv[])
     std::size_t space = size + alignof(std::string_view) - 1;
 
     auto* raw = alloca(space);
-    auto* args = static_cast<std::string_view*>(std::align(alignof(std::string_view), size, raw, space));
+    auto* args = static_cast<std::string_view*>(
+            std::align(alignof(std::string_view), size, raw, space));
     for (int i = 0; i < argc; ++i) {
         std::construct_at(&args[i], argv[i]); // Construct std::string_view from char* without UB
     }

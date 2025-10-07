@@ -1,56 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <registry>
-  <!-- Enums -->
-  <enum name="BlendMode">
-    <value name="Normal" ui_name="Normal" ui_desc="Standard alpha blending."/>
-    <value name="Multiply" ui_name="Multiply" ui_desc="Multiply colors together."/>
-    <value name="Screen" ui_name="Screen" ui_desc="Screen blend mode."/>
-    <value name="Add" ui_name="Add" ui_desc="Additive blending."/>
-    <value name="Subtract" ui_name="Subtract" ui_desc="Subtractive blending."/>
-    <value name="Darken" ui_name="Darken" ui_desc="Select darker color."/>
-    <value name="Lighten" ui_name="Lighten" ui_desc="Select lighter color."/>
-    <value name="Difference" ui_name="Difference" ui_desc="Absolute difference."/>
-    <value name="Overlay" ui_name="Overlay" ui_desc="Combines multiply and screen."/>
-  </enum>
+	<!-- Enums -->
+	<enum name="BlendMode">
+		<value name="Normal" ui_name="Normal" ui_desc="Standard alpha blending."/>
+		<value name="Multiply" ui_name="Multiply" ui_desc="Multiply colors together."/>
+		<value name="Screen" ui_name="Screen" ui_desc="Screen blend mode."/>
+		<value name="Add" ui_name="Add" ui_desc="Additive blending."/>
+		<value name="Subtract" ui_name="Subtract" ui_desc="Subtractive blending."/>
+		<value name="Darken" ui_name="Darken" ui_desc="Select darker color."/>
+		<value name="Lighten" ui_name="Lighten" ui_desc="Select lighter color."/>
+		<value name="Difference" ui_name="Difference" ui_desc="Absolute difference."/>
+		<value name="Overlay" ui_name="Overlay" ui_desc="Combines multiply and screen."/>
+	</enum>
 
-  <!-- Filter nodes -->
-  
-  <node name="Blend">
-    <property name="blend_mode" type="BlendMode" default="BlendMode::Normal" ui_name="Blend Mode" ui_desc="How to combine the images."/>
+	<!-- Filter nodes -->
+
+	<node name="Blend">
+		<property name="blend_mode" type="BlendMode" default="BlendMode::Normal" ui_name="Blend Mode" ui_desc="How to combine the images."/>
 		<property name="blend_constants" type="color" default="1.0,1.0,1.0,1.0" ui_name="Blend Constants" ui_desc="Constants used in certain blend modes."/>
-    <property name="clamp_result" type="bool" default="true" ui_name="Clamp Result" ui_desc="Clamp output to [0,1] range."/>
-  </node>
+		<property name="clamp_result" type="bool" default="true" ui_name="Clamp Result" ui_desc="Clamp output to [0,1] range."/>
+	</node>
 
-  <!-- Input nodes -->
-  
-  <node name="ImageInput">
-    <property name="image_path" type="path" ui_name="Image Path" ui_desc="Path to image file."/>
-    <property name="image_size" type="size" ui_name="Image Size" ui_desc="Size of the image in pixels."/>
-    <property name="origin" type="point" ui_name="Origin" ui_desc="Origin (Anchor) point of the image."/>
-    <property name="rotation_2d" type="f32" default="0.0" ui_name="Rotation (2D)" ui_desc="Rotation of the image in degrees."/>
-    <!--<property name="crop_rect" type="rect" disabled="true" ui_name="Crop Rectangle" ui_desc="Rectangle to crop the image."/>-->
-  </node>
+	<node name="Select">
+		<property name="input_index" type="i32" default="0" ui_name="Input Index" ui_desc="Index of the input to select."/>
+	</node>
 
-  <node name="StreamInput">
-    <property name="stream_url" type="u8string" ui_name="Stream URL" ui_desc="URL of the video stream."/>
-    <property name="stream_size" type="size" ui_name="Stream Size" ui_desc="Size of the video stream in pixels."/>
-    <property name="origin" type="point" ui_name="Origin" ui_desc="Origin (Anchor) point of the stream."/>
-    <property name="rotation_2d" type="f32" default="0.0" ui_name="Rotation (2D)" ui_desc="Rotation of the stream in degrees."/>
-    
-    <!-- AV Settings -->
-    <property name="stream_buffering" type="i32" default="1000" ui_name="Buffering" ui_desc="Buffering time in milliseconds."/>
-  </node>
+	<!-- Input nodes -->
 
-  <!-- Output nodes -->
-  
-  <node name="WindowOutput">
-    <property name="name" type="u8string" default="&quot;Vortex Output Window&quot;" ui_name="Window Title" ui_desc="Title of the output window."/>
-    <property name="window_size" type="sizeu" default="1920,1080" ui_name="Window Size" ui_desc="Resolution of the output window."/>
-    <property name="framerate" type="vortex::ratio32_t" default="60,1" ui_name="Framerate" ui_desc="Framerate of the output window."/>
-  </node>
-  <node name="NDIOutput">
-    <property name="name" type="u8string" default="&quot;Vortex NDI Output&quot;" ui_name="NDI Name" ui_desc="Name of the NDI stream."/>
-    <property name="window_size" type="sizeu" default="1920,1080" ui_name="Window Size" ui_desc="Resolution of the output window."/>
-    <property name="framerate" type="vortex::ratio32_t" default="60,1" ui_name="Framerate" ui_desc="Framerate of the output window."/>
-  </node>
+	<node name="ImageInput">
+		<property name="image_path" type="path" ui_name="Image Path" ui_desc="Path to image file."/>
+		<property name="image_size" type="size" ui_name="Image Size" ui_desc="Size of the image in pixels."/>
+		<property name="origin" type="point" ui_name="Origin" ui_desc="Origin (Anchor) point of the image."/>
+		<property name="rotation_2d" type="f32" default="0.0" ui_name="Rotation (2D)" ui_desc="Rotation of the image in degrees."/>
+		<!--<property name="crop_rect" type="rect" disabled="true" ui_name="Crop Rectangle" ui_desc="Rectangle to crop the image."/>-->
+	</node>
+
+	<node name="StreamInput">
+		<property name="stream_url" type="u8string" ui_name="Stream URL" ui_desc="URL of the video stream."/>
+		<property name="stream_size" type="size" ui_name="Stream Size" ui_desc="Size of the video stream in pixels."/>
+		<property name="origin" type="point" ui_name="Origin" ui_desc="Origin (Anchor) point of the stream."/>
+		<property name="rotation_2d" type="f32" default="0.0" ui_name="Rotation (2D)" ui_desc="Rotation of the stream in degrees."/>
+
+		<!-- AV Settings -->
+		<property name="stream_buffering" type="i32" default="1000" ui_name="Buffering" ui_desc="Buffering time in milliseconds."/>
+	</node>
+
+	<!-- Output nodes -->
+
+	<node name="WindowOutput">
+		<property name="name" type="u8string" default="&quot;Vortex Output Window&quot;" ui_name="Window Title" ui_desc="Title of the output window."/>
+		<property name="window_size" type="sizeu" default="1920,1080" ui_name="Window Size" ui_desc="Resolution of the output window."/>
+		<property name="framerate" type="vortex::ratio32_t" default="60,1" ui_name="Framerate" ui_desc="Framerate of the output window."/>
+	</node>
+	<node name="NDIOutput">
+		<property name="name" type="u8string" default="&quot;Vortex NDI Output&quot;" ui_name="NDI Name" ui_desc="Name of the NDI stream."/>
+		<property name="window_size" type="sizeu" default="1920,1080" ui_name="Window Size" ui_desc="Resolution of the output window."/>
+		<property name="framerate" type="vortex::ratio32_t" default="60,1" ui_name="Framerate" ui_desc="Framerate of the output window."/>
+	</node>
 </registry>

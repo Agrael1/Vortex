@@ -94,7 +94,7 @@ struct value_traits<uintptr_t> {
         if (list.GetType(index) != VTYPE_DOUBLE) {
             return false;
         }
-        out = std::bit_cast<double>(list.GetDouble(index));
+        out = std::bit_cast<uintptr_t>(list.GetDouble(index));
         return true;
     }
 };

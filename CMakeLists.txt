@@ -38,12 +38,14 @@ PUBLIC
   "src/vortex/gfx/texture_pool.cpp"
   "src/vortex/gfx/texture_pool.h"
  
-  "src/vortex/graph/optimize_probe.h" 
-  "src/vortex/graph/optimize_probe.cpp"
+   
+  
   "src/vortex/graph/ports.h" 
   "src/vortex/graph/connection.h" 
   "src/vortex/graph/interfaces.h" 
   "src/vortex/graph/node_factory.h" 
+  "src/vortex/graph/output_scheduler.h" 
+  "src/vortex/graph/output_scheduler.cpp"
  
   "src/vortex/util/lib/SPSC-Queue.h" 
   "src/vortex/util/reflection.h" 
@@ -62,6 +64,7 @@ PUBLIC
   "src/vortex/nodes/filter/composition.h"
   "src/vortex/nodes/filter/blend.h"
   "src/vortex/nodes/filter/blend.cpp"
+  "src/vortex/nodes/filter/select.h"
   "src/vortex/nodes/node_registry.h"
  
   "src/vortex/codec/ffmpeg/types.h" 
@@ -95,8 +98,10 @@ PUBLIC
   "src/vortex/util/interprocess_lock.cpp" 
   "src/vortex/nodes/output/ndi_output.cpp" 
   "src/vortex/audio/audio_buffer.h" 
-  "src/vortex/util/byte_ring.h"  
   "src/vortex/audio/audio_resampler.h" 
+  "src/vortex/util/byte_ring.h"  
+  "src/vortex/anim/animation.h" 
+  "src/vortex/anim/animation.cpp" 
   "src/vortex/ui/message_dispatch.h" 
   "src/vortex/util/bench_clock.h" 
 
@@ -110,7 +115,11 @@ PUBLIC
   "src/vortex/util/term/input.cpp"
 
   "src/vortex/util/main_args.h"   
-  "src/vortex/nodes/output/window_output.cpp" )
+  "src/vortex/nodes/output/window_output.cpp"
+  "src/vortex/util/interp/interpolation.h" 
+  "src/vortex/util/interp/easing.h" 
+  "src/vortex/util/interp/vector.h"
+ "src/vortex/anim/keyframe.h" "src/vortex/anim/keyframe.cpp" "src/vortex/anim/property_track.h" "src/vortex/anim/property_track.cpp" "src/vortex/anim/animation_clip.h" "src/vortex/anim/animation_clip.cpp" "src/vortex/util/deserialize.h")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES
@@ -126,6 +135,7 @@ target_link_libraries(VortexLib
     SDL3::SDL3
     NDI::NDI
     utf8cpp
+    nlohmann_json::nlohmann_json
     
     FFmpeg::FFmpeg
     frozen::frozen-headers

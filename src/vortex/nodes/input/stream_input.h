@@ -78,7 +78,7 @@ private:
 
     std::map<int64_t, ffmpeg::unique_frame> _video_frames; // Map of video frames by pts
     std::map<int64_t, ffmpeg::unique_frame> _audio_frames; // Map of audio frames by pts
-    std::array<int64_t, 2> _stream_indices{}; // Last rendered video PTS for each frame in flight
+    std::array<int64_t, 2> _stream_indices{}; // Indices of the video and audio streams
 
     unique_stream _stream_handle; // Handle to the stream managed by StreamManager
     ffmpeg::unique_swscontext _sws_context;
@@ -86,14 +86,11 @@ private:
     bool url_changed = true; // Flag to check if the node has been initialized
 
 private: // Stream synchronization
-    int64_t _first_video_pts{ AV_NOPTS_VALUE }; // First video PTS for synchronization
-    int64_t _first_audio_pts{ AV_NOPTS_VALUE }; // First audio PTS for synchronization
+    int64_t _first_video_pts{ invalid_pts }; // First video PTS for synchronization
+    int64_t _first_audio_pts{ invalid_pts }; // First audio PTS for synchronization
     std::chrono::steady_clock::time_point _start_time_video;
     std::chrono::steady_clock::time_point _start_time_audio;
-    bool _started{ false }; // Flag to indicate if playback has started
-
 
     ffmpeg::AudioResampler _audio_resampler; // Resampler for audio frames
-
 };
 } // namespace vortex

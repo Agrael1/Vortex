@@ -81,8 +81,9 @@ vortex::graph::OutputScheduler::GetNextReadyOutput() noexcept
     // output
     // 3. next_info.next_pts > current_pts: The output is not due yet, push back and return null
 
-    // Epsilon for timing tolerance (in 90kHz ticks)
-    constexpr int64_t epsilon = 200; // ~2.2ms tolerance
+    // Epsilon for timing tolerance (in 90kHz ticks) (one frame at output FPS)
+    int64_t epsilon = (sync::PTSClock::timebase_hz * next_info.output->GetOutputFPS().denom()) /
+            next_info.output->GetOutputFPS().num();
 
     int64_t pts_diff = static_cast<int64_t>(next_info.next_pts) - static_cast<int64_t>(current_pts);
 

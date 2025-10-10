@@ -163,7 +163,7 @@ bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx,
     }
 
     auto now = std::chrono::steady_clock::now();
-    if (_first_video_pts == AV_NOPTS_VALUE) {
+    if (_first_video_pts == invalid_pts) {
         return false;
     }
 
@@ -282,7 +282,7 @@ bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx,
 void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
 {
     auto now = std::chrono::steady_clock::now();
-    if (_first_audio_pts == AV_NOPTS_VALUE) {
+    if (_first_audio_pts == invalid_pts) {
         return;
     }
 
@@ -291,11 +291,19 @@ void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
     uint64_t elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now -
                                                                                 _start_time_audio)
                                   .count();
-    uint64_t current_audio_pts = _first_audio_pts +
+    int64_t current_audio_pts = _first_audio_pts +
             TimeToPts(_stream_collection.audio_channels[0]->time_base, elapsed_ms);
 
+    int64_t pick_pts = std::max(current_audio_pts, probe.last_audio_pts);
+    if (current_audio_pts > probe.last_audio_pts) {
+        vortex::warn("StreamInput: Audio is lagging behind by {} ms",
+                     (current_audio_pts - probe.last_audio_pts) *
+                             _stream_collection.audio_channels[0]->time_base.num /
+                             _stream_collection.audio_channels[0]->time_base.den * 1000);
+    }
+
     // Get all audio frames that are ready to be played
-    auto it = _audio_frames.lower_bound(current_audio_pts);
+    auto it = _audio_frames.lower_bound(pick_pts);
     if (it == _audio_frames.end()) {
         return; // No frames ready to be played
     }
@@ -326,10 +334,8 @@ void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
             vortex::warn("StreamInput: Unsupported audio format or channel count. Expected float "
                          "planar stereo.");
         }
-        // erase the frame after consuming
-        auto next_it = std::next(it);
-        _audio_frames.erase(it);
-        it = next_it;
+        probe.last_audio_pts = it->first + frame->duration;
+        it = std::next(it);
     }
 
     // probe.last_audio_pts = it->first + frame->duration;
@@ -337,15 +343,15 @@ void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
 
 void vortex::StreamInput::DecodeVideoFrames(vortex::ffmpeg::ChannelStorage& video_channel)
 {
-    static int64_t last_pts = AV_NOPTS_VALUE;
+    static int64_t last_pts = invalid_pts;
 
     // try read frames from atomic queue
     while (auto frame = video_channel.GetDecodedFrame()) {
         // if first audio frame, set the first audio pts
-        if (_first_video_pts == AV_NOPTS_VALUE) {
+        if (_first_video_pts == invalid_pts) {
             _start_time_video = std::chrono::steady_clock::now();
-            _first_video_pts = _first_video_pts == AV_NOPTS_VALUE ? frame->get()->pts
-                                                                  : _first_video_pts;
+            _first_video_pts = _first_video_pts == invalid_pts ? frame->get()->pts
+                                                               : _first_video_pts;
         }
 
         AVFrame* raw_frame = frame->get();
@@ -358,15 +364,15 @@ void vortex::StreamInput::DecodeVideoFrames(vortex::ffmpeg::ChannelStorage& vide
 }
 void vortex::StreamInput::DecodeAudioFrames(vortex::ffmpeg::ChannelStorage& audio_channel)
 {
-    static int64_t last_pts = AV_NOPTS_VALUE;
+    static int64_t last_pts = invalid_pts;
 
     // try read frames from atomic queue
     while (auto frame = audio_channel.GetDecodedFrame()) {
         // if first audio frame, set the first audio pts
-        if (_first_audio_pts == AV_NOPTS_VALUE) {
+        if (_first_audio_pts == invalid_pts) {
             _start_time_audio = std::chrono::steady_clock::now();
-            _first_audio_pts = _first_audio_pts == AV_NOPTS_VALUE ? frame->get()->pts
-                                                                  : _first_audio_pts;
+            _first_audio_pts = _first_audio_pts == invalid_pts ? frame->get()->pts
+                                                               : _first_audio_pts;
         }
 
         AVFrame* raw_frame = frame->get();

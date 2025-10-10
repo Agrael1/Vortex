@@ -139,11 +139,13 @@ bool vortex::NDIOutput::EvaluateAudio()
         return false; // No audio to send
     }
 
-    std::size_t read_samples = _audio_buffer.ReadPlanar(std::span{ _audio_samples });
-    if (read_samples < _audio_buffer.SamplesForFramerate(framerate)) {
-        return false; // No samples to send
+    // Check if we have enough samples for the current framerate
+    vortex::ratio32_t framerate = GetFramerate();
+    if (!_audio_buffer.CanReadForFramerate(framerate)) {
+        return false; // Not enough samples to send
     }
 
+    std::size_t read_samples = _audio_buffer.ReadPlanar(std::span{ _audio_samples });
     _swapchain.SendAudio(_audio_samples);
     return true;
 }

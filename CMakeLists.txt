@@ -61,7 +61,7 @@ PUBLIC
   "src/vortex/nodes/input/image_input.cpp"
   "src/vortex/nodes/input/stream_input.h"
   "src/vortex/nodes/input/stream_input.cpp"
-  "src/vortex/nodes/filter/composition.h"
+  
   "src/vortex/nodes/filter/blend.h"
   "src/vortex/nodes/filter/blend.cpp"
   "src/vortex/nodes/filter/select.h"

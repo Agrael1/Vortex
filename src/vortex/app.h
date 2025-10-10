@@ -55,46 +55,46 @@ public:
             return UIMessageHandler(std::move(args));
         });
 
-        //constexpr std::pair<std::string_view, std::string_view> output_values2[]{
-        //    std::pair{        "name", "Vortex Mega Output" },
-        //    std::pair{ "window_size",        "[2000,2000]" }
-        //};
-        //constexpr std::pair<std::string_view, std::string_view> output_values3[]{
-        //    std::pair{        "name", "Vortex Mega Output 2" },
-        //    std::pair{ "window_size",          "[1000,2000]" },
-        //    std::pair{   "framerate",               "[30,1]" }
-        //};
+        // constexpr std::pair<std::string_view, std::string_view> output_values2[]{
+        //     std::pair{        "name", "Vortex Mega Output" },
+        //     std::pair{ "window_size",        "[2000,2000]" }
+        // };
+        // constexpr std::pair<std::string_view, std::string_view> output_values3[]{
+        //     std::pair{        "name", "Vortex Mega Output 2" },
+        //     std::pair{ "window_size",          "[1000,2000]" },
+        //     std::pair{   "framerate",               "[30,1]" }
+        // };
 
-        //constexpr std::pair<std::string_view, std::string_view> stream_values[]{
-        //    std::pair{ "stream_url", "rtp://192.168.100.5:6970" },
-        //};
-        //constexpr std::pair<std::string_view, std::string_view> image_values[]{
-        //    std::pair{ "image_path", "ui/HDR.jpg" },
-        //};
-        //constexpr std::pair<std::string_view, std::string_view> image_values2[]{
-        //    std::pair{ "image_path", "ui/Watermark.png" },
-        //};
-        //constexpr std::pair<std::string_view, std::string_view> image_values3[]{
-        //    std::pair{ "blend_mode", "0" },
-        //};
+        // constexpr std::pair<std::string_view, std::string_view> stream_values[]{
+        //     std::pair{ "stream_url", "rtp://192.168.100.5:6970" },
+        // };
+        // constexpr std::pair<std::string_view, std::string_view> image_values[]{
+        //     std::pair{ "image_path", "ui/HDR.jpg" },
+        // };
+        // constexpr std::pair<std::string_view, std::string_view> image_values2[]{
+        //     std::pair{ "image_path", "ui/Watermark.png" },
+        // };
+        // constexpr std::pair<std::string_view, std::string_view> image_values3[]{
+        //     std::pair{ "blend_mode", "0" },
+        // };
 
         //// Test setup of the model
-        //auto i1 = _model.CreateNode(_gfx,
-        //                            "StreamInput",
-        //                            external_observer,
-        //                            stream_values); // Create a default node for testing
+        // auto i1 = _model.CreateNode(_gfx,
+        //                             "StreamInput",
+        //                             external_observer,
+        //                             stream_values); // Create a default node for testing
         //// auto o1 = _model.CreateNode(_gfx,
         ////                             "WindowOutput",
         ////                             external_observer,
         ////                             output_values3); // Create a default output for testing
-        //auto o2 = _model.CreateNode(_gfx,
-        //                            "NDIOutput",
-        //                            external_observer,
-        //                            output_values2); // Create a default output for testing
-        //auto b1 = _model.CreateNode(_gfx, "Blend", external_observer, image_values3);
-        //auto i2 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values);
+        // auto o2 = _model.CreateNode(_gfx,
+        //                             "NDIOutput",
+        //                             external_observer,
+        //                             output_values2); // Create a default output for testing
+        // auto b1 = _model.CreateNode(_gfx, "Blend", external_observer, image_values3);
+        // auto i2 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values);
         //// auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
-        //auto s1 = _model.CreateNode(_gfx, "Select", external_observer);
+        // auto s1 = _model.CreateNode(_gfx, "Select", external_observer);
 
         //_model.SetNodeInfo(i1, "Stream 1"); // Set some info for the node
         //_model.SetNodeInfo(i2, "Image 1"); // Set some info for the node
@@ -115,8 +115,8 @@ public:
         //_model.ConnectNodes(s1, 0, o2, 0); // Connect the nodes in the model
 
         //// Animate
-        //auto animation = _model.CreateAnimation(s1);
-        //auto track = _model.AddPropertyTrack(animation, "input_index", {});
+        // auto animation = _model.CreateAnimation(s1);
+        // auto track = _model.AddPropertyTrack(animation, "input_index", {});
         //_model.AddKeyframe(track, R"({ "time_from_start" : 180000, "value" : 1 })");
     }
 
@@ -352,10 +352,10 @@ private:
         { u"GetNodePropertiesAsync",     ui::MessageDispatch<&App::GetNodeProperties>::Dispatch },
         {   u"CreateAnimationAsync",       ui::MessageDispatch<&App::CreateAnimation>::Dispatch },
         {  u"AddPropertyTrackAsync",      ui::MessageDispatch<&App::AddPropertyTrack>::Dispatch },
+        {      u"ConnectNodesAsync",          ui::MessageDispatch<&App::ConnectNodes>::Dispatch },
 
         // Immediate calls (fire and forget)
         {             u"RemoveNode",            ui::MessageDispatch<&App::RemoveNode>::Dispatch },
-        {           u"ConnectNodes",          ui::MessageDispatch<&App::ConnectNodes>::Dispatch },
         {        u"DisconnectNodes",       ui::MessageDispatch<&App::DisconnectNodes>::Dispatch },
         {            u"SetNodeInfo",           ui::MessageDispatch<&App::SetNodeInfo>::Dispatch },
         {        u"SetNodeProperty",       ui::MessageDispatch<&App::SetNodeProperty>::Dispatch },

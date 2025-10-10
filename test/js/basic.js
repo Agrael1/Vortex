@@ -17,7 +17,7 @@ async function testCreateNode() {
     var imageSource = await Vortex.CreateNodeAsync("ImageInput");
     Vortex.SetNodePropertyByName(imageSource, "image_path", "ui/HDR.jpg");
 
-    Vortex.ConnectNodes(imageSource, 0, outputNDI, 0);
+    await Vortex.ConnectNodesAsync(imageSource, 0, outputNDI, 0);
     Vortex.Play();
 }
 

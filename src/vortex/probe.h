@@ -27,8 +27,8 @@ struct AudioProbe {
     std::vector<float> audio_data; // Audio data for this frame
     uint32_t audio_sample_rate = 48000; // Default 48 kHz
     uint32_t audio_channels = 2; // Default stereo
-    uint64_t first_audio_pts = invalid_pts; // First audio PTS for synchronization
-    uint64_t last_audio_pts = invalid_pts; // Last audio PTS for synchronization
+    int64_t first_audio_pts = invalid_pts; // First audio PTS for synchronization
+    int64_t last_audio_pts = invalid_pts; // Last audio PTS for synchronization
 };
 
 struct RenderPassForwardDesc {

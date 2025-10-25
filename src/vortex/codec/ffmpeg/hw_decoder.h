@@ -181,6 +181,8 @@ DX12CreateSRVNV12(wis::Result& result, const wis::DX12Device& device, wis::DX12T
 #endif
 
 #ifdef WISDOM_VULKAN
+#include <wisdom/vulkan/vk_device.h>
+
 namespace vortex::ffmpeg {
 class VKVADecodeContext;
 } // namespace vortex::ffmpeg

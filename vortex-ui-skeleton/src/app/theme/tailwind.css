@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --panel: theme('colors.ui.panel');
+  --border: theme('colors.ui.border');
+  --accent: theme('colors.ui.accent');
+}
+
+* { box-sizing: border-box; }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #2a3242; border-radius: 8px; }

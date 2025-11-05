@@ -26,7 +26,8 @@
         "strategy": "external"
       },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CEF_ROOT": "${sourceDir}/third_party/cef"
       }
     },
     {
@@ -34,7 +35,8 @@
       "displayName": "x64 Release",
       "inherits": "x64-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CEF_ROOT": "${sourceDir}/third_party/cef"
       }
     },
     {
@@ -78,7 +80,7 @@
       }
     },
     {
-      "name": "macos-debug",
+      "name": "macOS-debug",
       "displayName": "macOS Debug",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/out/build/${presetName}",

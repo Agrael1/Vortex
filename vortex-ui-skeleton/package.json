@@ -1,0 +1,33 @@
+{
+  "name": "vortex-ui-skeleton",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.0.4",
+    "cmdk": "^1.0.0",
+    "framer-motion": "^11.0.0",
+    "lucide-react": "^0.452.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-mosaic-component": "^6.2.0",
+    "react-router-dom": "^6.28.0",
+    "recoil": "^0.7.7",
+    "tinykeys": "^3.0.0",
+    "classnames": "^2.5.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.4",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.8"
+  }
+}

@@ -320,7 +320,7 @@ private:
     {
         // Handle node update logic here
         vortex::info("Node updated: {} (Property: {}, Value: {})", node, property_index, value);
-        //_ui_app.SendUIMessage(u"node_update", std::bit_cast<double>(node), property_index, value);
+        _ui_app.SendUIMessage(u"node_update", std::bit_cast<double>(node), static_cast<int32_t>(property_index), std::string(value));
     }
 
 public:

@@ -1,18 +1,25 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
-  darkMode: 'class',
+  darkMode: ['class'],
+  content: [
+    './index.html',
+    './src/**/*.{ts,tsx,js,jsx}',
+  ],
   theme: {
     extend: {
       colors: {
-        ui: {
-          bg: '#0f1115',
-          panel: '#161a22',
-          border: '#242b38',
-          text: '#d1d5db',
-          accent: '#7c9cf3'
-        }
-      }
+        background: 'hsl(240 10% 3.9%)',
+        foreground: 'hsl(0 0% 98%)',
+        muted: 'hsl(240 3.7% 15.9%)',
+        border: 'hsl(240 3.7% 15.9%)',
+        input: 'hsl(240 3.7% 15.9%)',
+        card: 'hsl(240 10% 3.9%)',
+        'card-foreground': 'hsl(0 0% 98%)',
+      },
+      borderRadius: {
+        xl: '0.75rem',
+        '2xl': '1rem',
+      },
     },
   },
   plugins: [],

@@ -463,6 +463,7 @@ auto vortex::ffmpeg::ChannelStorage::SendQueuedPackets(vortex::LogView log) noex
         }
         _packets.pop();
     }
+    return true;
 }
 auto vortex::ffmpeg::ChannelStorage::SendPacket(ffmpeg::unique_packet packet, vortex::LogView log) noexcept -> bool
 {

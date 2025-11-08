@@ -630,10 +630,17 @@ struct fixed_string {
         }
         data[Size] = T();
     }
+    constexpr explicit fixed_string(std::string_view str)
+    {
+        for (decltype(Size) i{}; i < Size; ++i) {
+            data[i] = str[i];
+        }
+        data[Size] = T();
+    }
     [[nodiscard]] constexpr auto operator<=>(const fixed_string&) const = default;
     [[nodiscard]] constexpr explicit(false) operator std::string_view() const { return { std::data(data), Size }; }
     [[nodiscard]] constexpr auto size() const { return Size; }
-    T data[Size + 1u];
+    T data[Size + 1u]{};
 };
 template<class T, std::size_t Capacity, std::size_t Size = Capacity - 1>
 fixed_string(const T (&str)[Capacity]) -> fixed_string<T, Size>;
@@ -1075,10 +1082,10 @@ template<class T>
 [[nodiscard]] constexpr auto type_name() noexcept -> std::string_view
 {
     using type_name_info = detail::type_name_info<std::remove_pointer_t<std::remove_cvref_t<T>>>;
-    constexpr std::string_view function_name = detail::function_name<std::remove_pointer_t<std::remove_cvref_t<T>>>();
-    constexpr std::string_view qualified_type_name = function_name.substr(type_name_info::begin, function_name.find(type_name_info::end) - type_name_info::begin);
-    constexpr std::string_view tmp_type_name = qualified_type_name.substr(0, qualified_type_name.find_first_of("<", 1));
-    constexpr std::string_view type_name = tmp_type_name.substr(tmp_type_name.find_last_of("::") + 1);
+    constexpr static std::string_view function_name = detail::function_name<std::remove_pointer_t<std::remove_cvref_t<T>>>();
+    constexpr static std::string_view qualified_type_name = function_name.substr(type_name_info::begin, function_name.find(type_name_info::end) - type_name_info::begin);
+    constexpr static std::string_view tmp_type_name = qualified_type_name.substr(0, qualified_type_name.find_first_of("<", 1));
+    constexpr static std::string_view type_name = tmp_type_name.substr(tmp_type_name.find_last_of("::") + 1);
     static_assert(std::size(type_name) > 0u);
     if (std::is_constant_evaluated()) {
         return type_name;
@@ -1206,7 +1213,7 @@ template<class E, fixed_string unknown = "", auto Min = enum_min(E{}), auto Max 
     requires(std::is_enum_v<E> and Max > Min)
 [[nodiscard]] constexpr auto enum_name(const E e) noexcept -> std::string_view
 {
-    if constexpr (constexpr auto cases = enumerators<E, Min, Max>; std::empty(cases)) {
+    if constexpr (constexpr static auto cases = enumerators<E, Min, Max>; std::empty(cases)) {
         return unknown;
     } else {
         const auto switch_case = [&]<std::size_t I = 0u>(auto switch_case, const auto value) -> std::string_view {
@@ -1256,9 +1263,9 @@ template<std::size_t N, class T>
     requires(std::is_aggregate_v<std::remove_cvref_t<T>> and N < size<T>())
 [[nodiscard]] constexpr auto member_name() noexcept -> std::string_view
 {
-    constexpr std::string_view function_name = detail::function_name<visit([](auto&&... args) { return detail::ref{ detail::nth_pack_element<N>(REFLECT_FWD(args)...) }; }, detail::ext<std::remove_cvref_t<T>>)>();
-    constexpr std::string_view tmp_member_name = function_name.substr(0, function_name.find(detail::member_name_info::end));
-    constexpr std::string_view member_name = tmp_member_name.substr(tmp_member_name.find_last_of(detail::member_name_info::begin) + 1);
+    constexpr static std::string_view function_name = detail::function_name<visit([](auto&&... args) { return detail::ref{ detail::nth_pack_element<N>(REFLECT_FWD(args)...) }; }, detail::ext<std::remove_cvref_t<T>>)>();
+    constexpr static std::string_view tmp_member_name = function_name.substr(0, function_name.find(detail::member_name_info::end));
+    constexpr static std::string_view member_name = tmp_member_name.substr(tmp_member_name.find_last_of(detail::member_name_info::begin) + 1);
     static_assert(std::size(member_name) > 0u);
     if (std::is_constant_evaluated()) {
         return member_name;

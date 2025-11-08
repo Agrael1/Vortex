@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { engine } from '../../services/ipc/cefBridge'
+import { engine } from '../../app/services/ipc/cefBridge'
 
 type Recent = { name: string; path: string; last: string }
 

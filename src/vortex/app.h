@@ -233,12 +233,17 @@ private:
     void GetNodeTypes()
     {
         const auto& node_types = vortex::graph::NodeFactory::GetNodesInfo();
-        CefRefPtr<CefDictionaryValue> return_dictionary = CefDictionaryValue::Create();
+        CefRefPtr<CefDictionaryValue> ret = CefDictionaryValue::Create();
 
         for (const auto& [name, info] : node_types) {
-            return_dictionary->SetString({ name.data() }, serialize(info));
+            // name — std::string или std::string_view
+            std::string key(name);
+            std::string value = serialize(info); // JSON/строка
+            ret->SetString(CefString(key), CefString(value));
+            // можно и так: ret->SetString(CefString(key), value);
         }
-        _ui_app.SendUIReturn(std::move(return_dictionary)); // Send the node types to the UI
+
+        _ui_app.SendUIReturn(std::move(ret));
     }
     auto GetNodeProperties(uintptr_t node_ptr) -> std::string
     {
@@ -320,7 +325,10 @@ private:
     {
         // Handle node update logic here
         vortex::info("Node updated: {} (Property: {}, Value: {})", node, property_index, value);
-        _ui_app.SendUIMessage(u"node_update", std::bit_cast<double>(node), static_cast<int32_t>(property_index), std::string(value));
+        _ui_app.SendUIMessage(u"node_update",
+                              std::bit_cast<double>(node),
+                              static_cast<int32_t>(property_index),
+                              std::string(value));
     }
 
 public:

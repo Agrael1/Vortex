@@ -1,100 +1,137 @@
-// src/app/panels/GraphPanel.tsx
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from "react";
 import {
-  ReactFlow,
   Background,
   Controls,
   MiniMap,
+  ReactFlow,
   addEdge,
   useEdgesState,
   useNodesState,
-  type Connection,
-  type Edge,
-  type Node,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { engine } from '@/bridge/engine';
+  Connection,
+  Edge,
+  Node,
+  OnConnect,
+  ReactFlowProvider,
+  useReactFlow,
+  Position,
+} from "@xyflow/react";
+import { Vortex } from "@/bridge/vortex";
 
-type Ptr = number;
+export const DND_TYPE = "application/x-vortex-node-type";
+const idFromPtr = (ptr: number) => String(ptr);
 
-export function GraphPanel({ onSelectPtr }: { onSelectPtr: (ptr: Ptr | null) => void }) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+// данные ноды
+type RFNodeData = { label: string; ptr: number };
+// типы ноды/ребра для state
+type RFNode = Node<RFNodeData>;
+type RFEdge = Edge;
 
-  const idFromPtr = (ptr: Ptr) => String(ptr);
+type Props = { onSelectPtr(ptr: number | null): void };
 
-  // окно (AppShell) вызывает это через window-хук
-  const addNodeFromType = useCallback(
-    (typeName: string, ptr: Ptr) => {
+function GraphInner({ onSelectPtr }: Props) {
+  // <<< ВАЖНО: передаём тип НОДЫ (RFNode), не массив и не RFNodeData
+  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
+  const rf = useReactFlow();
+
+  const [spawn, setSpawn] = useState({ x: 120, y: 120 });
+
+  const addNode = useCallback(
+    async (type: string, pos?: { x: number; y: number }) => {
+      const ptr = await Vortex.createNode(type);
       const id = idFromPtr(ptr);
-      const n: Node = {
+      const position = pos ?? spawn;
+
+      const n: RFNode = {
         id,
-        position: { x: 120 + Math.random() * 240, y: 120 + Math.random() * 120 },
-        data: { label: typeName, ptr },
-        type: 'default',
+        position,
+        data: { label: type, ptr },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        style: {
+          padding: 8,
+          borderRadius: 6,
+          background: "#121212",
+          color: "#ddd",
+          border: "1px solid #2a2a2a",
+        },
       };
+
       setNodes((nds) => nds.concat(n));
+      setSpawn((s) => ({ x: s.x + 40, y: s.y + 40 }));
+      onSelectPtr(ptr);
     },
-    [setNodes]
+    [onSelectPtr, setNodes, spawn]
   );
 
-  const onConnect = useCallback(
+  useEffect(() => {
+    (window as any).__GraphPanelAddNode = (
+      type: string,
+      x?: number,
+      y?: number
+    ) => addNode(type, x != null && y != null ? { x, y } : undefined);
+  }, [addNode]);
+
+  const onConnect = useCallback<OnConnect>(
     async (conn: Connection) => {
-      if (!conn.source || !conn.target) return;
-      const left = nodes.find((n) => n.id === conn.source);
-      const right = nodes.find((n) => n.id === conn.target);
-      if (!left || !right) return;
-
-      const lPtr = Number((left.data as any)?.ptr);
-      const rPtr = Number((right.data as any)?.ptr);
-      const lOut = Number(conn.sourceHandle ?? 0);
-      const rIn = Number(conn.targetHandle ?? 0);
-
-      const ok = await engine.connect(lPtr, lOut, rPtr, rIn);
-      if (ok) setEdges((eds) => addEdge(conn, eds));
-      else console.warn('Connect failed by engine');
+      setEdges((eds) => addEdge({ ...conn, animated: true } as RFEdge, eds));
+      const srcPtr = Number(conn.source);
+      const dstPtr = Number(conn.target);
+      await Vortex.connect(srcPtr, 0, dstPtr, 0);
     },
-    [nodes, setEdges]
+    [setEdges]
   );
-
-  const onNodesDelete = useCallback((deleted: Node[]) => {
-    deleted.forEach((n) => {
-      const ptr = Number((n.data as any)?.ptr);
-      if (Number.isFinite(ptr)) engine.removeNode(ptr);
-    });
-  }, []);
 
   const onSelectionChange = useCallback(
-    ({ nodes: sel }: { nodes: Node[] }) => {
-      if (sel.length > 0) {
-        const ptr = Number(sel[0].data?.ptr);
-        onSelectPtr(Number.isFinite(ptr) ? ptr : null);
-      } else {
-        onSelectPtr(null);
-      }
+    (params: { nodes: RFNode[] }) => {
+      const first = params.nodes[0];
+      onSelectPtr(first ? first.data.ptr : null);
     },
     [onSelectPtr]
   );
 
-  // прокинем хук в window
-  (window as any).__GraphPanelAddNode = addNodeFromType;
+  const onDrop = useCallback(
+    (ev: React.DragEvent) => {
+      ev.preventDefault();
+      const type = ev.dataTransfer.getData(DND_TYPE);
+      const pos = rf.screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+      if (type) addNode(type, pos);
+    },
+    [rf, addNode]
+  );
+
+  const onDragOver = useCallback((ev: React.DragEvent) => {
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+  }, []);
 
   return (
-    <div style={{ width: '100%', height: '100%', minHeight: 0 }}>
+    <div
+      style={{ width: "100%", height: "100%" }}
+      onDrop={onDrop}
+      onDragOver={onDragOver}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onConnect={onConnect}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodesDelete={onNodesDelete}
         onSelectionChange={onSelectionChange}
         fitView
       >
-        <Background />
         <MiniMap />
         <Controls />
+        <Background />
       </ReactFlow>
     </div>
+  );
+}
+
+export function GraphPanel(props: Props) {
+  return (
+    <ReactFlowProvider>
+      <GraphInner {...props} />
+    </ReactFlowProvider>
   );
 }

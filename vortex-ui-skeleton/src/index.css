@@ -1,34 +1,57 @@
-/* базовые размеры на весь экран */
-html, body, #root { height: 100%; }
-body {
-  margin: 0;
-  background: #0e0e10;
-  color: #d0d0d0;
-  font: 12px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+:root { color-scheme: dark; }
+html, body, #root { height: 100%; margin: 0; }
+body { font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial; background: #111; color: #ddd; }
+
+* { box-sizing: border-box; }
+
+.border { border: 1px solid #333; }
+.border-l { border-left: 1px solid #333; }
+.border-r { border-right: 1px solid #333; }
+.border-b { border-bottom: 1px solid #333; }
+.bg-black\/30 { background: rgba(0,0,0,.30); }
+
+.p-2 { padding: .5rem; }
+.px-2 { padding-left: .5rem; padding-right: .5rem; }
+.py-1 { padding-top: .25rem; padding-bottom: .25rem; }
+.rounded { border-radius: 6px; }
+.space-y-1 > * + * { margin-top: .25rem; }
+.space-y-2 > * + * { margin-top: .5rem; }
+.text-sm { font-size: 12px; }
+.text-xs { font-size: 11px; }
+.opacity-60 { opacity: .6; }
+.opacity-70 { opacity: .7; }
+.font-semibold { font-weight: 600; }
+.cursor-pointer { cursor: pointer; }
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+.min-h-0 { min-height: 0; }
+.overflow-auto { overflow: auto; }
+.overflow-hidden { overflow: hidden; }
+.relative { position: relative; }
+.absolute { position: absolute; }
+.grid { display: grid; }
+.col-span-3 { grid-column: span 3 / span 3; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.gap-2 { gap: .5rem; }
+.mx-2 { margin-left: .5rem; margin-right: .5rem; }
+
+/* buttons */
+.btn {
+  border: 1px solid #3a3a3a;
+  background: #1b1b1b;
+  border-radius: 6px;
+  padding: .35rem .6rem;
+  color: #ddd;
+  cursor: pointer;
 }
+.btn:hover { filter: brightness(1.15); }
 
-/* каркас приложения: три колонки */
-.app-shell {
-  height: 100%;
-  display: grid;
-  grid-template-columns: 280px 1fr 320px;
-  grid-template-rows: 1fr;
-}
-
-/* панели */
-.left, .right, .center { min-width: 0; }
-.left  { background:#0f0f10; border-right:1px solid #262626; }
-.right { background:#0f0f10; border-left:1px solid #262626; }
-.center{ background:#111113; }
-
-.panel-title {
-  padding: 8px 10px;
-  color: #b8b8b8;
-  font-weight: 600;
-}
-
-/* контейнер для React Flow обязан иметь размеры */
-.graph-host {
-  width: 100%;
-  height: 100%;
+/* inputs */
+input[type="text"], input[type="number"] {
+  color: #ddd;
+  border: 1px solid #333;
+  background: rgba(0,0,0,.35);
+  border-radius: 6px;
+  height: 26px;
 }

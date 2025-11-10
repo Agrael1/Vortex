@@ -2,32 +2,105 @@ import { useCallback, useState } from 'react';
 import { GraphPanel } from '@/app/panels/GraphPanel';
 import { NodeLibraryPanel } from '@/app/panels/NodeLibraryPanel';
 import { InspectorPanel } from '@/app/panels/InspectorPanel';
-import { Vortex } from '../bridge/vortex';;
+import { Vortex } from '@/bridge/vortex';
 
 export function AppShell() {
   const [selectedPtr, setSelectedPtr] = useState<number | null>(null);
 
-  // клик в палитре
   const onCreateNode = useCallback((typeName: string) => {
     (window as any).__GraphPanelAddNode?.(typeName);
   }, []);
 
-  // быстрый пресет StreamInput -> WindowOutput
+  const quickTestPattern = useCallback(async () => {
+    try {
+      console.log('[Quick Test] Starting Image→Window test pattern...');
+      
+      const add = (window as any).__GraphPanelAddNode as
+        (t: string, x?: number, y?: number) => Promise<number>;
+      if (!add) {
+        console.error('[Quick Test] __GraphPanelAddNode not available');
+        return;
+      }
+
+      console.log('[Quick Test] Creating ImageInput node...');
+      const imagePtr = await add('ImageInput', 200, 200);
+      console.log('[Quick Test] ImageInput created with ptr:', imagePtr);
+
+      console.log('[Quick Test] Creating WindowOutput node...');
+      const windowPtr = await add('WindowOutput', 520, 220);
+      console.log('[Quick Test] WindowOutput created with ptr:', windowPtr);
+
+      console.log('[Quick Test] Connecting nodes...', imagePtr, '->', windowPtr);
+      await Vortex.connect(imagePtr, 0, windowPtr, 0);
+      console.log('[Quick Test] Image→Window pipeline created successfully!');
+      console.log('[Quick Test] Now click Play to see test pattern');
+    } catch (error) {
+      console.error('[Quick Test] Error creating Image→Window:', error);
+    }
+  }, []);
   const quickStreamToWindow = useCallback(async () => {
-    const add = (window as any).__GraphPanelAddNode as (t: string, x?: number, y?: number) => Promise<void> | void;
-    if (!add) return;
+    try {
+      console.log('[Quick] Starting Stream→Window creation...');
+      
+      const add = (window as any).__GraphPanelAddNode as
+        (t: string, x?: number, y?: number) => Promise<number>;
+      if (!add) {
+        console.error('[Quick] __GraphPanelAddNode not available');
+        return;
+      }
 
-    // создаём две ноды рядом
-    // ptr вернётся внутри add, но для связи нам нужны ptr — получим через бэкенд свойство выбранной ноды?
-    // Проще — после создания мы запросим последние props через инспекторные вызовы.
-    // Для детерминированности — будем вызывать connect из бэкенда по id, которые мы уже знаем, если у тебя есть метод.
-    // В текущем MVP — просто создадим, а соединить можно вручную (или заработает ConnectNodesAsync ниже).
-    (window as any).__GraphPanelAddNode?.('StreamInput', 200, 200);
-    (window as any).__GraphPanelAddNode?.('WindowOutput', 520, 220);
+      console.log('[Quick] Creating StreamInput node...');
+      const streamPtr = await add('StreamInput', 200, 200);
+      console.log('[Quick] StreamInput created with ptr:', streamPtr);
 
-    // Если на бэке есть ConnectNodesAsync, попробуем автоконнектить.
-    // Мы не знаем ptr вновь созданных нод здесь напрямую — обычно их лучше хранить в состоянии GraphPanel.
-    // Для MVP оставим соединение вручную; при необходимости позже добавим обмен событиями.
+      console.log('[Quick] Creating WindowOutput node...');
+      const windowPtr = await add('WindowOutput', 520, 220);
+      console.log('[Quick] WindowOutput created with ptr:', windowPtr);
+
+      console.log('[Quick] Connecting nodes...', streamPtr, '->', windowPtr);
+      await Vortex.connect(streamPtr, 0, windowPtr, 0);
+      console.log('[Quick] Stream→Window pipeline created successfully!');
+    } catch (error) {
+      console.error('[Quick] Error creating Stream→Window:', error);
+    }
+  }, []);
+
+  const quickStreamToWindowWithVideo = useCallback(async () => {
+    try {
+      console.log('[Quick Video] Starting Stream→Window with video...');
+      
+      const add = (window as any).__GraphPanelAddNode as
+        (t: string, x?: number, y?: number) => Promise<number>;
+      if (!add) {
+        console.error('[Quick Video] __GraphPanelAddNode not available');
+        return;
+      }
+
+      // Ask user for video file path
+      const videoPath = prompt('Enter path to video file or stream URL:', 'C:\\path\\to\\video.mp4');
+      if (!videoPath) {
+        console.log('[Quick Video] User cancelled video selection');
+        return;
+      }
+
+      console.log('[Quick Video] Creating StreamInput node...');
+      const streamPtr = await add('StreamInput', 200, 200);
+      console.log('[Quick Video] StreamInput created with ptr:', streamPtr);
+
+      console.log('[Quick Video] Setting stream_url to:', videoPath);
+      await Vortex.setNodeProperty(streamPtr, 'stream_url', videoPath);
+
+      console.log('[Quick Video] Creating WindowOutput node...');
+      const windowPtr = await add('WindowOutput', 520, 220);
+      console.log('[Quick Video] WindowOutput created with ptr:', windowPtr);
+
+      console.log('[Quick Video] Connecting nodes...', streamPtr, '->', windowPtr);
+      await Vortex.connect(streamPtr, 0, windowPtr, 0);
+      console.log('[Quick Video] Stream→Window pipeline created successfully!');
+      console.log('[Quick Video] Now click Play button to start video playback');
+    } catch (error) {
+      console.error('[Quick Video] Error creating Stream→Window with video:', error);
+    }
   }, []);
 
   return (
@@ -48,6 +121,12 @@ export function AppShell() {
         <button onClick={quickStreamToWindow} style={{ marginLeft: 12, padding: '6px 12px', borderRadius: 6, background: '#222', color: '#ddd', border: '1px solid #2a2a2a' }}>
           Quick: Stream→Window
         </button>
+        <button onClick={quickStreamToWindowWithVideo} style={{ padding: '6px 12px', borderRadius: 6, background: '#2a4a2a', color: '#ddd', border: '1px solid #2a2a2a' }}>
+          Video: Stream→Window
+        </button>
+        <button onClick={quickTestPattern} style={{ padding: '6px 12px', borderRadius: 6, background: '#1a3a3a', color: '#ddd', border: '1px solid #2a2a2a' }}>
+          Test: Image→Window
+        </button>
       </div>
 
       <div style={{ borderRight: '1px solid #2a2a2a', background: '#0c0c0c' }}>
@@ -59,6 +138,7 @@ export function AppShell() {
       </div>
 
       <div style={{ borderLeft: '1px solid #2a2a2a', background: '#0c0c0c' }}>
+        <div className="p-2 font-semibold" style={{ padding: 8 }}>Inspector</div>
         <InspectorPanel selectedPtr={selectedPtr} />
       </div>
     </div>

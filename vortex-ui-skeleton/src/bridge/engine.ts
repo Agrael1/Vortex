@@ -1,42 +1,12 @@
-// src/bridge/engine.ts
+import { Vortex } from './vortex';
+
 type CEFAny = any;
-
-function ensureVortexProxy() {
-  if ((window as any).Vortex) return (window as any).Vortex;
-
-  (window as any).vortexCall = (method: string, ...args: any[]) =>
-    (window as any).cefQuery?.({ request: JSON.stringify({ method, args }) });
-
-  (window as any).vortexCallAsync = (method: string, ...args: any[]) =>
-    new Promise((resolve, reject) => {
-      (window as any).cefQuery?.({
-        request: JSON.stringify({ async: true, method, args }),
-        onSuccess: (r: string) => resolve(r),
-        onFailure: (_code: number, msg: string) => reject(new Error(msg)),
-      });
-    });
-
-  (window as any).Vortex = new Proxy(
-    {},
-    {
-      get(_t, k) {
-        const name = String(k);
-        if (name.endsWith('Async')) {
-          return (...args: any[]) => (window as any).vortexCallAsync(name, ...args);
-        }
-        return (...args: any[]) => (window as any).vortexCall(name, ...args);
-      },
-    }
-  );
-
-  return (window as any).Vortex;
-}
 
 export type NodeTypeItem = {
   type?: string;
   category?: string;
   icon?: string;
-  // остальные поля из сериализованного info — как есть
+  // remaining fields from serialized info — as is
   [k: string]: any;
 };
 
@@ -55,7 +25,8 @@ export type PropSpec = {
 export type PropSchema = { properties: PropSpec[] };
 
 class CefEngine {
-  private V = ensureVortexProxy();
+  // Using unified bridge from vortex.ts
+  private V = Vortex;
 
   // --- helpers ---
   private parseJSON<T = any>(v: any): T | undefined {
@@ -70,7 +41,7 @@ class CefEngine {
   }
 
   private normalizeDict<T = any>(dictLike: any): Record<string, T> {
-    // В CEF может прийти строка JSON всего словаря ИЛИ объект, где значения — строки JSON
+    // In CEF we might get JSON string of entire dict OR object where values are JSON strings
     const out: Record<string, T> = {};
     const raw = this.parseJSON<Record<string, any>>(dictLike) ?? dictLike;
 
@@ -83,11 +54,11 @@ class CefEngine {
     return out;
   }
 
-  // --- API, 1:1 с App::_message_handlers_disp ---
+  // --- API, 1:1 matching App::_message_handlers_disp ---
   async getNodeTypes(): Promise<Record<string, NodeTypeItem>> {
-    const r = await this.V.GetNodeTypesAsync();
+    const r = await this.V.getNodeTypes();
     const dict = this.normalizeDict<NodeTypeItem>(r);
-    // проставим поле type на всякий случай
+    // set type field just in case
     for (const [k, v] of Object.entries(dict)) {
       (v as any).type ??= k;
     }
@@ -95,45 +66,45 @@ class CefEngine {
   }
 
   async createNode(typeName: string): Promise<number> {
-    const ptr = await this.V.CreateNodeAsync(typeName);
+    const ptr = await this.V.createNode(typeName);
     return Number(ptr);
   }
 
   async getNodeProperties(nodePtr: number): Promise<PropSchema> {
-    const s = await this.V.GetNodePropertiesAsync(nodePtr);
+    const s = await this.V.getNodeProperties(nodePtr);
     const parsed = this.parseJSON<PropSchema>(s);
     return parsed ?? { properties: [] };
   }
 
   setNodePropertyByName(nodePtr: number, name: string, jsonValue: any) {
-    this.V.SetNodePropertyByName(nodePtr, name, JSON.stringify(jsonValue));
+    this.V.setNodeProperty(nodePtr, name, JSON.stringify(jsonValue));
   }
 
   setNodeProperty(nodePtr: number, index: number, jsonValue: any) {
-    this.V.SetNodeProperty(nodePtr, index, JSON.stringify(jsonValue));
+    this.V.setNodeProperty(nodePtr, index, JSON.stringify(jsonValue));
   }
 
   async connect(l: number, lo: number, r: number, ri: number): Promise<boolean> {
-    const ok = await this.V.ConnectNodesAsync(l, lo, r, ri);
+    const ok = await this.V.connect(l, lo, r, ri);
     return String(ok) === 'true' || ok === true;
   }
 
   disconnect(l: number, lo: number, r: number, ri: number) {
-    this.V.DisconnectNodes(l, lo, r, ri);
+    this.V.disconnect(l, lo, r, ri);
   }
 
   removeNode(ptr: number) {
-    this.V.RemoveNode(ptr);
+    this.V.removeNode(ptr);
   }
 
   play() {
-    this.V.Play();
+    this.V.play();
   }
   stop() {
-    this.V.Stop();
+    this.V.stop();
   }
 
-  // событие от C++: App::OnNodeUpdate -> SendUIMessage("node_update", ...)
+  // event from C++: App::OnNodeUpdate -> SendUIMessage("node_update", ...)
   onNodeUpdate(cb: (nodePtr: number, propIndex: number, value: any) => void) {
     (window as any).addEventListener?.('cef-message', (ev: CEFAny) => {
       const { name, args } = ev.detail || {};

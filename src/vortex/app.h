@@ -236,11 +236,11 @@ private:
         CefRefPtr<CefDictionaryValue> ret = CefDictionaryValue::Create();
 
         for (const auto& [name, info] : node_types) {
-            // name — std::string или std::string_view
+            // name — std::string or std::string_view
             std::string key(name);
-            std::string value = serialize(info); // JSON/строка
+            std::string value = serialize(info); // JSON/string
             ret->SetString(CefString(key), CefString(value));
-            // можно и так: ret->SetString(CefString(key), value);
+            // alternative: ret->SetString(CefString(key), value);
         }
 
         _ui_app.SendUIReturn(std::move(ret));

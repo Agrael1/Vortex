@@ -176,7 +176,7 @@ if(VORTEX_WITH_NDI)
       endif()
       target_link_libraries(VortexLib PUBLIC Processing.NDI.Lib.x64)
     else()
-      message(FATAL_ERROR "VORTEX_WITH_NDI=ON, но NDI::NDI не найден и NDI_SDK_DIR не задан.")
+      message(FATAL_ERROR "VORTEX_WITH_NDI=ON, but NDI::NDI not found and NDI_SDK_DIR not set.")
     endif()
   endif()
 else()
@@ -207,8 +207,8 @@ target_compile_options(${PROJECT_NAME} PRIVATE
   $<$<CXX_COMPILER_ID:Clang>:-Wno-interference-size>
 )
 
-# --- UI: копируем собранный фронтенд в runtime/ui ---
-# Поддерживаем и rc/ui, и rc/
+# --- UI: copy built frontend to runtime/ui ---
+# Support both rc/ui and rc/ directories
 set(VORTEX_UI_SRC "")
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rc/ui/index.html")
@@ -235,16 +235,16 @@ else()
   )
 endif()
 
-# зависимости
+# dependencies
 add_dependencies(${PROJECT_NAME} shaders vortex_ui_copy)
 
-# Встраиваем манифесты ОДИН РАЗ и ТОЛЬКО если файлы есть
+# Embed manifests ONCE and ONLY if files exist
 if (WIN32)
   set(MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/rc")
   set(APP_MAN "${MANIFEST_PATH}/${PROJECT_NAME}.exe.manifest")
   set(COMP_MAN "${MANIFEST_PATH}/compatibility.manifest")
   if (EXISTS "${APP_MAN}" AND EXISTS "${COMP_MAN}")
-    # CMake может знать путь к mt.exe как CMAKE_MT_EXECUTABLE (в VS toolset).
+    # CMake can know the path to mt.exe as CMAKE_MT_EXECUTABLE (in VS toolset).
     if (NOT CMAKE_MT_EXECUTABLE)
       set(CMAKE_MT_EXECUTABLE mt.exe)
     endif()
@@ -282,7 +282,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 target_compile_options(${PROJECT_NAME} PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus /wd5050>)
 
-# ---- WHOLEARCHIVE для регистрации нод ----
+# ---- WHOLEARCHIVE for node registration ----
 if (MSVC)
   target_link_options(${PROJECT_NAME} PRIVATE "/WHOLEARCHIVE:VortexLib")
   target_link_libraries(${PROJECT_NAME} PUBLIC libcef_dll_wrapper VortexLib)
@@ -303,7 +303,7 @@ if (WIN32)
   FFMPEG_COPY_DLL(${PROJECT_NAME})
 endif()
 
-# Копирование ресурсов CEF
+# Copy CEF resources
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           "${CEF_SOURCE_DIR}/Resources"
@@ -316,7 +316,7 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
           $<TARGET_FILE_DIR:${PROJECT_NAME}>
 )
 
-# Копирование NDI DLL (если включен NDI)
+# Copy NDI DLL (if NDI is enabled)
 if (WIN32 AND VORTEX_WITH_NDI)
   set(_ndi_dll "")
   if(DEFINED ENV{NDI_SDK_DIR})

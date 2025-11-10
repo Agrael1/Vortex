@@ -20,24 +20,20 @@ import { Vortex } from "@/bridge/vortex";
 export const DND_TYPE = "application/x-vortex-node-type";
 const idFromPtr = (ptr: number) => String(ptr);
 
-// данные ноды
 type RFNodeData = { label: string; ptr: number };
-// типы ноды/ребра для state
 type RFNode = Node<RFNodeData>;
 type RFEdge = Edge;
 
 type Props = { onSelectPtr(ptr: number | null): void };
 
 function GraphInner({ onSelectPtr }: Props) {
-  // <<< ВАЖНО: передаём тип НОДЫ (RFNode), не массив и не RFNodeData
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
   const rf = useReactFlow();
-
   const [spawn, setSpawn] = useState({ x: 120, y: 120 });
 
   const addNode = useCallback(
-    async (type: string, pos?: { x: number; y: number }) => {
+    async (type: string, pos?: { x: number; y: number }): Promise<number> => {
       const ptr = await Vortex.createNode(type);
       const id = idFromPtr(ptr);
       const position = pos ?? spawn;
@@ -60,10 +56,12 @@ function GraphInner({ onSelectPtr }: Props) {
       setNodes((nds) => nds.concat(n));
       setSpawn((s) => ({ x: s.x + 40, y: s.y + 40 }));
       onSelectPtr(ptr);
+      return ptr;
     },
     [onSelectPtr, setNodes, spawn]
   );
 
+  // access from AppShell (and console) - now returns ptr
   useEffect(() => {
     (window as any).__GraphPanelAddNode = (
       type: string,

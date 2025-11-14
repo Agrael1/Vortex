@@ -113,6 +113,8 @@ export const Vortex = {
       return call('SetNodeProperty', ptr, keyOrIndex, value);
     }
   },
+  setNodePropertyByName: (ptr: number, name: string, value: any) =>
+          call('SetNodePropertyByName', ptr, name, value),
   removeNode:       (ptr: number) => call('RemoveNode', ptr),
   disconnect:       (src: number, srcIdx: number, dst: number, dstIdx: number) =>
                      call('DisconnectNodes', src, srcIdx, dst, dstIdx),

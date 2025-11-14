@@ -18,7 +18,30 @@ bool vortex::ui::VortexResourceHandler::Open(CefRefPtr<CefRequest> request, bool
     if (!ext.empty() && ext.front() == '.') {
         ext.erase(ext.begin());
     }
-    _mime_type = CefGetMimeType(ext);
+    auto mime = CefGetMimeType(ext);
+    if (!mime.empty()) {
+        _mime_type = mime.ToString();
+    } else {
+        if (ext == "js" || ext == "mjs") {
+            _mime_type = "text/javascript";
+        } else if (ext == "css") {
+            _mime_type = "text/css";
+        } else if (ext == "json") {
+            _mime_type = "application/json";
+        } else if (ext == "wasm") {
+            _mime_type = "application/wasm";
+        } else if (ext == "svg") {
+            _mime_type = "image/svg+xml";
+        } else if (ext == "png") {
+            _mime_type = "image/png";
+        } else if (ext == "jpg" || ext == "jpeg") {
+            _mime_type = "image/jpeg";
+        } else if (ext == "mp4") {
+            _mime_type = "video/mp4";
+        } else {
+            _mime_type = "application/octet-stream";
+        }
+    }
     _file_stream.open(path, std::ios::binary);
     if (!_file_stream.is_open()) {
         vortex::error("VortexResourceHandler::Open: Failed to open resource file: {}", path.string());

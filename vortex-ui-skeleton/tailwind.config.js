@@ -15,6 +15,12 @@ export default {
         input: 'hsl(240 3.7% 15.9%)',
         card: 'hsl(240 10% 3.9%)',
         'card-foreground': 'hsl(0 0% 98%)',
+        ui: {
+          bg: '#080b12',
+          panel: '#111a26',
+          border: '#1f2a3a',
+          accent: '#60a5fa',
+        },
       },
       borderRadius: {
         xl: '0.75rem',

@@ -378,6 +378,11 @@ cmake-build-*/
 /ui/node_modules/
 /ui/dist/
 
+# Generated runtime assets
+/rc/assets/
+/rc/ui/assets/
+/vortex-ui-skeleton/dist/assets/
+
 # VS Code settings
 .vscode/
 

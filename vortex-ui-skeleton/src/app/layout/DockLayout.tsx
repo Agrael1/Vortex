@@ -1,10 +1,12 @@
 import 'react-mosaic-component/react-mosaic-component.css'
-import React, { useMemo, useState } from 'react'
-import { Mosaic, MosaicWindow, getLeaves, MosaicNode } from 'react-mosaic-component'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Mosaic, MosaicWindow, MosaicNode } from 'react-mosaic-component'
 import { GraphPanel } from '../panels/GraphPanel'
 import { InspectorPanel } from '../panels/InspectorPanel'
-import { LibraryPanel } from '../panels/LibraryPanel'
+import { NodeLibraryPanel } from '../panels/NodeLibraryPanel'
 import { ConsolePanel } from '../panels/ConsolePanel'
+import { AppHeader } from '../components/AppHeader'
+import { engine, type LastProject } from '@/app/services/ipc/cefBridge'
 
 type PanelId = 'graph' | 'inspector' | 'library' | 'console'
 
@@ -25,8 +27,33 @@ const DEFAULT_TREE: MosaicNode<PanelId> = {
   splitPercentage: 20
 }
 
+const createDefaultTree = (): MosaicNode<PanelId> =>
+  JSON.parse(JSON.stringify(DEFAULT_TREE)) as MosaicNode<PanelId>
+
+const LAYOUT_STORAGE_PREFIX = 'vortex.editor.layout'
+
+const getLayoutStorageKey = (projectPath: string | null | undefined) =>
+  `${LAYOUT_STORAGE_PREFIX}:${projectPath && projectPath.length ? projectPath : 'default'}`
+
+const loadLayout = (projectPath: string | null | undefined): MosaicNode<PanelId> | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    const stored = window.localStorage.getItem(getLayoutStorageKey(projectPath))
+    if (!stored) return null
+    const parsed = JSON.parse(stored)
+    if (!parsed || typeof parsed !== 'object') return null
+    return parsed as MosaicNode<PanelId>
+  } catch (error) {
+    console.warn('[DockLayout] Failed to load layout from storage', error)
+    return null
+  }
+}
+
 export function DockLayout() {
-  const [tree, setTree] = useState<MosaicNode<PanelId> | null>(DEFAULT_TREE)
+  const initialProjectRef = useRef(engine.getLastProject()?.path ?? 'default')
+  const [layoutKey, setLayoutKey] = useState<string>(initialProjectRef.current)
+  const [tree, setTree] = useState<MosaicNode<PanelId> | null>(() => loadLayout(initialProjectRef.current) ?? createDefaultTree())
+  const [selectedPtr, setSelectedPtr] = useState<number | null>(null)
 
   const TITLE: Record<PanelId,string> = {
     graph: 'Graph',
@@ -35,28 +62,60 @@ export function DockLayout() {
     console: 'Console',
   }
 
-  const RENDER = useMemo(() => (id: PanelId) => {
-    switch (id) {
-      case 'graph': return <GraphPanel />
-      case 'inspector': return <InspectorPanel />
-      case 'library': return <LibraryPanel />
-      case 'console': return <ConsolePanel />
+  const onCreateNode = useCallback((typeName: string) => {
+    (window as any).__GraphPanelAddNode?.(typeName);
+  }, []);
+
+  const handleResetLayout = useCallback(() => {
+    setTree(createDefaultTree())
+  }, [])
+
+  useEffect(() => {
+    const off = engine.on('lastProject:updated', (payload) => {
+      const detail = payload as LastProject | null
+      const nextKey = detail?.path ?? 'default'
+      setLayoutKey((current) => (current === nextKey ? current : nextKey))
+    })
+
+    return () => {
+      off?.()
     }
   }, [])
 
+  useEffect(() => {
+    const stored = loadLayout(layoutKey)
+    setTree(stored ?? createDefaultTree())
+    setSelectedPtr(null)
+  }, [layoutKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const key = getLayoutStorageKey(layoutKey)
+
+    if (!tree) {
+      window.localStorage.removeItem(key)
+      return
+    }
+
+    try {
+      window.localStorage.setItem(key, JSON.stringify(tree))
+    } catch (error) {
+      console.warn('[DockLayout] Failed to persist layout', error)
+    }
+  }, [layoutKey, tree])
+
+  const RENDER = useMemo(() => (id: PanelId) => {
+    switch (id) {
+      case 'graph': return <GraphPanel onSelectPtr={setSelectedPtr} />
+      case 'inspector': return <InspectorPanel selectedPtr={selectedPtr} />
+      case 'library': return <NodeLibraryPanel onCreate={onCreateNode} />
+      case 'console': return <ConsolePanel />
+    }
+  }, [selectedPtr, onCreateNode])
+
   return (
     <div className="w-screen h-screen flex flex-col">
-      <header className="h-10 border-b border-ui-border bg-ui-panel flex items-center px-3 justify-between">
-        <div className="flex items-center gap-3">
-          <strong>Vortex</strong>
-          <span className="opacity-70 text-sm">File</span>
-          <span className="opacity-70 text-sm">Edit</span>
-          <span className="opacity-70 text-sm">View</span>
-          <span className="opacity-70 text-sm">Window</span>
-          <span className="opacity-70 text-sm">Help</span>
-        </div>
-        <div className="text-xs opacity-70">FPS: 60 • GPU: DX12</div>
-      </header>
+      <AppHeader onResetLayout={handleResetLayout} />
       <div className="flex-1">
         <Mosaic<PanelId>
           renderTile={(id, path) => (

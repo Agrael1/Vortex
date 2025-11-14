@@ -1,5 +1,36 @@
 #include <vortex/ui/ui_app.h>
 #include <include/cef_browser.h>
+#include <include/cef_dialog_handler.h>
+
+namespace {
+class FileDialogCallback : public CefRunFileDialogCallback
+{
+public:
+    using ResultHandler = std::function<void(std::vector<std::filesystem::path>)>;
+
+    explicit FileDialogCallback(ResultHandler handler)
+        : _handler(std::move(handler))
+    {
+    }
+
+    void OnFileDialogDismissed(const std::vector<CefString>& file_paths) override
+    {
+        std::vector<std::filesystem::path> paths;
+        paths.reserve(file_paths.size());
+        for (const auto& file : file_paths) {
+            paths.emplace_back(file.ToString());
+        }
+
+        if (_handler) {
+            _handler(std::move(paths));
+        }
+    }
+
+private:
+    ResultHandler _handler;
+    IMPLEMENT_REFCOUNTING(FileDialogCallback);
+};
+} // namespace
 
 #if defined(SDL_PLATFORM_LINUX)
 #include <X11/Xlib.h>
@@ -102,5 +133,74 @@ void vortex::ui::UIApp::ResizeCEFBrowser(int width, int height)
 
         // Notify CEF of the resize
         host->WasResized();
+    }
+}
+
+void vortex::ui::UIApp::ShowOpenFileDialog(const std::vector<std::string>& filters,
+                                           std::function<void(std::vector<std::filesystem::path>)> callback)
+{
+    if (!_cef_client) {
+        if (callback) {
+            callback({});
+        }
+        return;
+    }
+
+    if (auto* browser = _cef_client->GetBrowser()) {
+        auto host = browser->GetHost();
+        if (!host) {
+            if (callback) {
+                callback({});
+            }
+            return;
+        }
+
+        std::vector<CefString> cef_filters;
+        cef_filters.reserve(filters.size());
+        for (const auto& filter : filters) {
+            cef_filters.emplace_back(filter);
+        }
+
+        // cef_file_dialog_mode_t does not expose named constants via the C++ alias.
+        constexpr auto kOpenDialogMode = static_cast<CefBrowserHost::FileDialogMode>(0); // FILE_DIALOG_OPEN
+
+        host->RunFileDialog(kOpenDialogMode,
+                CefString("Open project"),
+                CefString(),
+                cef_filters,
+                new FileDialogCallback(std::move(callback)));
+    } else if (callback) {
+        callback({});
+    }
+}
+
+void vortex::ui::UIApp::ShowSelectFolderDialog(std::function<void(std::vector<std::filesystem::path>)> callback)
+{
+    if (!_cef_client) {
+        if (callback) {
+            callback({});
+        }
+        return;
+    }
+
+    if (auto* browser = _cef_client->GetBrowser()) {
+        auto host = browser->GetHost();
+        if (!host) {
+            if (callback) {
+                callback({});
+            }
+            return;
+        }
+
+        // Value 2 corresponds to FILE_DIALOG_OPEN_FOLDER in cef_file_dialog_mode_t.
+        constexpr auto kFolderDialogMode = static_cast<CefBrowserHost::FileDialogMode>(2);
+
+        host->RunFileDialog(kFolderDialogMode,
+            CefString("Select project folder"),
+                CefString(),
+                {},
+                new FileDialogCallback(std::move(callback)));
+    } else if (callback) {
+        callback({});
     }
 }

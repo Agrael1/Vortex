@@ -113,10 +113,15 @@ void vortex::graph::GraphModel::SetNodePropertyByName(uintptr_t node_ptr,
                                                       std::string_view value,
                                                       bool notify_ui)
 {
+    vortex::info("GraphModel: Setting property '{}' to '{}' for node {}", name, value, node_ptr);
     if (auto* node = GetNode(node_ptr)) {
         auto [index, type] = node->GetPropertyDesc(name);
+        vortex::info("GraphModel: Property found at index {} with type {}", index, (int)type);
         node->SetProperty(index, value, notify_ui);
         UpdateIfStatic(node); // Update the node if it is static, dynamic nodes update every frame
+        vortex::info("GraphModel: Property set successfully");
+    } else {
+        vortex::warn("GraphModel: Node {} not found", node_ptr);
     }
 }
 

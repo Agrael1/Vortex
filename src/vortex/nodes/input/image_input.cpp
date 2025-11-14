@@ -66,36 +66,27 @@ vortex::ImageInputLazy::ImageInputLazy(const vortex::Graphics& gfx)
 void vortex::ImageInput::Update(const vortex::Graphics& gfx)
 {
     // Load the texture from the image path if it has changed
-    if (path_changed && !image_path.empty()) {
-        wis::Result res = wis::success;
-        auto result = codec::CodecFFmpeg::LoadTexture(gfx, image_path);
-        if (!result) {
-            vortex::error("ImageInput: Failed to load texture from path: {}. Error: {}", image_path, result.error().message());
-            image_path = ""; // Clear the path if loading failed
-            path_changed = false; // Reset the path changed flag
-            return; // Skip rendering if texture loading failed
+    if (path_changed) {
+        if (!image_path.empty()) {
+            // Load texture from file
+            wis::Result res = wis::success;
+            auto result = codec::CodecFFmpeg::LoadTexture(gfx, image_path);
+            if (!result) {
+                vortex::error("ImageInput: Failed to load texture from path: {}. Error: {}", image_path, result.error().message());
+                image_path = ""; // Clear the path if loading failed
+                path_changed = false; // Reset the path changed flag
+                return; // Skip rendering if texture loading failed
+            }
+
+            _texture = std::move(result.value()); // Store the loaded texture
+            _texture_resource = _texture.CreateShaderResource(gfx);
+            
+            vortex::info("ImageInput: Successfully loaded texture from: {}", image_path);
+        } else {
+            // When no image path is specified, we don't need to create a texture
+            // Just mark the path as processed so we don't retry
+            vortex::info("ImageInput: No image_path specified, will render test color");
         }
-
-        _texture = std::move(result.value()); // Store the loaded texture
-        _texture_resource = _texture.CreateShaderResource(gfx);
-
-        auto cmd_list = gfx.GetDevice().CreateCommandList(res, wis::QueueType::Graphics);
-        // Update state to shader resource
-        std::ignore = cmd_list.Reset();
-        cmd_list.TextureBarrier({
-                                        .sync_before = wis::BarrierSync::None,
-                                        .sync_after = wis::BarrierSync::None,
-                                        .access_before = wis::ResourceAccess::NoAccess,
-                                        .access_after = wis::ResourceAccess::NoAccess,
-                                        .state_before = wis::TextureState::Undefined,
-                                        .state_after = wis::TextureState::ShaderResource,
-                                },
-                                _texture.Get());
-
-        cmd_list.Close();
-        wis::CommandListView views[]{ cmd_list };
-        gfx.GetMainQueue().ExecuteCommandLists(views, 1);
-        gfx.WaitForGPU(); // Ensure the texture is ready for rendering
 
         path_changed = false; // Reset the path changed flag after loading
     }
@@ -105,8 +96,15 @@ bool vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPro
 {
     // Check if the texture is valid before rendering
     if (!_texture || _texture.GetSize().width == 0 || _texture.GetSize().height == 0) {
-        //vortex::info("ImageInput: Texture is not valid or has zero size.");
-        return false; // Skip rendering if texture is not valid
+        static auto last_log_time = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_log_time > std::chrono::seconds(2)) {
+            vortex::info("ImageInput: No valid texture loaded (image_path: '{}'), skipping render", image_path);
+            last_log_time = now;
+        }
+        
+        // Simple approach - just return false, no complex rendering
+        return false;
     }
 
     wis::RenderPassRenderTargetDesc target_desc{

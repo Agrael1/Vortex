@@ -1,57 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root { color-scheme: dark; }
 html, body, #root { height: 100%; margin: 0; }
-body { font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial; background: #111; color: #ddd; }
+body { font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial; background: #0c111b; color: #d0d4df; }
 
 * { box-sizing: border-box; }
 
-.border { border: 1px solid #333; }
-.border-l { border-left: 1px solid #333; }
-.border-r { border-right: 1px solid #333; }
-.border-b { border-bottom: 1px solid #333; }
-.bg-black\/30 { background: rgba(0,0,0,.30); }
-
-.p-2 { padding: .5rem; }
-.px-2 { padding-left: .5rem; padding-right: .5rem; }
-.py-1 { padding-top: .25rem; padding-bottom: .25rem; }
-.rounded { border-radius: 6px; }
-.space-y-1 > * + * { margin-top: .25rem; }
-.space-y-2 > * + * { margin-top: .5rem; }
-.text-sm { font-size: 12px; }
-.text-xs { font-size: 11px; }
-.opacity-60 { opacity: .6; }
-.opacity-70 { opacity: .7; }
-.font-semibold { font-weight: 600; }
-.cursor-pointer { cursor: pointer; }
-.w-full { width: 100%; }
-.h-full { height: 100%; }
-.min-h-0 { min-height: 0; }
-.overflow-auto { overflow: auto; }
-.overflow-hidden { overflow: hidden; }
-.relative { position: relative; }
-.absolute { position: absolute; }
-.grid { display: grid; }
-.col-span-3 { grid-column: span 3 / span 3; }
-.flex { display: flex; }
-.items-center { align-items: center; }
-.gap-2 { gap: .5rem; }
-.mx-2 { margin-left: .5rem; margin-right: .5rem; }
-
 /* buttons */
 .btn {
-  border: 1px solid #3a3a3a;
-  background: #1b1b1b;
+  border: 1px solid rgba(86, 104, 133, 0.5);
+  background: rgba(17, 24, 39, 0.85);
   border-radius: 6px;
   padding: .35rem .6rem;
-  color: #ddd;
+  color: #e0e6f0;
   cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
-.btn:hover { filter: brightness(1.15); }
+.btn:hover { filter: brightness(1.1); }
 
 /* inputs */
-input[type="text"], input[type="number"] {
-  color: #ddd;
-  border: 1px solid #333;
-  background: rgba(0,0,0,.35);
-  border-radius: 6px;
-  height: 26px;
+input[type="text"],
+input[type="number"],
+input[type="search"],
+input[type="password"],
+select,
+textarea {
+  color: #e4e8f5;
+  border: 1px solid rgba(86, 104, 133, 0.45);
+  background: rgba(15, 21, 32, 0.65);
+  border-radius: 8px;
+  min-height: 32px;
 }

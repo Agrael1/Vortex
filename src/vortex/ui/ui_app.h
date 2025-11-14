@@ -3,6 +3,9 @@
 #include <vortex/ui/sdl.h>
 #include <vortex/ui/value.h>
 #include <optional>
+#include <functional>
+#include <filesystem>
+#include <vector>
 
 namespace vortex::ui {
 class UIApp
@@ -60,6 +63,10 @@ public:
     {
         return _cef_client;
     }
+
+    void ShowOpenFileDialog(const std::vector<std::string>& filters,
+                            std::function<void(std::vector<std::filesystem::path>)> callback);
+    void ShowSelectFolderDialog(std::function<void(std::vector<std::filesystem::path>)> callback);
 
     template<typename... Args>
     void SendUIMessage(std::u16string_view message_name, Args&&... args)

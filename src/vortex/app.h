@@ -13,6 +13,7 @@
 #include <vortex/util/term/input.h>
 #include <filesystem>
 #include <fstream>
+#include <vector>
 
 namespace vortex {
 struct AppExitControl {
@@ -303,6 +304,28 @@ private:
     }
     void Play() { _model.Play(); }
     void Stop() { _model.Stop(); }
+    void ShowOpenProjectDialog()
+    {
+        std::vector<std::string> filters{ "*.vortex", "*.json", "*.*" };
+
+        _ui_app.ShowOpenFileDialog(filters, [this](std::vector<std::filesystem::path> paths) {
+            if (!paths.empty()) {
+                _ui_app.SendUIReturn(paths.front().string());
+            } else {
+                _ui_app.SendUIReturn();
+            }
+        });
+    }
+    void ShowSelectFolderDialog()
+    {
+        _ui_app.ShowSelectFolderDialog([this](std::vector<std::filesystem::path> paths) {
+            if (!paths.empty()) {
+                _ui_app.SendUIReturn(paths.front().string());
+            } else {
+                _ui_app.SendUIReturn();
+            }
+        });
+    }
 
 private:
     // Thunk for node update observer
@@ -372,6 +395,8 @@ private:
         {            u"AddKeyframe",           ui::MessageDispatch<&App::AddKeyframe>::Dispatch },
         {                   u"Play",                  ui::MessageDispatch<&App::Play>::Dispatch },
         {                   u"Stop",                  ui::MessageDispatch<&App::Stop>::Dispatch },
+        { u"ShowOpenProjectDialogAsync", ui::MessageDispatch<&App::ShowOpenProjectDialog>::Dispatch },
+        { u"ShowSelectFolderDialogAsync", ui::MessageDispatch<&App::ShowSelectFolderDialog>::Dispatch },
     };
 
 private:

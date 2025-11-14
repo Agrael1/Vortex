@@ -37,8 +37,7 @@ public:
         info.size_bytes = wis::aligned_size(desc_count * info.descriptor_size_bytes,
                                             info.table_alignment_bytes);
 
-        assert(_info.size_bytes >= info.size_bytes &&
-               "Not enough space in the descriptor buffer!");
+        assert(_info.size_bytes >= info.size_bytes && "Not enough space in the descriptor buffer!");
 
         // Advance current offset
         _info.offset_bytes += info.size_bytes;
@@ -65,10 +64,49 @@ public:
         _desc_buffer->WriteSampler(_info.offset_bytes, index, std::move(sampler));
     }
 
+    void WriteRWBuffer(uint32_t index,
+                       wis::BufferView buffer,
+                       uint32_t stride,
+                       uint32_t element_count) noexcept
+    {
+        assert(_desc_buffer != nullptr);
+        assert(index * _info.descriptor_size_bytes < _info.size_bytes);
+        assert(!_info.is_sampler_table && "Cannot write RW buffer to sampler table!");
+        _desc_buffer->WriteRWStructuredBuffer(_info.offset_bytes,
+                                              index,
+                                              std::move(buffer),
+                                              stride,
+                                              element_count,
+                                              0);
+    }
+
     void BindOffset(const vortex::Graphics& gfx,
                     wis::CommandList& cmd_list,
                     wis::RootSignatureView root,
                     uint32_t root_table_index) const noexcept;
+    void BindComputeOffset(const vortex::Graphics& gfx,
+                           wis::CommandList& cmd_list,
+                           wis::RootSignatureView root,
+                           uint32_t root_table_index) const noexcept;
+
+private:
+#ifdef VORTEX_DX12
+    void DX12SetComputeDescriptorTableOffset(wis::DX12CommandListView cmd_list,
+                                             wis::DX12RootSignatureView root_signature,
+                                             uint32_t root_table_index,
+                                             wis::DX12DescriptorBufferGPUView buffer,
+                                             uint32_t table_aligned_byte_offset) const noexcept
+    {
+        auto handle = std::get<0>(buffer);
+        auto* list = reinterpret_cast<ID3D12GraphicsCommandList*>(std::get<0>(cmd_list));
+        uint32_t root_table_offset = std::get<2>(
+                root_signature); // offset of the root table in the root signature (after push
+                                 // constants and push desriptors)
+        list->SetComputeRootDescriptorTable(
+                root_table_offset + root_table_index,
+                CD3DX12_GPU_DESCRIPTOR_HANDLE(handle, table_aligned_byte_offset));
+    }
+#endif
 
 private:
     wis::DescriptorBuffer* _desc_buffer = nullptr;

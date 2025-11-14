@@ -193,11 +193,11 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx,
     desc_buffer.BindBuffers(gfx, cmd_list);
     cmd_list.TextureBarrier(
             {
-                    .sync_before = wis::BarrierSync::Copy,
+                    .sync_before = wis::BarrierSync::Compute,
                     .sync_after = wis::BarrierSync::RenderTarget,
-                    .access_before = wis::ResourceAccess::CopySource,
+                    .access_before = wis::ResourceAccess::ShaderResource,
                     .access_after = wis::ResourceAccess::RenderTarget,
-                    .state_before = wis::TextureState::CopySource,
+                    .state_before = wis::TextureState::ShaderResource,
                     .state_after = wis::TextureState::RenderTarget,
             },
             current_texture);
@@ -208,20 +208,8 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx,
         return false;
     }
 
-    // Close the render target
-    cmd_list.TextureBarrier(
-            {
-                    .sync_before = wis::BarrierSync::RenderTarget,
-                    .sync_after = wis::BarrierSync::Copy,
-                    .access_before = wis::ResourceAccess::RenderTarget,
-                    .access_after = wis::ResourceAccess::CopySource,
-                    .state_before = wis::TextureState::RenderTarget,
-                    .state_after = wis::TextureState::CopySource,
-            },
-            current_texture);
-
     // Copy the current texture to the staging buffer (it will be presented next time)
-    _swapchain.CopyToStagingBuffer(_command_lists[current_texture_index]);
+    _swapchain.CopyToStagingBuffer(gfx, _command_lists[current_texture_index], probe.descriptor_buffer);
 
     // End the command list
     if (!cmd_list.Close()) {

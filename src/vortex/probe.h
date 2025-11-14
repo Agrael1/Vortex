@@ -34,5 +34,6 @@ struct AudioProbe {
 struct RenderPassForwardDesc {
     wis::RenderTargetView current_rt_view;
     wis::Size2D output_size; // Viewport
+    wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Format of the render target
 };
 } // namespace vortex

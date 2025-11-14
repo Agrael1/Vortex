@@ -39,9 +39,9 @@ vortex::DescriptorBuffer::DescriptorBuffer(const vortex::Graphics& gfx,
 
     // Create descriptor buffer
     _desc_buffer = desc_ext.CreateDescriptorBuffer(result,
-                                                      wis::DescriptorHeapType::Descriptor,
-                                                      wis::DescriptorMemory::ShaderVisible,
-                                                      _desc_info.size_bytes);
+                                                   wis::DescriptorHeapType::Descriptor,
+                                                   wis::DescriptorMemory::ShaderVisible,
+                                                   _desc_info.size_bytes);
     if (!vortex::success(result)) {
         vortex::error("DescriptorBuffer: Failed to create descriptor buffer: {}", result.error);
         return;
@@ -86,9 +86,9 @@ void vortex::DescriptorBuffer::BindOffsets(
 }
 
 void vortex::DescriptorBufferView::BindOffset(const vortex::Graphics& gfx,
-                                                     wis::CommandList& cmd_list,
-                                                     wis::RootSignatureView root,
-                                                     uint32_t root_table_index) const noexcept
+                                              wis::CommandList& cmd_list,
+                                              wis::RootSignatureView root,
+                                              uint32_t root_table_index) const noexcept
 {
     assert(_desc_buffer != nullptr);
     auto& desc_ext = gfx.GetDescriptorBufferExtension();
@@ -97,4 +97,18 @@ void vortex::DescriptorBufferView::BindOffset(const vortex::Graphics& gfx,
                                       root_table_index,
                                       *_desc_buffer,
                                       _info.offset_bytes);
+}
+
+void vortex::DescriptorBufferView::BindComputeOffset(const vortex::Graphics& gfx,
+                                                     wis::CommandList& cmd_list,
+                                                     wis::RootSignatureView root,
+                                                     uint32_t root_table_index) const noexcept
+{
+    assert(_desc_buffer != nullptr);
+    auto& desc_ext = gfx.GetDescriptorBufferExtension();
+    DX12SetComputeDescriptorTableOffset(cmd_list,
+                                        root,
+                                        root_table_index,
+                                        *_desc_buffer,
+                                        _info.offset_bytes);
 }

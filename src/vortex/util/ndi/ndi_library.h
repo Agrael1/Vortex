@@ -30,26 +30,22 @@ public:
     }
 };
 
-
 #ifdef NDI_AVAILABLE
 constexpr inline NDIlib_FourCC_video_type_e GetNDIFormat(wis::DataFormat format) noexcept
 {
     switch (format) {
     case wis::DataFormat::RGBA8Unorm:
-        return NDIlib_FourCC_video_type_RGBA;
+        return NDIlib_FourCC_video_type_UYVY; // Use UYVY for better NDI performance
     case wis::DataFormat::BGRA8Unorm:
-        return NDIlib_FourCC_video_type_BGRA;
+        return NDIlib_FourCC_video_type_UYVY; // Use UYVY for better NDI performance
     default:
-        return NDIlib_FourCC_video_type_RGBA;
+        return NDIlib_FourCC_video_type_UYVY;
     }
 }
 
 struct NDISendInstance {
     NDISendInstance() = default;
-    NDISendInstance(std::string_view name)
-    {
-        instance = CreateSendInstance(name);
-    }
+    NDISendInstance(std::string_view name) { instance = CreateSendInstance(name); }
     NDISendInstance(const NDISendInstance&) = delete;
     NDISendInstance& operator=(const NDISendInstance&) = delete;
     NDISendInstance(NDISendInstance&& other) noexcept
@@ -68,20 +64,11 @@ struct NDISendInstance {
         }
         return *this;
     }
-    ~NDISendInstance()
-    {
-        Reset();
-    }
+    ~NDISendInstance() { Reset(); }
 
 public:
-    operator NDIlib_send_instance_t() const noexcept
-    {
-        return instance;
-    }
-    operator bool() const noexcept
-    {
-        return instance != nullptr;
-    }
+    operator NDIlib_send_instance_t() const noexcept { return instance; }
+    operator bool() const noexcept { return instance != nullptr; }
     void Reset()
     {
         if (instance) {

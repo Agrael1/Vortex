@@ -3,7 +3,6 @@
 #include <vortex/graph/connection.h>
 #include <vortex/graph/output_scheduler.h>
 #include <vortex/anim/animation.h>
-#include <vortex/sync/timeline.h>
 #include <vortex/probe.h>
 #include <atomic>
 #include <unordered_set>

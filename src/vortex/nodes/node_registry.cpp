@@ -10,6 +10,7 @@
 #include <vortex/nodes/filter/blend.h>
 #include <vortex/nodes/filter/select.h>
 #include <vortex/nodes/filter/transform.h>
+#include <vortex/nodes/filter/color_correction.h>
 
 void vortex::RegisterHardwareNodes()
 {
@@ -23,4 +24,5 @@ void vortex::RegisterHardwareNodes()
     vortex::Blend::RegisterNode();
     vortex::Select::RegisterNode();
     vortex::Transform::RegisterNode();
+    vortex::ColorCorrection::RegisterNode();
 }

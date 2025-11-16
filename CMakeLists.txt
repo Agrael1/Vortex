@@ -65,6 +65,10 @@ PUBLIC
   "src/vortex/nodes/filter/blend.h"
   "src/vortex/nodes/filter/blend.cpp"
   "src/vortex/nodes/filter/select.h"
+  "src/vortex/nodes/filter/transform.h" 
+  "src/vortex/nodes/filter/transform.cpp"
+  "src/vortex/nodes/filter/color_correction.h"
+  "src/vortex/nodes/filter/color_correction.cpp"
   "src/vortex/nodes/node_registry.h"
  
   "src/vortex/codec/ffmpeg/types.h" 
@@ -78,7 +82,7 @@ PUBLIC
   "src/vortex/codec/ffmpeg/codec_ffmpeg.cpp" 
  
   "src/vortex/sync/wall_clock.h"
-  "src/vortex/sync/timeline.h"
+  
  
   "src/vortex/ui/sdl.h"
   "src/vortex/ui/sdl.cpp"
@@ -119,7 +123,7 @@ PUBLIC
   "src/vortex/util/interp/interpolation.h" 
   "src/vortex/util/interp/easing.h" 
   "src/vortex/util/interp/vector.h"
- "src/vortex/anim/keyframe.h" "src/vortex/anim/keyframe.cpp" "src/vortex/anim/property_track.h" "src/vortex/anim/property_track.cpp" "src/vortex/anim/animation_clip.h" "src/vortex/anim/animation_clip.cpp" "src/vortex/util/deserialize.h" "src/vortex/nodes/filter/transform.h" "src/vortex/nodes/filter/transform.cpp" "src/vortex/nodes/node_registry.cpp")
+ "src/vortex/anim/keyframe.h" "src/vortex/anim/keyframe.cpp" "src/vortex/anim/property_track.h" "src/vortex/anim/property_track.cpp" "src/vortex/anim/animation_clip.h" "src/vortex/anim/animation_clip.cpp" "src/vortex/util/deserialize.h" "src/vortex/nodes/filter/transform.h" "src/vortex/nodes/filter/transform.cpp" "src/vortex/nodes/node_registry.cpp" "src/vortex/util/lut_loader.cpp" "src/vortex/util/lut_loader.h")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES

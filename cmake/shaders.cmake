@@ -9,6 +9,7 @@ set(SHADER_SOURCES
 	"src/vortex/shaders/transform.ps.hlsl"
 	"src/vortex/shaders/transform.vs.hlsl"
 	"src/vortex/shaders/rgba_to_uyvy.cs.hlsl"
+	"src/vortex/shaders/color_correction.ps.hlsl"
 )
 
 target_sources(shaders PRIVATE ${SHADER_SOURCES})

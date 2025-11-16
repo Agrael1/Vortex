@@ -23,7 +23,6 @@ public:
 // Rendering a texture from an image input node onto a 2D plane in the scene graph.
 class ImageInput : public vortex::graph::NodeImpl<ImageInput, ImageInputProperties, 0, 1>
 {
-    
 public:
     ImageInput(const vortex::Graphics& gfx, SerializedProperties props)
         : ImplClass(props), _lazy_data(gfx)

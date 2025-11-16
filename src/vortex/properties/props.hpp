@@ -24,6 +24,19 @@ struct enum_traits<BlendMode> {
         "Darken", "Lighten",  "Difference", "Overlay",
     };
 };
+enum class LUTInterp {
+    Nearest, //<UI name - Nearest:
+    Trilinear, //<UI name - Trilinear:
+    Tetrahedral, //<UI name - Tetrahedral:
+};
+template<>
+struct enum_traits<LUTInterp> {
+    static constexpr std::string_view strings[] = {
+        "Nearest",
+        "Trilinear",
+        "Tetrahedral",
+    };
+};
 struct BlendProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
@@ -483,6 +496,213 @@ public:
                         self.GetRotation()),
                 vortex::reflection_traits<decltype(self.GetCropRect())>::serialize(
                         self.GetCropRect()));
+    }
+    template<typename Self>
+    bool Deserialize(this Self& self, SerializedProperties values, bool notify)
+    {
+        for (auto&& [k, v] : values) {
+            uint32_t index = self.property_map.at(k).first;
+            self.SetPropertyStub(index, v, notify);
+        }
+        return true;
+    }
+};
+struct ColorCorrectionProperties {
+    UpdateNotifier notifier; // Callback for property change notifications
+public:
+    static constexpr auto
+            property_map = frozen::make_unordered_map<frozen::string,
+                                                      std::pair<uint32_t, PropertyType>>({
+                    { "brightness",  { 0, PropertyType::I32 } },
+                    {   "contrast",  { 1, PropertyType::I32 } },
+                    { "saturation",  { 2, PropertyType::I32 } },
+                    {        "lut", { 3, PropertyType::Path } },
+                    { "lut_interp",  { 4, PropertyType::I32 } },
+    });
+    float brightness{ 0.0 }; //<UI attribute - brightness
+    float contrast{ 1.0 }; //<UI attribute - contrast
+    float saturation{ 1.0 }; //<UI attribute - saturation
+    std::string lut{}; //<UI attribute - LUT Path: Path to 3D LUT file.
+    LUTInterp lut_interp{ LUTInterp::Trilinear }; //<UI attribute - LUT Interpolation: Algorithm for
+                                                  //LUT interpolation.
+
+public:
+    void SetBrightness(float value, bool notify = false)
+    {
+        brightness = value;
+        if (notify) {
+            NotifyPropertyChange(0);
+        }
+    }
+    void SetContrast(float value, bool notify = false)
+    {
+        contrast = value;
+        if (notify) {
+            NotifyPropertyChange(1);
+        }
+    }
+    void SetSaturation(float value, bool notify = false)
+    {
+        saturation = value;
+        if (notify) {
+            NotifyPropertyChange(2);
+        }
+    }
+    void SetLut(std::string_view value, bool notify = false)
+    {
+        lut = std::string{ value };
+        if (notify) {
+            NotifyPropertyChange(3);
+        }
+    }
+    void SetLutInterp(LUTInterp value, bool notify = false)
+    {
+        lut_interp = value;
+        if (notify) {
+            NotifyPropertyChange(4);
+        }
+    }
+
+public:
+    template<typename Self>
+    float GetBrightness(this Self&& self)
+    {
+        return self.brightness;
+    }
+    template<typename Self>
+    float GetContrast(this Self&& self)
+    {
+        return self.contrast;
+    }
+    template<typename Self>
+    float GetSaturation(this Self&& self)
+    {
+        return self.saturation;
+    }
+    template<typename Self>
+    std::string_view GetLut(this Self&& self)
+    {
+        return self.lut;
+    }
+    template<typename Self>
+    LUTInterp GetLutInterp(this Self&& self)
+    {
+        return self.lut_interp;
+    }
+
+public:
+    template<typename Self>
+    void NotifyPropertyChange(this Self&& self, uint32_t index)
+    {
+        if (!self.notifier) {
+            vortex::error("ColorCorrection: Notifier callback is not set.");
+            return; // No notifier set, cannot notify
+        }
+        switch (index) {
+        case 0:
+            self.notifier(0, vortex::reflection_traits<float>::serialize(self.GetBrightness()));
+            break;
+        case 1:
+            self.notifier(1, vortex::reflection_traits<float>::serialize(self.GetContrast()));
+            break;
+        case 2:
+            self.notifier(2, vortex::reflection_traits<float>::serialize(self.GetSaturation()));
+            break;
+        case 3:
+            self.notifier(3, vortex::reflection_traits<std::string_view>::serialize(self.GetLut()));
+            break;
+        case 4:
+            self.notifier(4, vortex::reflection_traits<LUTInterp>::serialize(self.GetLutInterp()));
+            break;
+        default:
+            vortex::error("ColorCorrection: Invalid property index for notification: {}", index);
+            break;
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
+                self.SetBrightness(out_value, notify);
+            }
+            break;
+        case 1:
+            if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
+                self.SetContrast(out_value, notify);
+            }
+            break;
+        case 2:
+            if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
+                self.SetSaturation(out_value, notify);
+            }
+            break;
+        case 3:
+            if (std::string_view out_value;
+                vortex::reflection_traits<std::string_view>::deserialize(&out_value, value)) {
+                self.SetLut(out_value, notify);
+            }
+            break;
+        case 4:
+            if (LUTInterp out_value;
+                vortex::reflection_traits<LUTInterp>::deserialize(&out_value, value)) {
+                self.SetLutInterp(out_value, notify);
+            }
+            break;
+        default:
+            vortex::error("ColorCorrection: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         const PropertyValue& value,
+                         bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            self.SetBrightness(static_cast<float>(std::get<int32_t>(value)), notify);
+            break;
+        case 1:
+            self.SetContrast(static_cast<float>(std::get<int32_t>(value)), notify);
+            break;
+        case 2:
+            self.SetSaturation(static_cast<float>(std::get<int32_t>(value)), notify);
+            break;
+        case 3:
+            self.SetLut(std::get<std::string>(value), notify);
+            break;
+        case 4:
+            self.SetLutInterp(static_cast<LUTInterp>(std::get<int32_t>(value)), notify);
+            break;
+        default:
+            vortex::error("ColorCorrection: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+    template<typename Self>
+    std::string Serialize(this Self& self)
+    {
+        return std::format(
+                "{{ brightness: {}, contrast: {}, saturation: {}, lut: {}, lut_interp: {}}}",
+                vortex::reflection_traits<decltype(self.GetBrightness())>::serialize(
+                        self.GetBrightness()),
+                vortex::reflection_traits<decltype(self.GetContrast())>::serialize(
+                        self.GetContrast()),
+                vortex::reflection_traits<decltype(self.GetSaturation())>::serialize(
+                        self.GetSaturation()),
+                vortex::reflection_traits<decltype(self.GetLut())>::serialize(self.GetLut()),
+                vortex::reflection_traits<decltype(self.GetLutInterp())>::serialize(
+                        self.GetLutInterp()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)

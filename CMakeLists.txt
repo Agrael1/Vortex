@@ -119,7 +119,7 @@ PUBLIC
   "src/vortex/util/interp/interpolation.h" 
   "src/vortex/util/interp/easing.h" 
   "src/vortex/util/interp/vector.h"
- "src/vortex/anim/keyframe.h" "src/vortex/anim/keyframe.cpp" "src/vortex/anim/property_track.h" "src/vortex/anim/property_track.cpp" "src/vortex/anim/animation_clip.h" "src/vortex/anim/animation_clip.cpp" "src/vortex/util/deserialize.h")
+ "src/vortex/anim/keyframe.h" "src/vortex/anim/keyframe.cpp" "src/vortex/anim/property_track.h" "src/vortex/anim/property_track.cpp" "src/vortex/anim/animation_clip.h" "src/vortex/anim/animation_clip.cpp" "src/vortex/util/deserialize.h" "src/vortex/nodes/filter/transform.h" "src/vortex/nodes/filter/transform.cpp" "src/vortex/nodes/node_registry.cpp")
 
 target_include_directories(VortexLib PUBLIC "src")
 set_target_properties(VortexLib PROPERTIES

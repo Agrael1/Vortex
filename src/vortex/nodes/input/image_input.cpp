@@ -23,7 +23,7 @@ vortex::ImageInputLazy::ImageInputLazy(const vortex::Graphics& gfx)
 
     // Load shaders for the image input node
     auto vertex_shader = gfx.LoadShader("shaders/basic.vs");
-    auto pixel_shader = gfx.LoadShader("shaders/image.ps");
+    auto pixel_shader = gfx.LoadShader("shaders/basic.ps");
 
     // Create a pipeline state for the image input node
     wis::GraphicsPipelineDesc pipeline_desc{
@@ -143,4 +143,18 @@ bool vortex::ImageInput::Evaluate(const vortex::Graphics& gfx, vortex::RenderPro
     // End the render pass
     cmd_list.EndRenderPass();
     return true;
+}
+
+void vortex::ImageInput::SetImagePath(std::string_view path, bool notify)
+{
+    if (GetImagePath() == path) {
+        return; // No change in path, skip setting
+    }
+    if (std::filesystem::exists(path)) {
+        ImageInputProperties::SetImagePath(path, notify);
+    } else {
+        vortex::error("ImageInput: Image path does not exist: {}", path);
+        ImageInputProperties::SetImagePath("", notify);
+    }
+    path_changed = true; // Mark that the path has changed
 }

@@ -7,13 +7,38 @@
 #include <functional>
 
 namespace vortex::ui {
-class Client : public CefImplements<Client, CefClient, CefLifeSpanHandler, CefDisplayHandler, CefRenderHandler>
+class Client : public CefImplements<Client,
+                                    CefClient,
+                                    CefLifeSpanHandler,
+                                    CefDisplayHandler,
+                                    CefRenderHandler>
 {
 public:
     using MessageHandler = std::function<bool(CefRefPtr<CefProcessMessage>)>;
     void OnAfterCreated(CefRefPtr<CefBrowser> browser) override
     {
         _browser = browser;
+
+        _browser->GetMainFrame()->ExecuteJavaScript(uR"(
+const Vortex = new Proxy({}, {
+    get(target, methodName) {
+        const methodStr = String(methodName);
+
+        // If method ends with 'Async', use vortexCallAsync
+        if (methodStr.endsWith('Async')) {
+            return function (...args) {
+                return vortexCallAsync(methodName, ...args);
+            };
+        }
+
+        // Return a function that calls vortexCall
+        return function (...args) {
+            return vortexCall(methodName, ...args);
+        };
+    }
+});)",
+                                                    "",
+                                                    0);
     }
 
 public:
@@ -29,10 +54,7 @@ public:
     {
         return this; // Return this client as the render handler
     }
-    CefBrowser* GetBrowser() noexcept
-    {
-        return _browser.get();
-    }
+    CefBrowser* GetBrowser() noexcept { return _browser.get(); }
 
     void BindMessageHandler(MessageHandler message_handler)
     {
@@ -74,7 +96,9 @@ public:
                                   CefProcessId source_process,
                                   CefRefPtr<CefProcessMessage> message) override
     {
-        vortex::info("Client::OnProcessMessageReceived: Received message from process {}: {}", reflect::enum_name(source_process), message->GetName().ToString());
+        vortex::info("Client::OnProcessMessageReceived: Received message from process {}: {}",
+                     reflect::enum_name(source_process),
+                     message->GetName().ToString());
         return _message_handler(std::move(message));
     }
 

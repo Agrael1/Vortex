@@ -2,93 +2,412 @@
 <html>
 <head>
     <link rel="icon" href="data:;base64,=" />
-    <title>CEF Two-Way Binding Example</title>
+    <title>Vortex Transform Test</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
             margin: 0;
-            background-color: #f5f5f5;
+            padding: 20px;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #252526;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        h1, h2 {
+            color: #ffffff;
+            margin-top: 0;
+        }
+
+        h2 {
+            font-size: 1.2em;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #3e3e42;
+            padding-bottom: 5px;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #9cdcfe;
+            font-size: 14px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            background-color: #3c3c3c;
+            border: 1px solid #555555;
+            border-radius: 4px;
+            color: #d4d4d4;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        input[type="number"]:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #007acc;
+        }
+
+        .inline-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .value-display {
+            display: inline-block;
+            margin-left: 10px;
+            color: #4ec9b0;
+            font-weight: bold;
+            min-width: 80px;
         }
 
         button {
             padding: 12px 24px;
             font-size: 16px;
-            background-color: #4CAF50;
+            background-color: #0e639c;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.3s;
-            margin-bottom: 20px;
+            margin: 5px;
         }
 
-            button:hover {
-                background-color: #45a049;
-            }
+        button:hover {
+            background-color: #1177bb;
+        }
 
-            button:active {
-                background-color: #3e8e41;
-            }
+        button:active {
+            background-color: #0d5a8c;
+        }
 
-        input {
-            padding: 10px;
-            font-size: 16px;
-            border: 1px solid #ddd;
+        button.success {
+            background-color: #4caf50;
+        }
+
+        button.success:hover {
+            background-color: #45a049;
+        }
+
+        button.danger {
+            background-color: #d32f2f;
+        }
+
+        button.danger:hover {
+            background-color: #c62828;
+        }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #3e3e42;
+        }
+
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #1e1e1e;
             border-radius: 4px;
-            width: 300px;
-            margin-bottom: 10px;
+            border-left: 4px solid #007acc;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
         }
 
-        .container {
-            background-color: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            text-align: center;
+        .status-line {
+            margin-bottom: 5px;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+        }
+
+        .slider-container input[type="range"] {
+            flex: 1;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Two-Way Binding Example</h2>
+        <h1>?? Vortex Transform Test</h1>
+        
+        <div class="button-group">
+            <button id="setupBtn" class="success">Setup Test Scene</button>
+            <button id="playBtn">Play</button>
+            <button id="stopBtn" class="danger">Stop</button>
+        </div>
 
-        <button id="myButton">Loading...</button>
+        <h2>Translation (pixels)</h2>
+        <div class="control-group">
+            <label>X: <span class="value-display" id="translationXValue">0</span></label>
+            <div class="slider-container">
+                <input type="range" id="translationX" min="-1000" max="1000" value="0" step="1">
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Y: <span class="value-display" id="translationYValue">0</span></label>
+            <div class="slider-container">
+                <input type="range" id="translationY" min="-1000" max="1000" value="0" step="1">
+            </div>
+        </div>
 
-        <p>Edit button text:</p>
-        <input type="text" id="textInput" placeholder="Enter new button text">
-        <button id="updateButton">Update Button Text</button>
+        <h2>Scale</h2>
+        <div class="control-group">
+            <label>X: <span class="value-display" id="scaleXValue">1.0</span></label>
+            <div class="slider-container">
+                <input type="range" id="scaleX" min="0.1" max="3.0" value="1.0" step="0.01">
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Y: <span class="value-display" id="scaleYValue">1.0</span></label>
+            <div class="slider-container">
+                <input type="range" id="scaleY" min="0.1" max="3.0" value="1.0" step="0.01">
+            </div>
+        </div>
+
+        <h2>Rotation</h2>
+        <div class="control-group">
+            <label>Angle (degrees): <span class="value-display" id="rotationValue">0</span></label>
+            <div class="slider-container">
+                <input type="range" id="rotation" min="-180" max="180" value="0" step="1">
+            </div>
+        </div>
+
+        <h2>Pivot Point (normalized 0-1)</h2>
+        <div class="control-group">
+            <label>X: <span class="value-display" id="pivotXValue">0.5</span></label>
+            <div class="slider-container">
+                <input type="range" id="pivotX" min="0" max="1" value="0.5" step="0.01">
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Y: <span class="value-display" id="pivotYValue">0.5</span></label>
+            <div class="slider-container">
+                <input type="range" id="pivotY" min="0" max="1" value="0.5" step="0.01">
+            </div>
+        </div>
+
+        <h2>Crop Rectangle (normalized 0-1)</h2>
+        <div class="inline-controls">
+            <div class="control-group">
+                <label>X</label>
+                <input type="number" id="cropX" min="0" max="1" value="0" step="0.01">
+            </div>
+            <div class="control-group">
+                <label>Y</label>
+                <input type="number" id="cropY" min="0" max="1" value="0" step="0.01">
+            </div>
+        </div>
+        <div class="inline-controls">
+            <div class="control-group">
+                <label>Width</label>
+                <input type="number" id="cropWidth" min="0" max="1" value="1" step="0.01">
+            </div>
+            <div class="control-group">
+                <label>Height</label>
+                <input type="number" id="cropHeight" min="0" max="1" value="1" step="0.01">
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="resetBtn">Reset All</button>
+        </div>
+
+        <div id="status">
+            <div class="status-line">Ready. Click "Setup Test Scene" to begin.</div>
+        </div>
     </div>
 
     <script>
-        // Elements
-        const button = document.getElementById('myButton');
-        const textInput = document.getElementById('textInput');
-        const updateButton = document.getElementById('updateButton');
+        // Store node IDs
+        let imageNode = null;
+        let transformNode = null;
+        let outputNode = null;
 
-        // Initialize with current value from C++
-        async function initializeUI() {
-            var nodes = await vortexCallAsync("GetNodeTypesAsync");
-            // nodes is a dictionary with string : json string pairs
-            // print the dictionary to console
-            console.log("Node Types:", JSON.stringify(nodes, null, 2));
+        // Status logging
+        function log(message, isError = false) {
+            const status = document.getElementById('status');
+            const line = document.createElement('div');
+            line.className = 'status-line';
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            if (isError) line.style.color = '#f48771';
+            status.appendChild(line);
+            status.scrollTop = status.scrollHeight;
         }
 
-        // Add on button click
-        button.addEventListener('click', async function () {
-            // Toggle between two states
-            var a = await vortexCallAsync("CreateNodeAsync", "ImageInput");
-            var b = await vortexCallAsync("GetNodePropertiesAsync", a);
+        // Setup test scene
+        async function setupScene() {
+            try {
+                log('Setting up test scene...');
+                
+                // Create nodes
+                imageNode = await Vortex.CreateNodeAsync("ImageInput");
+                transformNode = await Vortex.CreateNodeAsync("Transform");
+                outputNode = await Vortex.CreateNodeAsync("WindowOutput");
+                
+                log(`? Created ImageInput node (ID: ${imageNode})`);
+                log(`? Created Transform node (ID: ${transformNode})`);
+                log(`? Created WindowOutput node (ID: ${outputNode})`);
+                
+                // Configure image input
+                Vortex.SetNodePropertyByName(imageNode, "image_path", "ui/HDR.jpg");
+                log('? Set image path');
+                
+                // Configure output
+                Vortex.SetNodePropertyByName(outputNode, "name", "Transform Test");
+                Vortex.SetNodePropertyByName(outputNode, "window_size", "[1920,1080]");
+                Vortex.SetNodePropertyByName(outputNode, "framerate", "[60,1]");
+                log('? Configured output window');
+                
+                // Connect nodes: ImageInput -> Transform -> WindowOutput
+                await Vortex.ConnectNodesAsync(imageNode, 0, transformNode, 0);
+                await Vortex.ConnectNodesAsync(transformNode, 0, outputNode, 0);
+                log('? Connected nodes');
+                
+                log('? Scene setup complete! Adjust controls and press Play.');
+            } catch (error) {
+                log(`? Error setting up scene: ${error}`, true);
+                console.error(error);
+            }
+        }
 
-            button.textContent = a;
+        // Update transform property
+        function updateTransform() {
+            if (!transformNode) return;
+
+            const translation = `[${document.getElementById('translationX').value},${document.getElementById('translationY').value}]`;
+            const scale = `[${document.getElementById('scaleX').value},${document.getElementById('scaleY').value}]`;
+            const pivot = `[${document.getElementById('pivotX').value},${document.getElementById('pivotY').value}]`;
+            const rotation = document.getElementById('rotation').value;
+            const cropRect = `[${document.getElementById('cropX').value},${document.getElementById('cropY').value},${document.getElementById('cropWidth').value},${document.getElementById('cropHeight').value}]`;
+
+            Vortex.SetNodePropertyByName(transformNode, "translation", translation);
+            Vortex.SetNodePropertyByName(transformNode, "scale", scale);
+            Vortex.SetNodePropertyByName(transformNode, "pivot", pivot);
+            Vortex.SetNodePropertyByName(transformNode, "rotation", rotation);
+            Vortex.SetNodePropertyByName(transformNode, "crop_rect", cropRect);
+        }
+
+        // Update value displays
+        function updateValueDisplay(sliderId, displayId, precision = 0) {
+            const slider = document.getElementById(sliderId);
+            const display = document.getElementById(displayId);
+            const value = parseFloat(slider.value);
+            display.textContent = precision > 0 ? value.toFixed(precision) : Math.round(value);
+        }
+
+        // Setup event listeners for all controls
+        function setupEventListeners() {
+            // Translation
+            document.getElementById('translationX').addEventListener('input', (e) => {
+                updateValueDisplay('translationX', 'translationXValue', 0);
+                updateTransform();
+            });
+            document.getElementById('translationY').addEventListener('input', (e) => {
+                updateValueDisplay('translationY', 'translationYValue', 0);
+                updateTransform();
+            });
+
+            // Scale
+            document.getElementById('scaleX').addEventListener('input', (e) => {
+                updateValueDisplay('scaleX', 'scaleXValue', 2);
+                updateTransform();
+            });
+            document.getElementById('scaleY').addEventListener('input', (e) => {
+                updateValueDisplay('scaleY', 'scaleYValue', 2);
+                updateTransform();
+            });
+
+            // Rotation
+            document.getElementById('rotation').addEventListener('input', (e) => {
+                updateValueDisplay('rotation', 'rotationValue', 0);
+                updateTransform();
+            });
+
+            // Pivot
+            document.getElementById('pivotX').addEventListener('input', (e) => {
+                updateValueDisplay('pivotX', 'pivotXValue', 2);
+                updateTransform();
+            });
+            document.getElementById('pivotY').addEventListener('input', (e) => {
+                updateValueDisplay('pivotY', 'pivotYValue', 2);
+                updateTransform();
+            });
+
+            // Crop rectangle
+            ['cropX', 'cropY', 'cropWidth', 'cropHeight'].forEach(id => {
+                document.getElementById(id).addEventListener('change', updateTransform);
+            });
+
+            // Buttons
+            document.getElementById('setupBtn').addEventListener('click', setupScene);
+            document.getElementById('playBtn').addEventListener('click', () => {
+                Vortex.Play();
+                log('?? Playing');
+            });
+            document.getElementById('stopBtn').addEventListener('click', () => {
+                Vortex.Stop();
+                log('?? Stopped');
+            });
+            document.getElementById('resetBtn').addEventListener('click', resetControls);
+        }
+
+        // Reset all controls to defaults
+        function resetControls() {
+            document.getElementById('translationX').value = 0;
+            document.getElementById('translationY').value = 0;
+            document.getElementById('scaleX').value = 1.0;
+            document.getElementById('scaleY').value = 1.0;
+            document.getElementById('rotation').value = 0;
+            document.getElementById('pivotX').value = 0.5;
+            document.getElementById('pivotY').value = 0.5;
+            document.getElementById('cropX').value = 0;
+            document.getElementById('cropY').value = 0;
+            document.getElementById('cropWidth').value = 1;
+            document.getElementById('cropHeight').value = 1;
+
+            // Update displays
+            updateValueDisplay('translationX', 'translationXValue', 0);
+            updateValueDisplay('translationY', 'translationYValue', 0);
+            updateValueDisplay('scaleX', 'scaleXValue', 2);
+            updateValueDisplay('scaleY', 'scaleYValue', 2);
+            updateValueDisplay('rotation', 'rotationValue', 0);
+            updateValueDisplay('pivotX', 'pivotXValue', 2);
+            updateValueDisplay('pivotY', 'pivotYValue', 2);
+
+            updateTransform();
+            log('?? Reset to defaults');
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            log('UI initialized. Ready to test Transform node.');
         });
-
-        // Initialize the UI when the page loads
-        document.addEventListener('DOMContentLoaded', initializeUI);
     </script>
 </body>
 </html>

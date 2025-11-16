@@ -1,4 +1,5 @@
-struct PSQuadIn {
+struct PSQuadIn
+{
     float2 texcoord : TEXCOORD;
     float4 position : SV_POSITION;
 };

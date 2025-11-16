@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <registry>
+	
 	<!-- Enums -->
+	
 	<enum name="BlendMode">
 		<value name="Normal" ui_name="Normal" ui_desc="Standard alpha blending."/>
 		<value name="Multiply" ui_name="Multiply" ui_desc="Multiply colors together."/>
@@ -24,24 +26,23 @@
 	<node name="Select">
 		<property name="input_index" type="i32" default="0" ui_name="Input Index" ui_desc="Index of the input to select."/>
 	</node>
+	
+	<node name="Transform">
+		<property name="translation" type="f32x2" default="0.0,0.0" ui_name="Translation" ui_desc="Translation offset in pixels."/>
+		<property name="scale" type="f32x2" default="1.0,1.0" ui_name="Scale" ui_desc="Scaling factors."/>
+		<property name="pivot" type="f32x2" default="0.5,0.5" ui_name="Pivot Point" ui_desc="Pivot point for rotation and scaling (normalized coordinates 0-1)."/>
+		<property name="rotation" type="f32" default="0.0" ui_name="Rotation" ui_desc="Rotation angle in degrees."/>
+		<property name="crop_rect" type="rect" default="0.0,0.0,1.0,1.0" ui_name="Crop Rectangle" ui_desc="Crop rectangle (normalized coordinates 0-1)."/>
+	</node>
 
 	<!-- Input nodes -->
 
 	<node name="ImageInput">
 		<property name="image_path" type="path" ui_name="Image Path" ui_desc="Path to image file."/>
-		<property name="image_size" type="size" ui_name="Image Size" ui_desc="Size of the image in pixels."/>
-		<property name="origin" type="point" ui_name="Origin" ui_desc="Origin (Anchor) point of the image."/>
-		<property name="rotation_2d" type="f32" default="0.0" ui_name="Rotation (2D)" ui_desc="Rotation of the image in degrees."/>
-		<!--<property name="crop_rect" type="rect" disabled="true" ui_name="Crop Rectangle" ui_desc="Rectangle to crop the image."/>-->
 	</node>
 
 	<node name="StreamInput">
 		<property name="stream_url" type="u8string" ui_name="Stream URL" ui_desc="URL of the video stream."/>
-		<property name="stream_size" type="size" ui_name="Stream Size" ui_desc="Size of the video stream in pixels."/>
-		<property name="origin" type="point" ui_name="Origin" ui_desc="Origin (Anchor) point of the stream."/>
-		<property name="rotation_2d" type="f32" default="0.0" ui_name="Rotation (2D)" ui_desc="Rotation of the stream in degrees."/>
-
-		<!-- AV Settings -->
 		<property name="stream_buffering" type="i32" default="1000" ui_name="Buffering" ui_desc="Buffering time in milliseconds."/>
 	</node>
 
@@ -52,9 +53,11 @@
 		<property name="window_size" type="sizeu" default="1920,1080" ui_name="Window Size" ui_desc="Resolution of the output window."/>
 		<property name="framerate" type="vortex::ratio32_t" default="60,1" ui_name="Framerate" ui_desc="Framerate of the output window."/>
 	</node>
+	
 	<node name="NDIOutput">
 		<property name="name" type="u8string" default="&quot;Vortex NDI Output&quot;" ui_name="NDI Name" ui_desc="Name of the NDI stream."/>
 		<property name="window_size" type="sizeu" default="1920,1080" ui_name="Window Size" ui_desc="Resolution of the output window."/>
 		<property name="framerate" type="vortex::ratio32_t" default="60,1" ui_name="Framerate" ui_desc="Framerate of the output window."/>
 	</node>
+	
 </registry>

@@ -5,8 +5,9 @@ file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/bin/shaders")
 set(SHADER_SOURCES
 	"src/vortex/shaders/basic.vs.hlsl"
 	"src/vortex/shaders/basic.ps.hlsl"
-	"src/vortex/shaders/image.ps.hlsl"
 	"src/vortex/shaders/video.ps.hlsl"
+	"src/vortex/shaders/transform.ps.hlsl"
+	"src/vortex/shaders/transform.vs.hlsl"
 	"src/vortex/shaders/rgba_to_uyvy.cs.hlsl"
 )
 

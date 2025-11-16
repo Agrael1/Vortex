@@ -278,21 +278,231 @@ public:
         return true;
     }
 };
+struct TransformProperties {
+    UpdateNotifier notifier; // Callback for property change notifications
+public:
+    static constexpr auto
+            property_map = frozen::make_unordered_map<frozen::string,
+                                                      std::pair<uint32_t, PropertyType>>({
+                    { "translation", { 0, PropertyType::F32x2 } },
+                    {       "scale", { 1, PropertyType::F32x2 } },
+                    {       "pivot", { 2, PropertyType::F32x2 } },
+                    {    "rotation",   { 3, PropertyType::F32 } },
+                    {   "crop_rect",  { 4, PropertyType::Rect } },
+    });
+    DirectX::XMFLOAT2 translation{ 0.0, 0.0 }; //<UI attribute - Translation: Translation offset in
+                                               //pixels.
+    DirectX::XMFLOAT2 scale{ 1.0, 1.0 }; //<UI attribute - Scale: Scaling factors.
+    DirectX::XMFLOAT2 pivot{ 0.5, 0.5 }; //<UI attribute - Pivot Point: Pivot point for rotation and
+                                         //scaling (normalized coordinates 0-1).
+    float rotation{ 0.0 }; //<UI attribute - Rotation: Rotation angle in degrees.
+    DirectX::XMFLOAT4 crop_rect{ 0.0, 0.0, 1.0, 1.0 }; //<UI attribute - Crop Rectangle: Crop
+                                                       //rectangle (normalized coordinates 0-1).
+
+public:
+    void SetTranslation(DirectX::XMFLOAT2 value, bool notify = false)
+    {
+        translation = value;
+        if (notify) {
+            NotifyPropertyChange(0);
+        }
+    }
+    void SetScale(DirectX::XMFLOAT2 value, bool notify = false)
+    {
+        scale = value;
+        if (notify) {
+            NotifyPropertyChange(1);
+        }
+    }
+    void SetPivot(DirectX::XMFLOAT2 value, bool notify = false)
+    {
+        pivot = value;
+        if (notify) {
+            NotifyPropertyChange(2);
+        }
+    }
+    void SetRotation(float value, bool notify = false)
+    {
+        rotation = value;
+        if (notify) {
+            NotifyPropertyChange(3);
+        }
+    }
+    void SetCropRect(DirectX::XMFLOAT4 value, bool notify = false)
+    {
+        crop_rect = value;
+        if (notify) {
+            NotifyPropertyChange(4);
+        }
+    }
+
+public:
+    template<typename Self>
+    DirectX::XMFLOAT2 GetTranslation(this Self&& self)
+    {
+        return self.translation;
+    }
+    template<typename Self>
+    DirectX::XMFLOAT2 GetScale(this Self&& self)
+    {
+        return self.scale;
+    }
+    template<typename Self>
+    DirectX::XMFLOAT2 GetPivot(this Self&& self)
+    {
+        return self.pivot;
+    }
+    template<typename Self>
+    float GetRotation(this Self&& self)
+    {
+        return self.rotation;
+    }
+    template<typename Self>
+    DirectX::XMFLOAT4 GetCropRect(this Self&& self)
+    {
+        return self.crop_rect;
+    }
+
+public:
+    template<typename Self>
+    void NotifyPropertyChange(this Self&& self, uint32_t index)
+    {
+        if (!self.notifier) {
+            vortex::error("Transform: Notifier callback is not set.");
+            return; // No notifier set, cannot notify
+        }
+        switch (index) {
+        case 0:
+            self.notifier(
+                    0,
+                    vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetTranslation()));
+            break;
+        case 1:
+            self.notifier(1,
+                          vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetScale()));
+            break;
+        case 2:
+            self.notifier(2,
+                          vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetPivot()));
+            break;
+        case 3:
+            self.notifier(3, vortex::reflection_traits<float>::serialize(self.GetRotation()));
+            break;
+        case 4:
+            self.notifier(
+                    4,
+                    vortex::reflection_traits<DirectX::XMFLOAT4>::serialize(self.GetCropRect()));
+            break;
+        default:
+            vortex::error("Transform: Invalid property index for notification: {}", index);
+            break;
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         std::string_view value,
+                         bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            if (DirectX::XMFLOAT2 out_value;
+                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
+                self.SetTranslation(out_value, notify);
+            }
+            break;
+        case 1:
+            if (DirectX::XMFLOAT2 out_value;
+                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
+                self.SetScale(out_value, notify);
+            }
+            break;
+        case 2:
+            if (DirectX::XMFLOAT2 out_value;
+                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
+                self.SetPivot(out_value, notify);
+            }
+            break;
+        case 3:
+            if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
+                self.SetRotation(out_value, notify);
+            }
+            break;
+        case 4:
+            if (DirectX::XMFLOAT4 out_value;
+                vortex::reflection_traits<DirectX::XMFLOAT4>::deserialize(&out_value, value)) {
+                self.SetCropRect(out_value, notify);
+            }
+            break;
+        default:
+            vortex::error("Transform: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+
+public:
+    template<typename Self>
+    void SetPropertyStub(this Self&& self,
+                         uint32_t index,
+                         const PropertyValue& value,
+                         bool notify = false)
+    {
+        switch (index) {
+        case 0:
+            self.SetTranslation(std::get<DirectX::XMFLOAT2>(value), notify);
+            break;
+        case 1:
+            self.SetScale(std::get<DirectX::XMFLOAT2>(value), notify);
+            break;
+        case 2:
+            self.SetPivot(std::get<DirectX::XMFLOAT2>(value), notify);
+            break;
+        case 3:
+            self.SetRotation(std::get<float>(value), notify);
+            break;
+        case 4:
+            self.SetCropRect(std::get<DirectX::XMFLOAT4>(value), notify);
+            break;
+        default:
+            vortex::error("Transform: Invalid property index: {}", index);
+            break; // Invalid index, cannot set property
+        }
+    }
+    template<typename Self>
+    std::string Serialize(this Self& self)
+    {
+        return std::format(
+                "{{ translation: {}, scale: {}, pivot: {}, rotation: {}, crop_rect: {}}}",
+                vortex::reflection_traits<decltype(self.GetTranslation())>::serialize(
+                        self.GetTranslation()),
+                vortex::reflection_traits<decltype(self.GetScale())>::serialize(self.GetScale()),
+                vortex::reflection_traits<decltype(self.GetPivot())>::serialize(self.GetPivot()),
+                vortex::reflection_traits<decltype(self.GetRotation())>::serialize(
+                        self.GetRotation()),
+                vortex::reflection_traits<decltype(self.GetCropRect())>::serialize(
+                        self.GetCropRect()));
+    }
+    template<typename Self>
+    bool Deserialize(this Self& self, SerializedProperties values, bool notify)
+    {
+        for (auto&& [k, v] : values) {
+            uint32_t index = self.property_map.at(k).first;
+            self.SetPropertyStub(index, v, notify);
+        }
+        return true;
+    }
+};
 struct ImageInputProperties {
     UpdateNotifier notifier; // Callback for property change notifications
 public:
     static constexpr auto
             property_map = frozen::make_unordered_map<frozen::string,
                                                       std::pair<uint32_t, PropertyType>>({
-                    {  "image_path",  { 0, PropertyType::Path } },
-                    {  "image_size",  { 1, PropertyType::Size } },
-                    {      "origin", { 2, PropertyType::Point } },
-                    { "rotation_2d",   { 3, PropertyType::F32 } },
+                    { "image_path", { 0, PropertyType::Path } },
     });
     std::string image_path{}; //<UI attribute - Image Path: Path to image file.
-    DirectX::XMFLOAT2 image_size{}; //<UI attribute - Image Size: Size of the image in pixels.
-    DirectX::XMFLOAT2 origin{}; //<UI attribute - Origin: Origin (Anchor) point of the image.
-    float rotation_2d{ 0.0 }; //<UI attribute - Rotation (2D): Rotation of the image in degrees.
 
 public:
     void SetImagePath(std::string_view value, bool notify = false)
@@ -302,48 +512,12 @@ public:
             NotifyPropertyChange(0);
         }
     }
-    void SetImageSize(DirectX::XMFLOAT2 value, bool notify = false)
-    {
-        image_size = value;
-        if (notify) {
-            NotifyPropertyChange(1);
-        }
-    }
-    void SetOrigin(DirectX::XMFLOAT2 value, bool notify = false)
-    {
-        origin = value;
-        if (notify) {
-            NotifyPropertyChange(2);
-        }
-    }
-    void SetRotation2d(float value, bool notify = false)
-    {
-        rotation_2d = value;
-        if (notify) {
-            NotifyPropertyChange(3);
-        }
-    }
 
 public:
     template<typename Self>
     std::string_view GetImagePath(this Self&& self)
     {
         return self.image_path;
-    }
-    template<typename Self>
-    DirectX::XMFLOAT2 GetImageSize(this Self&& self)
-    {
-        return self.image_size;
-    }
-    template<typename Self>
-    DirectX::XMFLOAT2 GetOrigin(this Self&& self)
-    {
-        return self.origin;
-    }
-    template<typename Self>
-    float GetRotation2d(this Self&& self)
-    {
-        return self.rotation_2d;
     }
 
 public:
@@ -359,19 +533,6 @@ public:
             self.notifier(
                     0,
                     vortex::reflection_traits<std::string_view>::serialize(self.GetImagePath()));
-            break;
-        case 1:
-            self.notifier(
-                    1,
-                    vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetImageSize()));
-            break;
-        case 2:
-            self.notifier(
-                    2,
-                    vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetOrigin()));
-            break;
-        case 3:
-            self.notifier(3, vortex::reflection_traits<float>::serialize(self.GetRotation2d()));
             break;
         default:
             vortex::error("ImageInput: Invalid property index for notification: {}", index);
@@ -393,23 +554,6 @@ public:
                 self.SetImagePath(out_value, notify);
             }
             break;
-        case 1:
-            if (DirectX::XMFLOAT2 out_value;
-                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
-                self.SetImageSize(out_value, notify);
-            }
-            break;
-        case 2:
-            if (DirectX::XMFLOAT2 out_value;
-                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
-                self.SetOrigin(out_value, notify);
-            }
-            break;
-        case 3:
-            if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
-                self.SetRotation2d(out_value, notify);
-            }
-            break;
         default:
             vortex::error("ImageInput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -427,15 +571,6 @@ public:
         case 0:
             self.SetImagePath(std::get<std::string>(value), notify);
             break;
-        case 1:
-            self.SetImageSize(std::get<DirectX::XMFLOAT2>(value), notify);
-            break;
-        case 2:
-            self.SetOrigin(std::get<DirectX::XMFLOAT2>(value), notify);
-            break;
-        case 3:
-            self.SetRotation2d(std::get<float>(value), notify);
-            break;
         default:
             vortex::error("ImageInput: Invalid property index: {}", index);
             break; // Invalid index, cannot set property
@@ -444,15 +579,9 @@ public:
     template<typename Self>
     std::string Serialize(this Self& self)
     {
-        return std::format(
-                "{{ image_path: {}, image_size: {}, origin: {}, rotation_2d: {}}}",
-                vortex::reflection_traits<decltype(self.GetImagePath())>::serialize(
-                        self.GetImagePath()),
-                vortex::reflection_traits<decltype(self.GetImageSize())>::serialize(
-                        self.GetImageSize()),
-                vortex::reflection_traits<decltype(self.GetOrigin())>::serialize(self.GetOrigin()),
-                vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(
-                        self.GetRotation2d()));
+        return std::format("{{ image_path: {}}}",
+                           vortex::reflection_traits<decltype(self.GetImagePath())>::serialize(
+                                   self.GetImagePath()));
     }
     template<typename Self>
     bool Deserialize(this Self& self, SerializedProperties values, bool notify)
@@ -471,16 +600,9 @@ public:
             property_map = frozen::make_unordered_map<frozen::string,
                                                       std::pair<uint32_t, PropertyType>>({
                     {       "stream_url", { 0, PropertyType::U8string } },
-                    {      "stream_size",     { 1, PropertyType::Size } },
-                    {           "origin",    { 2, PropertyType::Point } },
-                    {      "rotation_2d",      { 3, PropertyType::F32 } },
-                    { "stream_buffering",      { 4, PropertyType::I32 } },
+                    { "stream_buffering",      { 1, PropertyType::I32 } },
     });
     std::string stream_url{}; //<UI attribute - Stream URL: URL of the video stream.
-    DirectX::XMFLOAT2 stream_size{}; //<UI attribute - Stream Size: Size of the video stream in
-                                     //pixels.
-    DirectX::XMFLOAT2 origin{}; //<UI attribute - Origin: Origin (Anchor) point of the stream.
-    float rotation_2d{ 0.0 }; //<UI attribute - Rotation (2D): Rotation of the stream in degrees.
     int32_t stream_buffering{ 1000 }; //<UI attribute - Buffering: Buffering time in milliseconds.
 
 public:
@@ -491,32 +613,11 @@ public:
             NotifyPropertyChange(0);
         }
     }
-    void SetStreamSize(DirectX::XMFLOAT2 value, bool notify = false)
-    {
-        stream_size = value;
-        if (notify) {
-            NotifyPropertyChange(1);
-        }
-    }
-    void SetOrigin(DirectX::XMFLOAT2 value, bool notify = false)
-    {
-        origin = value;
-        if (notify) {
-            NotifyPropertyChange(2);
-        }
-    }
-    void SetRotation2d(float value, bool notify = false)
-    {
-        rotation_2d = value;
-        if (notify) {
-            NotifyPropertyChange(3);
-        }
-    }
     void SetStreamBuffering(int32_t value, bool notify = false)
     {
         stream_buffering = value;
         if (notify) {
-            NotifyPropertyChange(4);
+            NotifyPropertyChange(1);
         }
     }
 
@@ -525,21 +626,6 @@ public:
     std::string_view GetStreamUrl(this Self&& self)
     {
         return self.stream_url;
-    }
-    template<typename Self>
-    DirectX::XMFLOAT2 GetStreamSize(this Self&& self)
-    {
-        return self.stream_size;
-    }
-    template<typename Self>
-    DirectX::XMFLOAT2 GetOrigin(this Self&& self)
-    {
-        return self.origin;
-    }
-    template<typename Self>
-    float GetRotation2d(this Self&& self)
-    {
-        return self.rotation_2d;
     }
     template<typename Self>
     int32_t GetStreamBuffering(this Self&& self)
@@ -562,20 +648,7 @@ public:
                     vortex::reflection_traits<std::string_view>::serialize(self.GetStreamUrl()));
             break;
         case 1:
-            self.notifier(
-                    1,
-                    vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetStreamSize()));
-            break;
-        case 2:
-            self.notifier(
-                    2,
-                    vortex::reflection_traits<DirectX::XMFLOAT2>::serialize(self.GetOrigin()));
-            break;
-        case 3:
-            self.notifier(3, vortex::reflection_traits<float>::serialize(self.GetRotation2d()));
-            break;
-        case 4:
-            self.notifier(4,
+            self.notifier(1,
                           vortex::reflection_traits<int32_t>::serialize(self.GetStreamBuffering()));
             break;
         default:
@@ -599,23 +672,6 @@ public:
             }
             break;
         case 1:
-            if (DirectX::XMFLOAT2 out_value;
-                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
-                self.SetStreamSize(out_value, notify);
-            }
-            break;
-        case 2:
-            if (DirectX::XMFLOAT2 out_value;
-                vortex::reflection_traits<DirectX::XMFLOAT2>::deserialize(&out_value, value)) {
-                self.SetOrigin(out_value, notify);
-            }
-            break;
-        case 3:
-            if (float out_value; vortex::reflection_traits<float>::deserialize(&out_value, value)) {
-                self.SetRotation2d(out_value, notify);
-            }
-            break;
-        case 4:
             if (int32_t out_value;
                 vortex::reflection_traits<int32_t>::deserialize(&out_value, value)) {
                 self.SetStreamBuffering(out_value, notify);
@@ -639,15 +695,6 @@ public:
             self.SetStreamUrl(std::get<std::string>(value), notify);
             break;
         case 1:
-            self.SetStreamSize(std::get<DirectX::XMFLOAT2>(value), notify);
-            break;
-        case 2:
-            self.SetOrigin(std::get<DirectX::XMFLOAT2>(value), notify);
-            break;
-        case 3:
-            self.SetRotation2d(std::get<float>(value), notify);
-            break;
-        case 4:
             self.SetStreamBuffering(std::get<int32_t>(value), notify);
             break;
         default:
@@ -659,15 +706,9 @@ public:
     std::string Serialize(this Self& self)
     {
         return std::format(
-                "{{ stream_url: {}, stream_size: {}, origin: {}, rotation_2d: {}, "
-                "stream_buffering: {}}}",
+                "{{ stream_url: {}, stream_buffering: {}}}",
                 vortex::reflection_traits<decltype(self.GetStreamUrl())>::serialize(
                         self.GetStreamUrl()),
-                vortex::reflection_traits<decltype(self.GetStreamSize())>::serialize(
-                        self.GetStreamSize()),
-                vortex::reflection_traits<decltype(self.GetOrigin())>::serialize(self.GetOrigin()),
-                vortex::reflection_traits<decltype(self.GetRotation2d())>::serialize(
-                        self.GetRotation2d()),
                 vortex::reflection_traits<decltype(self.GetStreamBuffering())>::serialize(
                         self.GetStreamBuffering()));
     }

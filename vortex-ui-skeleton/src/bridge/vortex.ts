@@ -45,7 +45,7 @@ function tryResolveBridge(): BridgeFn {
     };
   }
 
-  // 3) Proxy approach through CEF message system  
+  // 3) Proxy approach through CEF message system
   if (typeof w.VortexCall === 'undefined') {
     w.VortexCall = (method: string, ...args: any[]) => {
       if (typeof w.cefQuery === 'function') {
@@ -53,7 +53,11 @@ function tryResolveBridge(): BridgeFn {
           w.cefQuery({
             request: JSON.stringify({ method, args }),
             onSuccess: (resp: string) => {
-              try { resolve(JSON.parse(resp)); } catch { resolve(resp); }
+              try {
+                resolve(JSON.parse(resp));
+              } catch {
+                resolve(resp);
+              }
             },
             onFailure: (_: number, msg: string) => reject(new Error(msg)),
           });
@@ -72,19 +76,21 @@ function tryResolveBridge(): BridgeFn {
 async function ensureBridge(timeoutMs = 4000): Promise<BridgeFn> {
   if (_bridge) return _bridge;
   const t0 = Date.now();
-  
+
   console.log('[Bridge] Searching for bridge functions...');
-  console.log('[Bridge] Available window functions:', Object.getOwnPropertyNames(window).filter(name => typeof (window as any)[name] === 'function'));
-  
+  console.log(
+    '[Bridge] Available window functions:',
+    Object.getOwnPropertyNames(window).filter((name) => typeof (window as any)[name] === 'function'),
+  );
+
   while (Date.now() - t0 < timeoutMs) {
-    try { 
-      _bridge = tryResolveBridge(); 
+    try {
+      _bridge = tryResolveBridge();
       console.log('[Bridge] Bridge found successfully!');
-      return _bridge; 
-    }
-    catch (error) { 
+      return _bridge;
+    } catch (error) {
       console.log('[Bridge] Bridge not found, retrying...', error);
-      await new Promise(r => setTimeout(r, 50)); 
+      await new Promise((r) => setTimeout(r, 50));
     }
   }
   throw new Error('Vortex bridge not found');
@@ -93,29 +99,32 @@ async function ensureBridge(timeoutMs = 4000): Promise<BridgeFn> {
 async function call(name: string, ...args: any[]) {
   const br = await ensureBridge();
   const res = await br(name, ...args);
-  if (typeof res === 'string') { try { return JSON.parse(res); } catch {} }
+  if (typeof res === 'string') {
+    try {
+      return JSON.parse(res);
+    } catch (error) {
+      console.warn('[Bridge] Failed to parse response', { name, error });
+    }
+  }
   return res;
 }
 
 export const Vortex = {
-  play:  () => call('Play'),
-  stop:  () => call('Stop'),
+  play: () => call('Play'),
+  stop: () => call('Stop'),
 
-  getNodeTypes:    () => call('GetNodeTypesAsync'),
-  createNode:      (type: string) => call('CreateNodeAsync', type),
-  connect:         (src: number, srcIdx: number, dst: number, dstIdx: number) =>
-                    call('ConnectNodesAsync', src, srcIdx, dst, dstIdx),
+  getNodeTypes: () => call('GetNodeTypesAsync'),
+  createNode: (type: string) => call('CreateNodeAsync', type),
+  connect: (src: number, srcIdx: number, dst: number, dstIdx: number) => call('ConnectNodesAsync', src, srcIdx, dst, dstIdx),
   getNodeProperties: (ptr: number) => call('GetNodePropertiesAsync', ptr),
-  setNodeProperty:   (ptr: number, keyOrIndex: string | number, value: any) => {
+  setNodeProperty: (ptr: number, keyOrIndex: string | number, value: any) => {
     if (typeof keyOrIndex === 'string') {
       return call('SetNodePropertyByName', ptr, keyOrIndex, value);
     } else {
       return call('SetNodeProperty', ptr, keyOrIndex, value);
     }
   },
-  setNodePropertyByName: (ptr: number, name: string, value: any) =>
-          call('SetNodePropertyByName', ptr, name, value),
-  removeNode:       (ptr: number) => call('RemoveNode', ptr),
-  disconnect:       (src: number, srcIdx: number, dst: number, dstIdx: number) =>
-                     call('DisconnectNodes', src, srcIdx, dst, dstIdx),
+  setNodePropertyByName: (ptr: number, name: string, value: any) => call('SetNodePropertyByName', ptr, name, value),
+  removeNode: (ptr: number) => call('RemoveNode', ptr),
+  disconnect: (src: number, srcIdx: number, dst: number, dstIdx: number) => call('DisconnectNodes', src, srcIdx, dst, dstIdx),
 };

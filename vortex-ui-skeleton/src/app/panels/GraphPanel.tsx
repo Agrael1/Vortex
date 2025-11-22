@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from 'react';
 import {
   Background,
   Controls,
@@ -14,12 +14,18 @@ import {
   ReactFlowProvider,
   useReactFlow,
   Position,
-} from "@xyflow/react";
-import { Vortex } from "@/bridge/vortex";
-import { CustomNode, CustomNodeData } from "@/app/components/CustomNode";
-import { engine, type LastProject } from "@/app/services/ipc/cefBridge";
+} from '@xyflow/react';
+import type { DragEvent } from 'react';
+import type { NodeChange } from '@xyflow/react';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
+import { Vortex } from '@/bridge/vortex';
+import { CustomNode, CustomNodeData } from '@/app/components/CustomNode';
+import { graphSnapshotAtom } from '@state/atoms/project';
+import { selectedNodePtrAtom } from '@state/atoms/editor';
+import { useGraphCommands } from '@state/hooks/useGraphCommands';
+import type { GraphEdgeSnapshot, GraphNodeSnapshot, GraphSnapshot } from '@state/types';
 
-export const DND_TYPE = "application/x-vortex-node-type";
+export const DND_TYPE = 'application/x-vortex-node-type';
 const idFromPtr = (ptr: number) => String(ptr);
 
 type RFNode = Node<CustomNodeData>;
@@ -29,127 +35,87 @@ const nodeTypes = {
   custom: CustomNode,
 };
 
-type Props = { onSelectPtr(ptr: number | null): void };
-
-const GRAPH_STORAGE_PREFIX = 'vortex.editor.graph'
-
-type StoredNode = {
-  ptr: number
-  type: string
-  label: string
-  position: { x: number; y: number }
-}
-
-type StoredEdge = {
-  id: string
-  source: string
-  target: string
-  animated?: boolean
-}
-
-type StoredGraph = {
-  nodes: StoredNode[]
-  edges: StoredEdge[]
-}
-
-const getGraphStorageKey = (projectPath: string | null | undefined) =>
-  `${GRAPH_STORAGE_PREFIX}:${projectPath && projectPath.length ? projectPath : 'default'}`
-
-const toRFNode = (node: StoredNode): RFNode => ({
-  id: idFromPtr(node.ptr),
+const toRFNode = (node: GraphNodeSnapshot): RFNode => ({
+  id: node.id ?? idFromPtr(node.ptr ?? 0),
   type: 'custom',
   position: node.position ?? { x: 120, y: 120 },
-  data: { label: node.label ?? node.type, ptr: node.ptr, type: node.type },
+  data: {
+    label: node.label ?? node.type,
+    ptr: node.ptr ?? Number(node.id),
+    type: node.type,
+    props: node.props,
+  },
   sourcePosition: Position.Right,
   targetPosition: Position.Left,
-})
+});
 
-const toRFEdge = (edge: StoredEdge): RFEdge => ({
+const toRFEdge = (edge: GraphEdgeSnapshot): RFEdge => ({
   id: edge.id ?? `${edge.source}-${edge.target}`,
   source: edge.source,
   target: edge.target,
   animated: edge.animated ?? true,
-})
+});
 
-const loadGraphState = (projectPath: string | null | undefined): { nodes: RFNode[]; edges: RFEdge[] } => {
-  if (typeof window === 'undefined') return { nodes: [], edges: [] }
+const toSnapshotNode = (node: RFNode): GraphNodeSnapshot => ({
+  id: node.id,
+  type: node.data.type ?? node.data.label ?? 'Node',
+  label: node.data.label,
+  position: node.position ?? { x: 120, y: 120 },
+  ptr: Number.isFinite(node.data.ptr) ? Number(node.data.ptr) : undefined,
+  props: node.data.props && typeof node.data.props === 'object' ? (node.data.props as Record<string, any>) : undefined,
+});
 
-  try {
-    const stored = window.localStorage.getItem(getGraphStorageKey(projectPath))
-    if (!stored) return { nodes: [], edges: [] }
-    const parsed = JSON.parse(stored) as StoredGraph
+const toSnapshotEdge = (edge: RFEdge): GraphEdgeSnapshot => ({
+  id: edge.id,
+  source: edge.source,
+  target: edge.target,
+  animated: edge.animated,
+});
 
-    const nodes = Array.isArray(parsed?.nodes) ? parsed.nodes.map(toRFNode) : []
-    const edges = Array.isArray(parsed?.edges) ? parsed.edges.map(toRFEdge) : []
-    return { nodes, edges }
-  } catch (error) {
-    console.warn('[GraphPanel] Failed to load graph state', error)
-    return { nodes: [], edges: [] }
-  }
-}
+const snapshotToReactFlow = (snapshot: GraphSnapshot, selectedPtr?: number | null): { nodes: RFNode[]; edges: RFEdge[] } => {
+  const selectedId = selectedPtr != null ? String(selectedPtr) : null;
+  const nodes =
+    snapshot.nodes?.map((node) => {
+      const rfNode = toRFNode(node);
+      const isSelected = selectedPtr != null && (node.ptr === selectedPtr || node.id === selectedId);
+      if (isSelected) {
+        rfNode.selected = true;
+      }
+      return rfNode;
+    }) ?? [];
 
-const serializeGraph = (nodes: RFNode[], edges: RFEdge[]): StoredGraph => ({
-  nodes: nodes.map((node) => ({
-    ptr: node.data.ptr,
-    type: node.data.type ?? node.data.label,
-    label: node.data.label,
-    position: node.position,
-  })),
-  edges: edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    animated: edge.animated,
-  })),
-})
+  return {
+    nodes,
+    edges: snapshot.edges?.map(toRFEdge) ?? [],
+  };
+};
 
-const computeNextSpawn = (nodeList: RFNode[]) => {
-  if (!nodeList.length) {
-    return { x: 120, y: 120 }
-  }
-  const last = nodeList[nodeList.length - 1]
-  return { x: last.position.x + 40, y: last.position.y + 40 }
-}
+const reactFlowToSnapshot = (nodes: RFNode[], edges: RFEdge[]): GraphSnapshot => ({
+  nodes: nodes.map(toSnapshotNode),
+  edges: edges.map(toSnapshotEdge),
+});
 
-function GraphInner({ onSelectPtr }: Props) {
-  const [projectKey, setProjectKey] = useState<string>(() => engine.getLastProject()?.path ?? 'default')
-  const initialGraph = useRef(loadGraphState(projectKey))
+function GraphInner() {
+  const graphSnapshot = useRecoilValue(graphSnapshotAtom);
+  const setGraphSnapshot = useSetRecoilState(graphSnapshotAtom);
+  const setSelectedPtr = useSetRecoilState(selectedNodePtrAtom);
+  const selectedPtr = useRecoilValue(selectedNodePtrAtom);
+  const { createNode, removeNode, removeEdges } = useGraphCommands();
+  const initialGraph = useRef(snapshotToReactFlow(graphSnapshot));
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>(initialGraph.current.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>(initialGraph.current.edges);
   const rf = useReactFlow();
-  const [spawn, setSpawn] = useState(() => computeNextSpawn(initialGraph.current.nodes));
-  const previousNodeCountRef = useRef<number>(initialGraph.current.nodes.length);
-
-  const addNode = useCallback(
-    async (type: string, pos?: { x: number; y: number }): Promise<number> => {
-      const ptr = await Vortex.createNode(type);
-      const id = idFromPtr(ptr);
-      const position = pos ?? spawn;
-
-      const n: RFNode = {
-        id,
-        type: 'custom',
-        position,
-        data: { label: type, ptr, type },
-        sourcePosition: Position.Right,
-        targetPosition: Position.Left,
-      };
-
-      setNodes((nds) => nds.concat(n));
-      onSelectPtr(ptr);
-      return ptr;
-    },
-    [onSelectPtr, setNodes, spawn]
-  );
-
-  // access from AppShell (and console) - now returns ptr
+  const lastHydratedRef = useRef<string>(JSON.stringify(graphSnapshot));
+  const selectedEdgesRef = useRef<RFEdge[]>([]);
   useEffect(() => {
-    (window as any).__GraphPanelAddNode = (
-      type: string,
-      x?: number,
-      y?: number
-    ) => addNode(type, x != null && y != null ? { x, y } : undefined);
-  }, [addNode]);
+    const handler = (type: string, x?: number, y?: number) => createNode(type, x != null && y != null ? { x, y } : undefined);
+    (window as any).__GraphPanelAddNode = handler;
+    return () => {
+      if ((window as any).__GraphPanelAddNode === handler) {
+        delete (window as any).__GraphPanelAddNode;
+      }
+    };
+  }, [createNode]);
 
   const onConnect = useCallback<OnConnect>(
     async (conn: Connection) => {
@@ -158,89 +124,144 @@ function GraphInner({ onSelectPtr }: Props) {
       const dstPtr = Number(conn.target);
       await Vortex.connect(srcPtr, 0, dstPtr, 0);
     },
-    [setEdges]
+    [setEdges],
   );
 
   const onSelectionChange = useCallback(
-    (params: { nodes: RFNode[] }) => {
+    (params: { nodes: RFNode[]; edges: RFEdge[] }) => {
       const first = params.nodes[0];
-      onSelectPtr(first ? first.data.ptr : null);
+      setSelectedPtr(first ? first.data.ptr : null);
+      selectedEdgesRef.current = params.edges ?? [];
     },
-    [onSelectPtr]
+    [setSelectedPtr],
   );
 
   const onDrop = useCallback(
-    (ev: React.DragEvent) => {
+    (ev: DragEvent<HTMLDivElement>) => {
       ev.preventDefault();
       const type = ev.dataTransfer.getData(DND_TYPE);
       const pos = rf.screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
-      if (type) addNode(type, pos);
+      if (type) {
+        createNode(type, pos).catch((error) => {
+          console.error('[GraphPanel] Failed to create node from drop', error);
+        });
+      }
     },
-    [rf, addNode]
+    [rf, createNode],
   );
 
-  const onDragOver = useCallback((ev: React.DragEvent) => {
+  const onDragOver = useCallback((ev: DragEvent<HTMLDivElement>) => {
     ev.preventDefault();
-    ev.dataTransfer.dropEffect = "move";
+    ev.dataTransfer.dropEffect = 'move';
   }, []);
 
   useEffect(() => {
-    const off = engine.on('lastProject:updated', (payload) => {
-      const detail = payload as LastProject | null
-      const nextKey = detail?.path ?? 'default'
-      setProjectKey((current) => (current === nextKey ? current : nextKey))
-    })
+    const isInteractiveTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName?.toLowerCase();
+      if (!tag) return false;
+      if (target.isContentEditable) return true;
+      return tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button';
+    };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      if (isInteractiveTarget(event.target)) return;
+
+      if (selectedPtr) {
+        event.preventDefault();
+        removeNode(selectedPtr).catch((error) => {
+          console.error('[GraphPanel] Failed to remove node', error);
+        });
+        return;
+      }
+
+      const selectedEdges = selectedEdgesRef.current;
+      if (selectedEdges.length) {
+        event.preventDefault();
+        removeEdges(selectedEdges.map(toSnapshotEdge))
+          .catch((error) => {
+            console.error('[GraphPanel] Failed to remove edges', error);
+          })
+          .finally(() => {
+            selectedEdgesRef.current = [];
+          });
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      off?.()
-    }
-  }, [])
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [removeEdges, removeNode, selectedPtr]);
 
   useEffect(() => {
-    const snapshot = loadGraphState(projectKey)
-    setNodes(snapshot.nodes)
-    setEdges(snapshot.edges)
-    previousNodeCountRef.current = snapshot.nodes.length
-    setSpawn(computeNextSpawn(snapshot.nodes))
-    onSelectPtr(null)
-  }, [onSelectPtr, projectKey, setEdges, setNodes])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const payload = serializeGraph(nodes, edges)
-      window.localStorage.setItem(getGraphStorageKey(projectKey), JSON.stringify(payload))
-    } catch (error) {
-      console.warn('[GraphPanel] Failed to persist graph state', error)
-    }
-  }, [edges, nodes, projectKey])
-
-  useEffect(() => {
-    const currentCount = nodes.length
-    if (currentCount === 0) {
-      setSpawn({ x: 120, y: 120 })
-    } else if (currentCount > previousNodeCountRef.current) {
-      const last = nodes[currentCount - 1]
-      setSpawn({ x: last.position.x + 40, y: last.position.y + 40 })
-    } else if (currentCount < previousNodeCountRef.current) {
-      setSpawn(computeNextSpawn(nodes))
+    const serialized = JSON.stringify(graphSnapshot);
+    if (serialized === lastHydratedRef.current) {
+      return;
     }
 
-    previousNodeCountRef.current = currentCount
-  }, [nodes])
+    const nextGraph = snapshotToReactFlow(graphSnapshot, selectedPtr);
+    setNodes(nextGraph.nodes);
+    setEdges(nextGraph.edges);
+
+    const selectionStillExists =
+      selectedPtr != null && graphSnapshot.nodes?.some((node) => node.ptr === selectedPtr || node.id === String(selectedPtr));
+
+    if (!selectionStillExists) {
+      setSelectedPtr(null);
+    }
+
+    lastHydratedRef.current = serialized;
+  }, [graphSnapshot, selectedPtr, setEdges, setNodes, setSelectedPtr]);
+
+  useEffect(() => {
+    const snapshot = reactFlowToSnapshot(nodes, edges);
+    const serialized = JSON.stringify(snapshot);
+    if (serialized === lastHydratedRef.current) {
+      return;
+    }
+
+    lastHydratedRef.current = serialized;
+    setGraphSnapshot(snapshot);
+  }, [edges, nodes, setGraphSnapshot]);
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<RFNode>[]) => {
+      onNodesChange(changes);
+
+      const updates = changes.flatMap((change) => {
+        if (change.type !== 'position') return [];
+        if (change.dragging) return [];
+
+        const position = change.position ?? change.positionAbsolute;
+        if (!position) return [];
+
+        const node = nodes.find((n) => n.id === change.id);
+        const ptr = node?.data.ptr;
+        if (!Number.isFinite(ptr)) return [];
+
+        return [{ ptr: Number(ptr), position }];
+      });
+
+      updates.forEach(({ ptr, position }) => {
+        const payload = JSON.stringify(position);
+        Vortex.setNodeProperty(ptr, 'position', payload).catch((error) => {
+          console.error('[GraphPanel] Failed to sync node position', { ptr, error });
+        });
+      });
+    },
+    [nodes, onNodesChange],
+  );
 
   return (
-    <div
-      style={{ width: "100%", height: "100%" }}
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-    >
+    <div style={{ width: '100%', height: '100%' }} onDrop={onDrop} onDragOver={onDragOver}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onConnect={onConnect}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
         fitView
@@ -253,10 +274,10 @@ function GraphInner({ onSelectPtr }: Props) {
   );
 }
 
-export function GraphPanel(props: Props) {
+export function GraphPanel() {
   return (
     <ReactFlowProvider>
-      <GraphInner {...props} />
+      <GraphInner />
     </ReactFlowProvider>
   );
 }

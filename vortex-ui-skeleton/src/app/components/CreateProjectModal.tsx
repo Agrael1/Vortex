@@ -1,20 +1,20 @@
-import { FormEvent, MouseEventHandler, useEffect, useMemo, useRef } from 'react'
-import { createPortal } from 'react-dom'
-import type { CreateFormState, TemplateSpec } from '@/app/routes/Hub'
+import { FormEvent, MouseEventHandler, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import type { CreateFormState, TemplateSpec } from '@/app/routes/Hub';
 
 type Props = {
-  isOpen: boolean
-  onClose: () => void
-  form: CreateFormState
-  onChange: (patch: Partial<CreateFormState>) => void
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void
-  onBrowseLocation: () => void
-  selectedTemplate: TemplateSpec | null
-  error: string | null
-  isSubmitting: boolean
-}
+  isOpen: boolean;
+  onClose: () => void;
+  form: CreateFormState;
+  onChange: (patch: Partial<CreateFormState>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onBrowseLocation: () => void;
+  selectedTemplate: TemplateSpec | null;
+  error: string | null;
+  isSubmitting: boolean;
+};
 
-const MODAL_PORTAL_TARGET: HTMLElement | null = typeof document !== 'undefined' ? document.body : null
+const MODAL_PORTAL_TARGET: HTMLElement | null = typeof document !== 'undefined' ? document.body : null;
 
 export function CreateProjectModal({
   isOpen,
@@ -27,57 +27,54 @@ export function CreateProjectModal({
   error,
   isSubmitting,
 }: Props) {
-  const nameInputRef = useRef<HTMLInputElement>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        event.preventDefault()
-        onClose()
+        event.preventDefault();
+        onClose();
       }
-    }
+    };
 
-    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown);
 
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose])
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
-    if (!isOpen) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    nameInputRef.current?.focus()
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    nameInputRef.current?.focus();
 
     return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [isOpen])
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
 
   const templateSummary = useMemo(() => {
-    if (!selectedTemplate) return null
-    const { preset } = selectedTemplate
-    return `${preset.width}×${preset.height} @ ${preset.fps}fps · ${preset.colorSpace}`
-  }, [selectedTemplate])
+    if (!selectedTemplate) return null;
+    const { preset } = selectedTemplate;
+    return `${preset.width}×${preset.height} @ ${preset.fps}fps · ${preset.colorSpace}`;
+  }, [selectedTemplate]);
 
-  if (!isOpen || !MODAL_PORTAL_TARGET) return null
+  if (!isOpen || !MODAL_PORTAL_TARGET) return null;
 
   const handleBackdropClick = () => {
     if (!isSubmitting) {
-      onClose()
+      onClose();
     }
-  }
+  };
 
   const stopPropagation: MouseEventHandler<HTMLDivElement> = (event) => {
-    event.stopPropagation()
-  }
+    event.stopPropagation();
+  };
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
-      onClick={handleBackdropClick}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm" onClick={handleBackdropClick}>
       <div
         className="w-full max-w-4xl overflow-hidden rounded-2xl border border-ui-border/70 bg-ui-panel shadow-2xl"
         onClick={stopPropagation}
@@ -113,18 +110,14 @@ export function CreateProjectModal({
                     </div>
                   </div>
                   {templateSummary && (
-                    <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-gray-300">
-                      {templateSummary}
-                    </div>
+                    <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-gray-300">{templateSummary}</div>
                   )}
                   <p className="text-xs text-gray-500">
                     Want a different preset? Close this dialog and pick another option from Quick start.
                   </p>
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-gray-400">
-                  No template selected. The default Rec.709 1080p preset will be used.
-                </p>
+                <p className="mt-3 text-sm text-gray-400">No template selected. The default Rec.709 1080p preset will be used.</p>
               )}
             </div>
           </aside>
@@ -202,16 +195,10 @@ export function CreateProjectModal({
               </select>
             </label>
 
-            {error && (
-              <div className="rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-sm text-red-200">
-                {error}
-              </div>
-            )}
+            {error && <div className="rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-sm text-red-200">{error}</div>}
 
             <div className="flex items-center justify-between gap-4 rounded-lg border border-white/5 bg-white/5 px-4 py-3 text-sm text-gray-400">
-              <div>
-                Project files will be generated at the selected location. You can adjust all parameters later in the editor.
-              </div>
+              <div>Project files will be generated at the selected location. You can adjust all parameters later in the editor.</div>
             </div>
 
             <div className="flex justify-end gap-3">
@@ -228,9 +215,7 @@ export function CreateProjectModal({
                 className="inline-flex items-center gap-2 rounded-lg border border-blue-500/60 bg-blue-600/80 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isSubmitting}
               >
-                {isSubmitting && (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/80 border-t-transparent" />
-                )}
+                {isSubmitting && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/80 border-t-transparent" />}
                 <span>Create &amp; open</span>
               </button>
             </div>
@@ -238,6 +223,6 @@ export function CreateProjectModal({
         </div>
       </div>
     </div>,
-    MODAL_PORTAL_TARGET
-  )
+    MODAL_PORTAL_TARGET,
+  );
 }

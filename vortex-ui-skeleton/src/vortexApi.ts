@@ -1,15 +1,9 @@
 declare global {
-  function vortexCall(method: string, ...args: any[]): any;
-  function vortexCallAsync(method: string, ...args: any[]): Promise<any>;
+  function vortexCall(method: string, ...args: unknown[]): unknown;
+  function vortexCallAsync(method: string, ...args: unknown[]): Promise<unknown>;
 }
 
-export const Vortex = new Proxy({}, {
-  get(_t, prop: string) {
-    const name = String(prop);
-    return (...args: any[]) =>
-      name.endsWith('Async') ? vortexCallAsync(name, ...args) : vortexCall(name, ...args);
-  }
-}) as {
+type VortexApi = {
   GetNodeTypesAsync(): Promise<Record<string, string>>;
   CreateNodeAsync(type: string): Promise<number>;
   GetNodePropertiesAsync(nodePtr: number): Promise<string>;
@@ -25,3 +19,13 @@ export const Vortex = new Proxy({}, {
   Play(): void;
   Stop(): void;
 };
+
+export const Vortex = new Proxy(
+  {},
+  {
+    get(_t, prop: string) {
+      const name = String(prop);
+      return (...args: unknown[]) => (name.endsWith('Async') ? vortexCallAsync : vortexCall)(name, ...args);
+    },
+  },
+) as VortexApi;

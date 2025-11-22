@@ -2,29 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
-html, body, #root { height: 100%; margin: 0; }
-body { font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial; background: #0c111b; color: #d0d4df; }
+:root {
+  color-scheme: dark;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font:
+    13px/1.35 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial;
+  background: #0c111b;
+  color: #d0d4df;
+}
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 /* buttons */
 .btn {
   border: 1px solid rgba(86, 104, 133, 0.5);
   background: rgba(17, 24, 39, 0.85);
   border-radius: 6px;
-  padding: .35rem .6rem;
+  padding: 0.35rem 0.6rem;
   color: #e0e6f0;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
 }
-.btn:hover { filter: brightness(1.1); }
+.btn:hover {
+  filter: brightness(1.1);
+}
 
 /* inputs */
-input[type="text"],
-input[type="number"],
-input[type="search"],
-input[type="password"],
+input[type='text'],
+input[type='number'],
+input[type='search'],
+input[type='password'],
 select,
 textarea {
   color: #e4e8f5;

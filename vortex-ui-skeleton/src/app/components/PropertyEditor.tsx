@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { Vortex } from '@/bridge/vortex';
 
 export interface PropertySpec {
@@ -18,32 +19,63 @@ interface PropertyEditorProps {
   nodePtr: number;
   properties: PropertySpec[];
   className?: string;
+  liveValues?: Record<string, any> | null;
 }
 
-export function PropertyEditor({ nodePtr, properties, className = '' }: PropertyEditorProps) {
+export function PropertyEditor({ nodePtr, properties, className = '', liveValues }: PropertyEditorProps) {
   const [localValues, setLocalValues] = useState<Record<string, any>>({});
 
-  const handleValueChange = useCallback(async (prop: PropertySpec, value: any) => {
-    try {
-      // Update local state immediately for responsiveness
-      setLocalValues(prev => ({ ...prev, [prop.name]: value }));
-      
-      // Send to engine
-  await Vortex.setNodeProperty(nodePtr, prop.name, String(value));
-      console.log(`Property ${prop.name} updated to:`, value);
-    } catch (error) {
-      console.error(`Failed to update property ${prop.name}:`, error);
-      // Revert local value on error
-      setLocalValues(prev => {
-        const newState = { ...prev };
-        delete newState[prop.name];
-        return newState;
-      });
-    }
-  }, [nodePtr]);
+  useEffect(() => {
+    setLocalValues({});
+  }, [nodePtr, properties]);
+
+  useEffect(() => {
+    if (!liveValues) return;
+    setLocalValues((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const prop of properties) {
+        if (!prop || typeof prop.name !== 'string') continue;
+        if (!Object.prototype.hasOwnProperty.call(liveValues, prop.name)) continue;
+        const incoming = (liveValues as Record<string, any>)[prop.name];
+        if (Object.is(next[prop.name], incoming)) continue;
+        next[prop.name] = incoming;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [liveValues, properties]);
+
+  const handleValueChange = useCallback(
+    async (prop: PropertySpec, value: any) => {
+      try {
+        // Update local state immediately for responsiveness
+        setLocalValues((prev) => ({ ...prev, [prop.name]: value }));
+
+        // Send to engine
+        await Vortex.setNodeProperty(nodePtr, prop.name, String(value));
+        console.log(`Property ${prop.name} updated to:`, value);
+      } catch (error) {
+        console.error(`Failed to update property ${prop.name}:`, error);
+        // Revert local value on error
+        setLocalValues((prev) => {
+          const newState = { ...prev };
+          delete newState[prop.name];
+          return newState;
+        });
+      }
+    },
+    [nodePtr],
+  );
 
   const getCurrentValue = (prop: PropertySpec) => {
-    return localValues[prop.name] !== undefined ? localValues[prop.name] : prop.value ?? prop.default;
+    if (localValues[prop.name] !== undefined) {
+      return localValues[prop.name];
+    }
+    if (liveValues && Object.prototype.hasOwnProperty.call(liveValues, prop.name)) {
+      return (liveValues as Record<string, any>)[prop.name];
+    }
+    return prop.value ?? prop.default;
   };
 
   const renderPropertyInput = (prop: PropertySpec) => {
@@ -55,13 +87,7 @@ export function PropertyEditor({ nodePtr, properties, className = '' }: Property
 
     switch (prop.type) {
       case 'bool':
-        return (
-          <BooleanInput
-            {...commonProps}
-            value={currentValue}
-            label={prop.label || prop.name}
-          />
-        );
+        return <BooleanInput {...commonProps} value={currentValue} label={prop.label || prop.name} />;
 
       case 'int':
         return (
@@ -90,32 +116,13 @@ export function PropertyEditor({ nodePtr, properties, className = '' }: Property
         );
 
       case 'string':
-        return (
-          <StringInput
-            {...commonProps}
-            value={currentValue}
-            label={prop.label || prop.name}
-          />
-        );
+        return <StringInput {...commonProps} value={currentValue} label={prop.label || prop.name} />;
 
       case 'enum':
-        return (
-          <EnumInput
-            {...commonProps}
-            value={currentValue}
-            label={prop.label || prop.name}
-            options={prop.enum || []}
-          />
-        );
+        return <EnumInput {...commonProps} value={currentValue} label={prop.label || prop.name} options={prop.enum || []} />;
 
       case 'color':
-        return (
-          <ColorInput
-            {...commonProps}
-            value={currentValue}
-            label={prop.label || prop.name}
-          />
-        );
+        return <ColorInput {...commonProps} value={currentValue} label={prop.label || prop.name} />;
 
       case 'vec2':
       case 'vec3':
@@ -139,19 +146,13 @@ export function PropertyEditor({ nodePtr, properties, className = '' }: Property
   };
 
   if (properties.length === 0) {
-    return (
-      <div className={`p-4 text-center text-gray-500 ${className}`}>
-        No properties available
-      </div>
-    );
+    return <div className={`p-4 text-center text-gray-500 ${className}`}>No properties available</div>;
   }
 
   return (
     <div className={`p-4 space-y-4 ${className}`}>
-      <div className="text-sm font-semibold text-gray-300 mb-3">
-        Node Properties #{nodePtr}
-      </div>
-      
+      <div className="text-sm font-semibold text-gray-300 mb-3">Node Properties #{nodePtr}</div>
+
       {properties.map(renderPropertyInput)}
     </div>
   );
@@ -186,7 +187,7 @@ interface NumberInputProps extends InputProps {
 }
 
 function NumberInput({ value, label, onChange, min, max, step, isFloat }: NumberInputProps) {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const newValue = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value);
     if (!isNaN(newValue)) {
       onChange(newValue);

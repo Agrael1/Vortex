@@ -1,5 +1,5 @@
-import { DockLayout } from '../layout/DockLayout'
+import { DockLayout } from '../layout/DockLayout';
 
 export function Editor() {
-  return <DockLayout />
+  return <DockLayout />;
 }

@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useRecoilValue } from 'recoil';
 import { PlaybackControls } from '@/app/components/PlaybackControls';
 import { Vortex } from '@/bridge/vortex';
 import { engine, type Recent } from '@/app/services/ipc/cefBridge';
+import { useProjectCommands } from '@state/hooks/useProjectCommands';
+import { useGraphCommands } from '@state/hooks/useGraphCommands';
+import { persistenceStatusAtom } from '@state/atoms/persistence';
 
 type MenuKey = 'file' | 'edit' | 'view' | 'window' | 'help';
 
@@ -30,9 +34,9 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
   const [recents, setRecents] = useState<Recent[]>([]);
   const [isPerformingAction, setIsPerformingAction] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const saveMessageTimerRef = useRef<number | null>(null);
+  const { saveProject, openProject, createProject } = useProjectCommands();
+  const persistenceStatus = useRecoilValue(persistenceStatusAtom);
+  const { createNode } = useGraphCommands();
 
   const closeMenus = useCallback(() => {
     setActiveMenu(null);
@@ -42,12 +46,9 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
     setActiveMenu((current) => (current === key ? null : key));
   }, []);
 
-  const handleMenuHover = useCallback(
-    (key: MenuKey) => {
-      setActiveMenu((current) => (current ? key : current));
-    },
-    []
-  );
+  const handleMenuHover = useCallback((key: MenuKey) => {
+    setActiveMenu((current) => (current ? key : current));
+  }, []);
 
   useEffect(() => {
     if (!activeMenu) return;
@@ -114,18 +115,12 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
     try {
       console.log('[Quick Test] Starting Image→Window test pattern...');
 
-      const add = (window as any).__GraphPanelAddNode as (t: string, x?: number, y?: number) => Promise<number>;
-      if (!add) {
-        console.error('[Quick Test] __GraphPanelAddNode not available');
-        return;
-      }
-
       console.log('[Quick Test] Creating ImageInput node...');
-      const imagePtr = await add('ImageInput', 200, 200);
+      const imagePtr = await createNode('ImageInput', { x: 200, y: 200 });
       console.log('[Quick Test] ImageInput created with ptr:', imagePtr);
 
       console.log('[Quick Test] Creating WindowOutput node...');
-      const windowPtr = await add('WindowOutput', 520, 220);
+      const windowPtr = await createNode('WindowOutput', { x: 520, y: 220 });
       console.log('[Quick Test] WindowOutput created with ptr:', windowPtr);
 
       console.log('[Quick Test] Connecting nodes...', imagePtr, '->', windowPtr);
@@ -135,25 +130,19 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
     } catch (error) {
       console.error('[Quick Test] Error creating Image→Window:', error);
     }
-  }, [closeMenus]);
+  }, [closeMenus, createNode]);
 
   const quickStreamToWindow = useCallback(async () => {
     closeMenus();
     try {
       console.log('[Quick] Starting Stream→Window creation...');
 
-      const add = (window as any).__GraphPanelAddNode as (t: string, x?: number, y?: number) => Promise<number>;
-      if (!add) {
-        console.error('[Quick] __GraphPanelAddNode not available');
-        return;
-      }
-
       console.log('[Quick] Creating StreamInput node...');
-      const streamPtr = await add('StreamInput', 200, 200);
+      const streamPtr = await createNode('StreamInput', { x: 200, y: 200 });
       console.log('[Quick] StreamInput created with ptr:', streamPtr);
 
       console.log('[Quick] Creating WindowOutput node...');
-      const windowPtr = await add('WindowOutput', 520, 220);
+      const windowPtr = await createNode('WindowOutput', { x: 520, y: 220 });
       console.log('[Quick] WindowOutput created with ptr:', windowPtr);
 
       console.log('[Quick] Connecting nodes...', streamPtr, '->', windowPtr);
@@ -162,7 +151,7 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
     } catch (error) {
       console.error('[Quick] Error creating Stream→Window:', error);
     }
-  }, [closeMenus]);
+  }, [closeMenus, createNode]);
 
   const handleNavigateHub = useCallback(() => {
     closeMenus();
@@ -171,57 +160,46 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
 
   const handleNewProject = useCallback(() => {
     closeMenus();
-    navigate('/hub', { state: { action: 'new-project' } });
-  }, [closeMenus, navigate]);
+    createProject().catch((error) => console.error('[AppHeader] Create project failed', error));
+  }, [closeMenus, createProject]);
 
   const handleOpenProjectPicker = useCallback(async () => {
     closeMenus();
     setIsPerformingAction(true);
     try {
-      const selected = await engine.browseForProject();
-      if (!selected) return;
-      await engine.openProject(selected);
+      await openProject();
     } catch (error) {
       console.error('[AppHeader] Unable to open project from picker', error);
     } finally {
       setIsPerformingAction(false);
     }
-  }, [closeMenus]);
+  }, [closeMenus, openProject]);
 
-  const handleOpenRecent = useCallback(async (entry: Recent) => {
-    closeMenus();
-    setIsPerformingAction(true);
-    try {
-      await engine.openProject(entry.path);
-    } catch (error) {
-      console.error('[AppHeader] Unable to open recent project', entry.path, error);
-    } finally {
-      setIsPerformingAction(false);
-    }
-  }, [closeMenus]);
+  const handleOpenRecent = useCallback(
+    async (entry: Recent) => {
+      closeMenus();
+      setIsPerformingAction(true);
+      try {
+        await engine.openProject(entry.path);
+      } catch (error) {
+        console.error('[AppHeader] Unable to open recent project', entry.path, error);
+      } finally {
+        setIsPerformingAction(false);
+      }
+    },
+    [closeMenus],
+  );
 
   const handleSaveProject = useCallback(async () => {
     closeMenus();
-    if (isSaving) return;
-
-    setIsSaving(true);
-    setSaveMessage(null);
+    if (persistenceStatus.isSaving) return;
 
     try {
-      const status = await engine.saveProject();
-      const timestamp = new Date().toLocaleTimeString();
-      setSaveMessage(
-        status === 'fallback'
-          ? `Saved locally (${timestamp})`
-          : `Saved ${timestamp}`
-      );
+      await saveProject();
     } catch (error) {
       console.error('[AppHeader] Unable to save project', error);
-      setSaveMessage('Save failed');
-    } finally {
-      setIsSaving(false);
     }
-  }, [closeMenus, isSaving]);
+  }, [closeMenus, persistenceStatus.isSaving, saveProject]);
 
   const handleResetLayout = useCallback(() => {
     closeMenus();
@@ -247,7 +225,7 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
     const items: MenuItem[] = [
       { type: 'action', label: 'New Project…', shortcut: 'Ctrl+N', disabled: isPerformingAction, onSelect: handleNewProject },
       { type: 'action', label: 'Open Project…', shortcut: 'Ctrl+O', disabled: isPerformingAction, onSelect: handleOpenProjectPicker },
-      { type: 'action', label: 'Save Project', shortcut: 'Ctrl+S', disabled: isSaving, onSelect: handleSaveProject },
+      { type: 'action', label: 'Save Project', shortcut: 'Ctrl+S', disabled: persistenceStatus.isSaving, onSelect: handleSaveProject },
       { type: 'action', label: 'Open Hub', shortcut: 'Ctrl+H', onSelect: handleNavigateHub },
       { type: 'separator' },
     ];
@@ -268,12 +246,19 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
     }
 
     return items;
-  }, [handleNavigateHub, handleNewProject, handleOpenProjectPicker, handleOpenRecent, handleSaveProject, isPerformingAction, isSaving, recents]);
+  }, [
+    handleNavigateHub,
+    handleNewProject,
+    handleOpenProjectPicker,
+    handleOpenRecent,
+    handleSaveProject,
+    isPerformingAction,
+    persistenceStatus.isSaving,
+    recents,
+  ]);
 
   const viewMenuItems = useMemo<MenuItem[]>(() => {
-    return [
-      { type: 'action', label: 'Reset Layout', shortcut: 'Ctrl+0', disabled: !onResetLayout, onSelect: handleResetLayout },
-    ];
+    return [{ type: 'action', label: 'Reset Layout', shortcut: 'Ctrl+0', disabled: !onResetLayout, onSelect: handleResetLayout }];
   }, [handleResetLayout, onResetLayout]);
 
   const editMenuItems = useMemo<MenuItem[]>(() => {
@@ -281,35 +266,6 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
       { type: 'action', label: 'Undo', shortcut: 'Ctrl+Z', disabled: true },
       { type: 'action', label: 'Redo', shortcut: 'Ctrl+Y', disabled: true },
     ];
-  }, []);
-
-  useEffect(() => {
-    if (!saveMessage) return;
-
-    if (saveMessageTimerRef.current) {
-      window.clearTimeout(saveMessageTimerRef.current);
-    }
-
-    saveMessageTimerRef.current = window.setTimeout(() => {
-      setSaveMessage(null);
-      saveMessageTimerRef.current = null;
-    }, 4000);
-
-    return () => {
-      if (saveMessageTimerRef.current) {
-        window.clearTimeout(saveMessageTimerRef.current);
-        saveMessageTimerRef.current = null;
-      }
-    };
-  }, [saveMessage]);
-
-  useEffect(() => {
-    return () => {
-      if (saveMessageTimerRef.current) {
-        window.clearTimeout(saveMessageTimerRef.current);
-        saveMessageTimerRef.current = null;
-      }
-    };
   }, []);
 
   const windowMenuItems = useMemo<MenuItem[]>(() => {
@@ -328,13 +284,43 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
     ];
   }, [handleAbout, handleOpenDocs, handleShowShortcuts]);
 
-  const menus = useMemo(() => ({
-    file: fileMenuItems,
-    edit: editMenuItems,
-    view: viewMenuItems,
-    window: windowMenuItems,
-    help: helpMenuItems,
-  }), [editMenuItems, fileMenuItems, helpMenuItems, viewMenuItems, windowMenuItems]);
+  const formatSavedTimestamp = useCallback((value: string) => {
+    try {
+      return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return value;
+    }
+  }, []);
+
+  const saveStatus = useMemo(() => {
+    if (!persistenceStatus.isHydrated) {
+      return { message: 'Preparing project…', variant: 'muted' as const };
+    }
+    if (persistenceStatus.lastError) {
+      return { message: persistenceStatus.lastError, variant: 'error' as const };
+    }
+    if (persistenceStatus.isSaving) {
+      return { message: 'Saving…', variant: 'saving' as const };
+    }
+    if (persistenceStatus.isDirty) {
+      return { message: 'Unsaved changes', variant: 'dirty' as const };
+    }
+    if (persistenceStatus.lastSavedAt) {
+      return { message: `Saved ${formatSavedTimestamp(persistenceStatus.lastSavedAt)}`, variant: 'saved' as const };
+    }
+    return null;
+  }, [formatSavedTimestamp, persistenceStatus]);
+
+  const menus = useMemo(
+    () => ({
+      file: fileMenuItems,
+      edit: editMenuItems,
+      view: viewMenuItems,
+      window: windowMenuItems,
+      help: helpMenuItems,
+    }),
+    [editMenuItems, fileMenuItems, helpMenuItems, viewMenuItems, windowMenuItems],
+  );
 
   const renderMenu = (key: MenuKey) => {
     if (activeMenu !== key) return null;
@@ -374,9 +360,7 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
             >
               <span className="flex-1 overflow-hidden">
                 <span className="block truncate">{action.label}</span>
-                {action.description ? (
-                  <span className="block text-xs text-gray-500 truncate">{action.description}</span>
-                ) : null}
+                {action.description ? <span className="block text-xs text-gray-500 truncate">{action.description}</span> : null}
               </span>
               {action.shortcut ? <span className="text-xs text-gray-500">{action.shortcut}</span> : null}
             </button>
@@ -387,10 +371,7 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
   };
 
   return (
-    <header
-      ref={headerRef}
-      className={`h-12 border-b border-ui-border bg-ui-panel flex items-center justify-between px-4 ${className}`}
-    >
+    <header ref={headerRef} className={`h-12 border-b border-ui-border bg-ui-panel flex items-center justify-between px-4 ${className}`}>
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-3">
           <strong className="text-lg">Vortex</strong>
@@ -437,14 +418,34 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
         </div>
 
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          {isSaving ? (
-            <span className="flex items-center gap-2 text-gray-300">
-              <span className="inline-block h-3 w-3 animate-spin rounded-full border border-gray-400 border-t-transparent" />
-              <span>Saving…</span>
+          {saveStatus && (
+            <span
+              className={`flex items-center gap-2 ${
+                saveStatus.variant === 'error'
+                  ? 'text-red-300'
+                  : saveStatus.variant === 'dirty'
+                    ? 'text-amber-300'
+                    : saveStatus.variant === 'saved'
+                      ? 'text-gray-300'
+                      : saveStatus.variant === 'saving'
+                        ? 'text-gray-300'
+                        : 'text-gray-500'
+              }`}
+            >
+              {saveStatus.variant === 'saving' ? (
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+              ) : saveStatus.variant === 'dirty' ? (
+                <span className="inline-block h-2 w-2 rounded-full bg-amber-300" />
+              ) : saveStatus.variant === 'error' ? (
+                <span>⚠️</span>
+              ) : saveStatus.variant === 'saved' ? (
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-300/80" />
+              ) : (
+                <span className="inline-block h-2 w-2 rounded-full bg-gray-500/60" />
+              )}
+              <span>{saveStatus.message}</span>
             </span>
-          ) : saveMessage ? (
-            <span className="text-gray-300">{saveMessage}</span>
-          ) : null}
+          )}
           <span>v1.0.0-alpha</span>
         </div>
       </div>

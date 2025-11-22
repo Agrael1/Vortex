@@ -1,40 +1,44 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { CreateProjectModal } from '@/app/components/CreateProjectModal'
-import { engine, type CreateProjectPayload, type Recent, type LastProject } from '@/app/services/ipc/cefBridge'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { CreateProjectModal } from '@/app/components/CreateProjectModal';
+import { engine, type CreateProjectPayload, type Recent, type LastProject } from '@/app/services/ipc/cefBridge';
+import { projectPersistence } from '@services/persistence';
+import type { ProjectSnapshot } from '@state/types';
+import { useProjectCommands } from '@state/hooks/useProjectCommands';
+import { SPLASH_AUTO_CONTINUE_KEY } from '@/app/constants/preferences';
 
 export type TemplateSpec = {
-  name: string
-  description: string
-  icon: string
-  accent: string
-  preset: { width: number; height: number; fps: number; colorSpace: string }
-}
+  name: string;
+  description: string;
+  icon: string;
+  accent: string;
+  preset: { width: number; height: number; fps: number; colorSpace: string };
+};
 
 export type CreateFormState = {
-  name: string
-  location: string
-  width: string
-  height: string
-  fps: string
-  colorSpace: string
-}
+  name: string;
+  location: string;
+  width: string;
+  height: string;
+  fps: string;
+  colorSpace: string;
+};
 
-const RECENTS_STORAGE_KEY = 'vortex.hub.recents'
-const MAX_RECENTS = 30
+const RECENTS_STORAGE_KEY = 'vortex.hub.recents';
+const MAX_RECENTS = 30;
 
 const compareRecents = (a: Recent, b: Recent) => {
-  const pinDiff = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
-  if (pinDiff !== 0) return pinDiff
+  const pinDiff = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned));
+  if (pinDiff !== 0) return pinDiff;
 
-  const timeA = Date.parse(a.last)
-  const timeB = Date.parse(b.last)
+  const timeA = Date.parse(a.last);
+  const timeB = Date.parse(b.last);
   if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) {
-    return timeB - timeA
+    return timeB - timeA;
   }
 
-  return a.name.localeCompare(b.name)
-}
+  return a.name.localeCompare(b.name);
+};
 
 const TEMPLATES: TemplateSpec[] = [
   {
@@ -65,7 +69,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: 'bg-emerald-500/20 text-emerald-300',
     preset: { width: 3840, height: 2160, fps: 30, colorSpace: 'Rec.2020' },
   },
-]
+];
 
 const DEFAULT_FORM: CreateFormState = {
   name: '',
@@ -74,57 +78,57 @@ const DEFAULT_FORM: CreateFormState = {
   height: '1080',
   fps: '60',
   colorSpace: 'Rec.709',
-}
+};
 
 const deriveNameFromPath = (path: string) => {
-  if (!path) return 'Untitled'
-  const normalized = path.replace(/\\/g, '/').split('/')
-  const last = normalized[normalized.length - 1] || path
-  return last.replace(/\.[^.]+$/, '') || last
-}
+  if (!path) return 'Untitled';
+  const normalized = path.replace(/\\/g, '/').split('/');
+  const last = normalized[normalized.length - 1] || path;
+  return last.replace(/\.[^.]+$/, '') || last;
+};
 
 const formatLastUsed = (value: string) => {
-  const ts = Date.parse(value)
-  if (Number.isNaN(ts)) return 'Unknown date'
+  const ts = Date.parse(value);
+  if (Number.isNaN(ts)) return 'Unknown date';
 
-  const diff = Date.now() - ts
-  const minutes = Math.round(diff / 60000)
-  if (minutes <= 1) return 'just now'
-  if (minutes < 60) return `${minutes} min ago`
+  const diff = Date.now() - ts;
+  const minutes = Math.round(diff / 60000);
+  if (minutes <= 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
 
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours} h ago`
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
 
-  const days = Math.round(hours / 24)
-  if (days < 7) return `${days} d ago`
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days} d ago`;
 
-  return new Date(ts).toLocaleDateString()
-}
+  return new Date(ts).toLocaleDateString();
+};
 
 const loadRecentsFromStorage = (): Recent[] => {
-  if (typeof window === 'undefined' || !('localStorage' in window)) return []
+  if (typeof window === 'undefined' || !('localStorage' in window)) return [];
   try {
-    const raw = localStorage.getItem(RECENTS_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
+    const raw = localStorage.getItem(RECENTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
     const normalized = parsed
       .map((item) => {
-        if (!item || typeof item !== 'object') return null
-        const rawPath = (item as any).path
-        if (typeof rawPath !== 'string' || !rawPath.length) return null
-        const nameValue = (item as any).name
-        const lastValue = (item as any).last
-        const name = typeof nameValue === 'string' && nameValue.trim().length ? nameValue.trim() : deriveNameFromPath(rawPath)
-        const last = typeof lastValue === 'string' && lastValue.trim().length ? lastValue : new Date().toISOString()
-        const template = typeof (item as any).template === 'string' ? (item as any).template : null
-        const width = Number.isFinite((item as any).width) ? Number((item as any).width) : undefined
-        const height = Number.isFinite((item as any).height) ? Number((item as any).height) : undefined
-        const fps = Number.isFinite((item as any).fps) ? Number((item as any).fps) : undefined
-        const colorSpace = typeof (item as any).colorSpace === 'string' ? (item as any).colorSpace : undefined
-        const preview = typeof (item as any).preview === 'string' ? (item as any).preview : null
-        const pinned = (item as any).pinned === true
-        const error = typeof (item as any).error === 'string' ? (item as any).error : null
+        if (!item || typeof item !== 'object') return null;
+        const rawPath = (item as any).path;
+        if (typeof rawPath !== 'string' || !rawPath.length) return null;
+        const nameValue = (item as any).name;
+        const lastValue = (item as any).last;
+        const name = typeof nameValue === 'string' && nameValue.trim().length ? nameValue.trim() : deriveNameFromPath(rawPath);
+        const last = typeof lastValue === 'string' && lastValue.trim().length ? lastValue : new Date().toISOString();
+        const template = typeof (item as any).template === 'string' ? (item as any).template : null;
+        const width = Number.isFinite((item as any).width) ? Number((item as any).width) : undefined;
+        const height = Number.isFinite((item as any).height) ? Number((item as any).height) : undefined;
+        const fps = Number.isFinite((item as any).fps) ? Number((item as any).fps) : undefined;
+        const colorSpace = typeof (item as any).colorSpace === 'string' ? (item as any).colorSpace : undefined;
+        const preview = typeof (item as any).preview === 'string' ? (item as any).preview : null;
+        const pinned = (item as any).pinned === true;
+        const error = typeof (item as any).error === 'string' ? (item as any).error : null;
 
         const result: Recent = {
           name,
@@ -137,67 +141,113 @@ const loadRecentsFromStorage = (): Recent[] => {
           colorSpace,
           preview,
           error,
-        }
+        };
 
         if (pinned) {
-          result.pinned = true
+          result.pinned = true;
         }
 
-        return result
+        return result;
       })
-      .filter((item): item is Recent => Boolean(item))
+      .filter((item): item is Recent => Boolean(item));
 
-    return normalized.sort(compareRecents)
+    return normalized.sort(compareRecents);
   } catch {
-    return []
+    return [];
   }
-}
+};
 
 const persistRecents = (recents: Recent[]) => {
-  if (typeof window === 'undefined' || !('localStorage' in window)) return
+  if (typeof window === 'undefined' || !('localStorage' in window)) return;
   try {
-    const ordered = [...recents].sort(compareRecents)
-    const limited = ordered.slice(0, MAX_RECENTS)
-    localStorage.setItem(RECENTS_STORAGE_KEY, JSON.stringify(limited))
+    const ordered = [...recents].sort(compareRecents);
+    const limited = ordered.slice(0, MAX_RECENTS);
+    localStorage.setItem(RECENTS_STORAGE_KEY, JSON.stringify(limited));
   } catch {
     /* ignore storage write errors */
   }
-}
+};
+
+const mapSnapshotToRecent = (snapshot: ProjectSnapshot): Recent | null => {
+  if (!snapshot.path) return null;
+
+  const name = snapshot.meta?.name?.trim()?.length ? snapshot.meta.name.trim() : deriveNameFromPath(snapshot.path);
+  const last = snapshot.meta?.lastOpened ?? snapshot.updatedAt ?? new Date().toISOString();
+
+  return {
+    name,
+    path: snapshot.path,
+    last,
+    template: snapshot.meta?.template ?? null,
+    width: snapshot.settings.width,
+    height: snapshot.settings.height,
+    fps: snapshot.settings.fps,
+    colorSpace: snapshot.settings.colorSpace,
+  };
+};
+
+const mergeRecentCollections = (...collections: Recent[][]): Recent[] => {
+  const map = new Map<string, Recent>();
+  collections.forEach((list) => {
+    list.forEach((item) => {
+      if (!item?.path) return;
+      const previous = map.get(item.path);
+      const merged: Recent = {
+        ...previous,
+        ...item,
+        name: item.name?.trim()?.length ? item.name : (previous?.name ?? deriveNameFromPath(item.path)),
+        last: item.last ?? previous?.last ?? new Date().toISOString(),
+        pinned: previous?.pinned ?? item.pinned,
+        template: item.template ?? previous?.template ?? null,
+        preview: item.preview ?? previous?.preview ?? null,
+        error: item.error ?? previous?.error ?? null,
+      };
+      map.set(item.path, merged);
+    });
+  });
+
+  return Array.from(map.values()).sort(compareRecents);
+};
 
 export function Hub() {
-  const nav = useNavigate()
-  const location = useLocation()
-  const [recents, setRecents] = useState<Recent[]>(() => loadRecentsFromStorage())
-  const [isLoading, setIsLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [busyPath, setBusyPath] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [activeMenuPath, setActiveMenuPath] = useState<string | null>(null)
-  const [lastProject, setLastProject] = useState<LastProject | null>(() => engine.getLastProject())
+  const nav = useNavigate();
+  const location = useLocation();
+  const [recents, setRecents] = useState<Recent[]>(() => loadRecentsFromStorage());
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busyPath, setBusyPath] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeMenuPath, setActiveMenuPath] = useState<string | null>(null);
+  const [lastProject, setLastProject] = useState<LastProject | null>(() => engine.getLastProject());
+  const [autoContinue, setAutoContinue] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(SPLASH_AUTO_CONTINUE_KEY) === 'true';
+  });
 
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [isCreating, setIsCreating] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateSpec | null>(null)
-  const [form, setForm] = useState<CreateFormState>(DEFAULT_FORM)
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateSpec | null>(null);
+  const [form, setForm] = useState<CreateFormState>(DEFAULT_FORM);
+  const { loadProject } = useProjectCommands();
 
   const sortedRecents = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase()
+    const term = searchTerm.trim().toLowerCase();
     const filtered = recents.filter((item) => {
-      if (!term) return true
+      if (!term) return true;
       const haystack = [item.name, item.path, item.template ?? '', item.colorSpace ?? '']
         .filter(Boolean)
-        .map((value) => value.toLowerCase())
-      return haystack.some((value) => value.includes(term))
-    })
+        .map((value) => value.toLowerCase());
+      return haystack.some((value) => value.includes(term));
+    });
 
-    return filtered.sort(compareRecents)
-  }, [recents, searchTerm])
+    return filtered.sort(compareRecents);
+  }, [recents, searchTerm]);
 
   const updateRecents = useCallback((entry: Partial<Recent> & { path: string }) => {
     setRecents((prev) => {
-      const existing = prev.find((item) => item.path === entry.path)
+      const existing = prev.find((item) => item.path === entry.path);
 
       const next: Recent = {
         name: entry.name?.trim()?.length ? entry.name.trim() : existing?.name || deriveNameFromPath(entry.path),
@@ -211,165 +261,208 @@ export function Hub() {
         colorSpace: entry.colorSpace ?? existing?.colorSpace,
         preview: entry.preview ?? existing?.preview ?? null,
         error: entry.error ?? existing?.error ?? null,
-      }
+      };
 
-      const combined = [next, ...prev.filter((item) => item.path !== entry.path)]
-      const ordered = combined.sort(compareRecents)
-      const limited = ordered.slice(0, MAX_RECENTS)
-      persistRecents(limited)
-      return limited
-    })
-  }, [])
+      const combined = [next, ...prev.filter((item) => item.path !== entry.path)];
+      const ordered = combined.sort(compareRecents);
+      const limited = ordered.slice(0, MAX_RECENTS);
+      persistRecents(limited);
+      return limited;
+    });
+  }, []);
 
   const fetchRecents = useCallback(async () => {
-    setIsLoading(true)
-    setLoadError(null)
+    setIsLoading(true);
+    setLoadError(null);
+    const stored = loadRecentsFromStorage();
 
     try {
-      const list = await engine.listRecent()
-      if (list.length > 0) {
-        const ordered = [...list].sort(compareRecents)
-        setRecents(ordered)
-        persistRecents(ordered)
-      } else {
-        setRecents(loadRecentsFromStorage())
+      const [engineResult, snapshotResult] = await Promise.allSettled([engine.listRecent(), projectPersistence.listRecent()]);
+
+      const engineRecents = engineResult.status === 'fulfilled' ? engineResult.value : [];
+      if (engineResult.status === 'rejected') {
+        console.warn('[Hub] engine.listRecent failed', engineResult.reason);
+      }
+
+      const snapshotRecents =
+        snapshotResult.status === 'fulfilled'
+          ? snapshotResult.value.map(mapSnapshotToRecent).filter((item): item is Recent => Boolean(item))
+          : [];
+      if (snapshotResult.status === 'rejected') {
+        console.warn('[Hub] projectPersistence.listRecent failed', snapshotResult.reason);
+      }
+
+      const merged = mergeRecentCollections(stored, snapshotRecents, engineRecents);
+      setRecents(merged);
+      persistRecents(merged);
+
+      if (engineResult.status === 'rejected' && snapshotResult.status === 'rejected') {
+        setLoadError('Unable to load recent projects');
+      } else if (engineResult.status === 'rejected' || snapshotResult.status === 'rejected') {
+        setLoadError('Showing partial list due to sync issues');
       }
     } catch (error) {
-      console.warn('[Hub] Failed to fetch recent projects', error)
-      setLoadError(error instanceof Error ? error.message : 'Unable to load recent projects')
-      setRecents(loadRecentsFromStorage())
+      console.warn('[Hub] Failed to fetch recent projects', error);
+      setLoadError(error instanceof Error ? error.message : 'Unable to load recent projects');
+      setRecents(stored);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    fetchRecents()
-  }, [fetchRecents])
+    fetchRecents();
+  }, [fetchRecents]);
+
+  useEffect(() => {
+    const off = engine.on('recents:updated', (payload) => {
+      if (!Array.isArray(payload)) return;
+      setRecents((current) => {
+        const merged = mergeRecentCollections(current, payload as Recent[]);
+        persistRecents(merged);
+        return merged;
+      });
+    });
+
+    return () => {
+      off?.();
+    };
+  }, []);
 
   useEffect(() => {
     const off = engine.on('lastProject:updated', (payload) => {
       if (!payload) {
-        setLastProject(null)
-        return
+        setLastProject(null);
+        return;
       }
-      setLastProject(payload as LastProject)
-    })
+      setLastProject(payload as LastProject);
+    });
 
     return () => {
-      off?.()
-    }
-  }, [])
+      off?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(SPLASH_AUTO_CONTINUE_KEY, autoContinue ? 'true' : 'false');
+  }, [autoContinue]);
 
   const openProjectByPath = useCallback(
     async (path: string) => {
-      if (!path) return
-      const trimmed = path.trim()
-      if (!trimmed) return
+      if (!path) return;
+      const trimmed = path.trim();
+      if (!trimmed) return;
 
-      setBusyPath(trimmed)
-      setActionError(null)
+      setBusyPath(trimmed);
+      setActionError(null);
 
       try {
-        const project = await engine.openProject(trimmed)
-        const resolvedPath = project?.path || trimmed
-        const name = project?.name || deriveNameFromPath(resolvedPath)
+        await loadProject(trimmed);
+        const name = deriveNameFromPath(trimmed);
+        const timestamp = new Date().toISOString();
         updateRecents({
           name,
-          path: resolvedPath,
-          last: new Date().toISOString(),
-          template: project?.template ?? null,
-          width: project?.settings?.width,
-          height: project?.settings?.height,
-          fps: project?.settings?.fps,
-          colorSpace: project?.settings?.colorSpace,
-        })
+          path: trimmed,
+          last: timestamp,
+        });
         setLastProject({
           name,
-          path: resolvedPath,
-          lastOpened: new Date().toISOString(),
-          template: project?.template ?? null,
-        })
-        nav('/editor')
+          path: trimmed,
+          lastOpened: timestamp,
+          template: null,
+        });
+        nav('/editor');
       } catch (error) {
-  console.error('[Hub] Failed to open project', error)
-  setActionError(error instanceof Error ? error.message : 'Unable to open project')
+        console.error('[Hub] Failed to open project', error);
+        setActionError(error instanceof Error ? error.message : 'Unable to open project');
       } finally {
-        setBusyPath(null)
+        setBusyPath(null);
       }
     },
-    [nav, updateRecents]
-  )
+    [loadProject, nav, updateRecents],
+  );
 
   const handleOpenFromDisk = useCallback(async () => {
+    setActionError(null);
     try {
-      const selected = await engine.browseForProject()
-      if (!selected) return
-      await openProjectByPath(selected)
+      const selected = await engine.browseForProject();
+      if (!selected) return;
+      await openProjectByPath(selected);
     } catch (error) {
-      console.error('[Hub] File dialog failed', error)
-      setActionError(error instanceof Error ? error.message : 'Unable to open file dialog')
+      console.error('[Hub] File dialog failed', error);
+      setActionError(error instanceof Error ? error.message : 'Unable to open file dialog');
     }
-  }, [openProjectByPath, setActionError])
+  }, [openProjectByPath]);
+
+  const handleForgetLastProject = useCallback(() => {
+    const stalePath = lastProject?.path ?? null;
+    engine.clearLastProject();
+    setLastProject(null);
+    setActionError(null);
+    if (stalePath) {
+      setRecents((prev) => prev.filter((item) => item.path !== stalePath));
+    }
+  }, [lastProject]);
 
   const handleFormChange = useCallback((patch: Partial<CreateFormState>) => {
-    setForm((prev) => ({ ...prev, ...patch }))
-  }, [])
+    setForm((prev) => ({ ...prev, ...patch }));
+  }, []);
 
   const handleBrowseLocation = useCallback(async () => {
     try {
-      const selected = await engine.browseForFolder()
-      if (!selected) return
-      handleFormChange({ location: selected })
-      setCreateError(null)
+      const selected = await engine.browseForFolder();
+      if (!selected) return;
+      handleFormChange({ location: selected });
+      setCreateError(null);
     } catch (error) {
-      console.error('[Hub] File dialog failed', error)
-      setCreateError(error instanceof Error ? error.message : 'Unable to open folder dialog')
+      console.error('[Hub] File dialog failed', error);
+      setCreateError(error instanceof Error ? error.message : 'Unable to open folder dialog');
     }
-  }, [handleFormChange, setCreateError])
+  }, [handleFormChange, setCreateError]);
 
   const handleRemoveRecent = useCallback((path: string) => {
     setRecents((prev) => {
-      const filtered = prev.filter((item) => item.path !== path)
-      const ordered = filtered.sort(compareRecents)
-      persistRecents(ordered)
-      return ordered
-    })
-    setActiveMenuPath((current) => (current === path ? null : current))
-  }, [])
+      const filtered = prev.filter((item) => item.path !== path);
+      const ordered = filtered.sort(compareRecents);
+      persistRecents(ordered);
+      return ordered;
+    });
+    setActiveMenuPath((current) => (current === path ? null : current));
+  }, []);
 
   const handleTogglePin = useCallback((path: string) => {
     setRecents((prev) => {
-      const updated = prev.map((item) => (item.path === path ? { ...item, pinned: !item.pinned } : item))
-      const ordered = updated.sort(compareRecents)
-      persistRecents(ordered)
-      return ordered
-    })
-    setActiveMenuPath(null)
-  }, [])
+      const updated = prev.map((item) => (item.path === path ? { ...item, pinned: !item.pinned } : item));
+      const ordered = updated.sort(compareRecents);
+      persistRecents(ordered);
+      return ordered;
+    });
+    setActiveMenuPath(null);
+  }, []);
 
   const handleCopyPath = useCallback((path: string) => {
-    setActiveMenuPath(null)
+    setActiveMenuPath(null);
 
     if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       navigator.clipboard.writeText(path).catch((error) => {
-        console.warn('[Hub] Failed to copy path', error)
-      })
+        console.warn('[Hub] Failed to copy path', error);
+      });
     } else if (typeof window !== 'undefined') {
-      window.prompt('Copy project path', path)
+      window.prompt('Copy project path', path);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    if (!activeMenuPath) return
+    if (!activeMenuPath) return;
 
-    const handlePointer = () => setActiveMenuPath(null)
-    document.addEventListener('pointerdown', handlePointer)
-    return () => document.removeEventListener('pointerdown', handlePointer)
-  }, [activeMenuPath])
+    const handlePointer = () => setActiveMenuPath(null);
+    document.addEventListener('pointerdown', handlePointer);
+    return () => document.removeEventListener('pointerdown', handlePointer);
+  }, [activeMenuPath]);
 
   const openCreateModal = useCallback((template?: TemplateSpec) => {
-    setSelectedTemplate(template ?? null)
+    setSelectedTemplate(template ?? null);
     setForm({
       name: template?.name ?? '',
       location: '',
@@ -377,39 +470,39 @@ export function Hub() {
       height: String(template?.preset.height ?? 1080),
       fps: String(template?.preset.fps ?? 60),
       colorSpace: template?.preset.colorSpace ?? 'Rec.709',
-    })
-    setCreateError(null)
-    setIsCreateOpen(true)
-  }, [])
+    });
+    setCreateError(null);
+    setIsCreateOpen(true);
+  }, []);
 
   useEffect(() => {
-    if (!location.state || typeof location.state !== 'object') return
-    const action = (location.state as { action?: string }).action
+    if (!location.state || typeof location.state !== 'object') return;
+    const action = (location.state as { action?: string }).action;
     if (action === 'new-project') {
-      openCreateModal()
-      nav(location.pathname, { replace: true, state: null })
+      openCreateModal();
+      nav(location.pathname, { replace: true, state: null });
     }
-  }, [location, nav, openCreateModal])
+  }, [location, nav, openCreateModal]);
 
   const closeCreateModal = useCallback(() => {
-    if (isCreating) return
-    setIsCreateOpen(false)
-    setSelectedTemplate(null)
-    setForm(DEFAULT_FORM)
-    setCreateError(null)
-  }, [isCreating])
+    if (isCreating) return;
+    setIsCreateOpen(false);
+    setSelectedTemplate(null);
+    setForm(DEFAULT_FORM);
+    setCreateError(null);
+  }, [isCreating]);
 
   const handleCreateSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault()
-      setCreateError(null)
+      event.preventDefault();
+      setCreateError(null);
 
       if (!form.location.trim()) {
-        setCreateError('Please specify where the project should be stored')
-        return
+        setCreateError('Please specify where the project should be stored');
+        return;
       }
 
-      setIsCreating(true)
+      setIsCreating(true);
       try {
         const payload: CreateProjectPayload = {
           name: form.name.trim() || (selectedTemplate?.name ?? 'New Project'),
@@ -419,11 +512,11 @@ export function Hub() {
           fps: Number.parseInt(form.fps, 10) || 60,
           colorSpace: form.colorSpace,
           template: selectedTemplate?.name,
-        }
+        };
 
-        const project = await engine.createProject(payload)
-        const path = project?.path || payload.location
-        const name = project?.name || payload.name
+        const project = await engine.createProject(payload);
+        const path = project?.path || payload.location;
+        const name = project?.name || payload.name;
         updateRecents({
           name,
           path,
@@ -433,24 +526,25 @@ export function Hub() {
           height: project?.settings?.height ?? payload.height,
           fps: project?.settings?.fps ?? payload.fps,
           colorSpace: project?.settings?.colorSpace ?? payload.colorSpace,
-        })
+        });
         setLastProject({
           name,
           path,
           lastOpened: new Date().toISOString(),
           template: project?.template ?? payload.template ?? null,
-        })
-        setIsCreateOpen(false)
-        nav('/editor')
+        });
+        await loadProject(path);
+        setIsCreateOpen(false);
+        nav('/editor');
       } catch (error) {
-        console.error('[Hub] Failed to create project', error)
-        setCreateError(error instanceof Error ? error.message : 'Unable to create project')
+        console.error('[Hub] Failed to create project', error);
+        setCreateError(error instanceof Error ? error.message : 'Unable to create project');
       } finally {
-        setIsCreating(false)
+        setIsCreating(false);
       }
     },
-    [form, nav, selectedTemplate, updateRecents]
-  )
+    [form, loadProject, nav, selectedTemplate, updateRecents],
+  );
 
   return (
     <div className="min-h-screen bg-ui-bg text-white">
@@ -503,9 +597,70 @@ export function Hub() {
           </div>
         </header>
 
+        {lastProject && (
+          <section className="rounded-2xl border border-ui-border bg-black/20 px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1 max-w-2xl">
+              <div className="text-xs uppercase tracking-[0.3em] text-gray-500">Continue last project</div>
+              <div className="text-2xl font-semibold text-white flex items-center gap-3">
+                <span>🎬</span>
+                <span className="truncate" title={lastProject.name}>{lastProject.name}</span>
+              </div>
+              <div className="text-sm text-gray-400 break-all" title={lastProject.path}>
+                {lastProject.path}
+              </div>
+              <div className="text-xs text-gray-500 flex flex-wrap gap-3">
+                {lastProject.template && <span className="rounded-full bg-white/5 px-2 py-0.5">{lastProject.template}</span>}
+                {lastProject.lastOpened && <span>Last opened {formatLastUsed(lastProject.lastOpened)}</span>}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <button
+                type="button"
+                onClick={() => openProjectByPath(lastProject.path)}
+                disabled={busyPath === lastProject.path}
+                className="inline-flex items-center gap-2 rounded-lg border border-ui-border bg-ui-panel px-4 py-2 text-sm font-medium text-gray-100 transition hover:border-blue-500/60 hover:text-blue-200 disabled:opacity-60"
+              >
+                {busyPath === lastProject.path ? 'Opening…' : 'Continue'}
+              </button>
+              <button
+                type="button"
+                onClick={handleForgetLastProject}
+                className="text-xs text-gray-500 hover:text-gray-200"
+              >
+                Forget this project
+              </button>
+              <label className="flex items-center gap-2 text-xs text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={autoContinue}
+                  onChange={(event) => setAutoContinue(event.target.checked)}
+                  className="h-3.5 w-3.5 rounded border border-ui-border bg-black/40 text-ui-accent focus:ring-ui-accent"
+                />
+                Auto-continue on launch
+              </label>
+            </div>
+          </section>
+        )}
+
         {actionError && (
-          <div className="rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-3 text-sm text-red-200">
-            {actionError}
+          <div className="rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-3 text-sm text-red-200 space-y-3">
+            <p>{actionError}</p>
+            <div className="flex flex-wrap gap-3 text-xs">
+              <button
+                type="button"
+                onClick={handleOpenFromDisk}
+                className="rounded border border-red-500/50 px-3 py-1 text-red-100 transition hover:bg-red-500/20"
+              >
+                Choose another file
+              </button>
+              <button
+                type="button"
+                onClick={handleForgetLastProject}
+                className="rounded border border-red-500/30 px-3 py-1 text-red-100 transition hover:bg-red-500/20"
+              >
+                Forget last project
+              </button>
+            </div>
           </div>
         )}
 
@@ -581,12 +736,12 @@ export function Hub() {
               ) : (
                 <div className="divide-y divide-ui-border/70">
                   {sortedRecents.map((project) => {
-                    const isMenuOpen = activeMenuPath === project.path
-                    const details = []
-                    if (project.template) details.push(project.template)
-                    if (project.width && project.height) details.push(`${project.width}×${project.height}`)
-                    if (project.fps) details.push(`${project.fps} fps`)
-                    if (project.colorSpace) details.push(project.colorSpace)
+                    const isMenuOpen = activeMenuPath === project.path;
+                    const details = [];
+                    if (project.template) details.push(project.template);
+                    if (project.width && project.height) details.push(`${project.width}×${project.height}`);
+                    if (project.fps) details.push(`${project.fps} fps`);
+                    if (project.colorSpace) details.push(project.colorSpace);
 
                     return (
                       <div key={project.path} className="relative">
@@ -596,11 +751,7 @@ export function Hub() {
                           className="flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-white/5"
                         >
                           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/5 text-lg">
-                            {project.template ? (
-                              <span>{project.template.slice(0, 1)}</span>
-                            ) : (
-                              <span>🎬</span>
-                            )}
+                            {project.template ? <span>{project.template.slice(0, 1)}</span> : <span>🎬</span>}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
@@ -608,7 +759,11 @@ export function Hub() {
                                 {project.name}
                               </span>
                               {project.pinned && <span className="text-xs text-amber-300">★</span>}
-                              {project.error && <span className="rounded bg-red-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-200">Issue</span>}
+                              {project.error && (
+                                <span className="rounded bg-red-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-200">
+                                  Issue
+                                </span>
+                              )}
                             </div>
                             <div className="mt-1 text-xs text-gray-500 break-all" title={project.path}>
                               {project.path}
@@ -628,8 +783,8 @@ export function Hub() {
                             <button
                               type="button"
                               onClick={(event) => {
-                                event.stopPropagation()
-                                setActiveMenuPath((current) => (current === project.path ? null : project.path))
+                                event.stopPropagation();
+                                setActiveMenuPath((current) => (current === project.path ? null : project.path));
                               }}
                               className="rounded border border-transparent px-2 py-1 text-xs text-gray-400 hover:border-ui-border hover:text-gray-200"
                             >
@@ -676,7 +831,7 @@ export function Hub() {
                           </div>
                         )}
                       </div>
-                    )
+                    );
                   })}
                 </div>
               )}
@@ -756,5 +911,5 @@ export function Hub() {
         isSubmitting={isCreating}
       />
     </div>
-  )
+  );
 }

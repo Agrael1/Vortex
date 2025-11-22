@@ -106,19 +106,25 @@ class CefEngine {
 
   // event from C++: App::OnNodeUpdate -> SendUIMessage("node_update", ...)
   onNodeUpdate(cb: (nodePtr: number, propIndex: number, value: any) => void) {
-    (window as any).addEventListener?.('cef-message', (ev: CEFAny) => {
+    const handler = (ev: CEFAny) => {
       const { name, args } = ev.detail || {};
-      if (name === 'node_update' && Array.isArray(args) && args.length >= 3) {
-        const nodePtr = Number(args[0]);
-        const propIdx = Number(args[1]);
-        const raw = args[2];
-        try {
-          cb(nodePtr, propIdx, JSON.parse(raw));
-        } catch {
-          cb(nodePtr, propIdx, raw);
-        }
+      if (name !== 'node_update' || !Array.isArray(args) || args.length < 3) {
+        return;
       }
-    });
+
+      const nodePtr = Number(args[0]);
+      const propIdx = Number(args[1]);
+      const raw = args[2];
+
+      try {
+        cb(nodePtr, propIdx, JSON.parse(raw));
+      } catch {
+        cb(nodePtr, propIdx, raw);
+      }
+    };
+
+    (window as any).addEventListener?.('cef-message', handler);
+    return () => (window as any).removeEventListener?.('cef-message', handler);
   }
 }
 

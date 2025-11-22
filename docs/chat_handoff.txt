@@ -1,0 +1,163 @@
+VORTEX UI HAND-OFF NOTES (updated 2025-11-22)
+============================================
+
+1. ARCHITECTURE SNAPSHOT
+------------------------
+- Workspace layout
+  * Native core (C++): src/vortex, entry_main.cpp wires up vortex::App which embeds CEF UIApp.
+  * UI bundle: ui/vortex-ui-skeleton (Vite). Built assets are loaded by native shell through cef_cache/.../index.html.
+  * Shared docs/tests live under docs/, test/ (C++), ui/vortex-ui-skeleton/src/app/__tests__ (React).
+- Bridge layers
+  * `src/bridge/vortex.ts` discovers whichever JS bridge the shell exposes (window.vortexCall / cefQuery fallback) and normalizes calls (`Vortex.*`).
+  * `src/bridge/engine.ts` is thin wrapper for eventing (currently `onNodeUpdate`) and synchronous fire-and-forget APIs (play/stop/etc.).
+- React/Recoil data flow
+  * `projectPathAtom`, `graphSnapshotAtom`, `selectedNodePtrAtom`, etc. hold canonical UI state.
+  * Hooks (`useProjectPersistence`, `useProjectCommands`, `useEngineNodeUpdates`) are the glue between UI intent, persistence, and engine events.
+  * `GraphPanel` consumes `graphSnapshotAtom` and mirrors it into ReactFlow nodes/edges; `InspectorPanel` reads same atom for metadata.
+- Rendering stack
+  * ReactFlow handles graph layout/editing; custom nodes defined in `src/app/components/CustomNode.tsx`.
+  * UI uses Tailwind-style utility classes defined in `index.css`/`AppShell` components; docking layout via react-mosaic-component.
+
+2. LATEST CHANGES (this session)
+--------------------------------
+- Splash screen (src/app/routes/Splash.tsx)
+  * No longer auto-opens last project. Default path is: show Splash -> auto-redirect to Hub within ~1-3s.
+  * Added CTA buttons: Continue last project (manual), Open Hub, Forget last project.
+  * Continuation triggers loadProject() and navigates to /editor if successful.
+  * Added opt-in "Auto-continue next time" toggle (stored in localStorage). When enabled and a project exists, Splash auto-triggers continue after ~1.2s.
+
+- Project persistence (src/state/hooks/useProjectPersistence.ts)
+  * Removed automatic setPath(engine.getLastProject()). Hydration now waits until user picks a project.
+  * Fix ensures new sessions always start at Hub unless user explicitly loads a project.
+
+- Hub experience (src/app/routes/Hub.tsx)
+  * Added "Continue last project" banner with name/path/template/time + actions (Continue, Forget).
+  * Continue action calls openProjectByPath() (shared logic), so recents, busy state, and errors behave exactly like clicking a row.
+  * Header already had a smaller "Back to" button; both now coexist (CTA block is more obvious).
+  * Added the same auto-continue preference checkbox so users can toggle Splash behavior without waiting for another boot.
+
+- Graph/node updates (from earlier work, but critical context)
+  * New hook src/state/hooks/useEngineNodeUpdates.ts listens to engine.onNodeUpdate and populates graphSnapshotAtom with positions, labels, and arbitrary props.
+  * Graph nodes now carry props bag (GraphNodeSnapshot.props). These values propagate through GraphPanel, persistence, inspector, and CustomNode renderer.
+  * CustomNode (src/app/components/CustomNode.tsx) visualizes props (status/severity/progress/meta chips, message, accent color).
+  * InspectorPanel passes live props into PropertyEditor so UI stays in sync without manual refresh.
+  * Hook is now mounted once in DockLayout to keep state consistent across panels.
+
+3. ENGINE ↔ UI CONTRACT
+------------------------
+- Native side
+  * `vortex::App::OnNodeUpdate` gets invoked by nodes when `UpdateNotifier` fires (property changes, e.g., SetProperty notify=true).
+  * App packages the update as `_ui_app.SendUIMessage(u"node_update", double(nodePtr), int32(propertyIndex), std::string(value))`.
+- Browser side
+  * `engine.onNodeUpdate(cb)` attaches DOM listener to window `cef-message` events (detail { name, args }).
+  * Values arrive as strings; helper tries JSON.parse, falls back to raw string.
+- Property lookups
+  * To avoid extra C++ instrumentation we inspect `Vortex.getNodeProperties(nodePtr)` (currently returns JSON schema) and build index->name map.
+  * Map cached per node, invalidated only if `pendingPropertyFetch` completes.
+- Supported property types
+  * `position`: JSON object { x, y }. Hook ensures numbers and updates both `node.position` and `node.props.position`.
+  * `label`: plain string; UI normalizes empty string to fallback "Node" label.
+  * Everything else stored under `node.props[propName]` (status/severity/fps etc.) for downstream consumers (CustomNode, Inspector).
+- Client→engine updates
+  * Node drag end in ReactFlow -> Vortex.setNodeProperty(ptr, "position", JSON.stringify(position)). Engine is expected to broadcast back same update.
+  * Label edits from Inspector -> Vortex.setNodeProperty(ptr, 'label', value).
+  * Missing pieces: there is currently no event for node creation/removal/edge updates; UI assumes command succeeded and updates snapshot optimistically.
+
+4. ROUTING / FLOW
+-----------------
+- AppShell routes: "/splash" -> default redirect target; "/hub" -> project selection; "/editor" -> EditorGate (keeps verifying snapshot before mounting DockLayout).
+- Splash now only auto-redirects to Hub; continuing last project is manual.
+  * Users can enable the auto-continue toggle (from Splash or Hub) if they want Splash to open the last project automatically.
+- Hub handles project creation/opening and recents persistence (localStorage + engine + project snapshots).
+- EditorGate responsible for gating entry to editor (not modified this pass).
+
+5. BUILD / TEST COMMANDS
+------------------------
+- UI tooling
+  * `npm install` (first-time setup).
+  * `npm run dev` – Vite dev server (if running standalone outside CEF shell).
+  * `npm run build` – Vite production build (outputs to dist/ consumed by native app when packaged).
+  * `npm run typecheck` – TypeScript only (tsc --noEmit). Lint command currently disabled; ESLint still configured but Prettier plugin removed.
+- Native tooling
+  * Build via root CMake (see CMakePresets). `cmake --preset default && cmake --build --preset default` typical flow.
+  * Tests under test/ (C++) runnable with ctest after build.
+- Dev workflow tips
+  * When editing UI while testing inside CEF shell, ensure latest dist is copied or point shell to Vite dev server.
+  * Clear cef_cache/... when switching between dev/prod assets to avoid stale JS.
+
+6. REMAINING IDEAS / NEXT STEPS
+--------------------------------
+Already discussed but not started:
+- Sync edges/connectors (need engine events for connect/disconnect).
+- Expand CustomNode visuals (icons per prop, feed preview, error badges, inline charts for meters).
+- Enrich Hub (pin/unpin from CTA, keyboard shortcuts, quick rename, inline error badges for broken projects).
+- Autosave toggle (remember user preference; if enabled, Splash could auto-continue after timeout).
+- Unit tests (vitest) for `useEngineNodeUpdates`, `useProjectPersistence`, and hub reducers with mocked engine.
+
+Additional opportunities after reviewing code:
+- Normalize property schema caching: expire on schema mismatch or when node is removed.
+- Provide `engine.onProjectEvent` hook (for additions/removals) so UI does not rely on optimistic updates.
+- Introduce logging/notification center fed by `engine.onConsole` (if native side exposes logs).
+- Document JSON contract for `ProjectDTO` (src/app/services/ipc/cefBridge.ts) so future updates remain compatible.
+
+7. HOW TO CONTINUE
+------------------
+Step-by-step workflow for new developer:
+1. `cd ui/vortex-ui-skeleton && npm install` (first time) then `npm run dev` if you want hot reload; otherwise run native shell which loads dist build.
+2. Launch native app (vortex.exe) so CEF hosts UI.
+3. App boot sequence: Splash -> Hub. Use Continue CTA or "Open…" to select a `.vortex` project. This sets `projectPathAtom` via `useProjectCommands.loadProject`.
+4. `useProjectPersistence` observes `projectPathAtom`, loads snapshot via `projectPersistence.load`, hydrates Recoil atoms (meta/settings/graph).
+5. DockLayout renders GraphPanel/Inspector once persistence sets `isHydrated=true`.
+6. Graph editing writes directly to Vortex bridge for node operations; `useEngineNodeUpdates` mirrors any native-side changes back into Recoil state.
+7. Before pushing code, run `npm run typecheck` (and native builds/tests if C++ touched). Optionally `npm run build` to verify production bundle.
+
+Debug tips:
+- Enable `console.log` inside `useEngineNodeUpdates` to verify property events (wrap with condition to avoid noisy logs in prod).
+- If nodes stop updating, ensure `DockLayout` still mounts hook (no duplicate React roots) and that native App is calling `SetPropertyUpdateNotifier`.
+- Graph not hydrating? Check `projectPersistence.load` logs and browser devtools localforage entries.
+
+8. FILES TO REVIEW FIRST
+------------------------
+- src/state/hooks/useEngineNodeUpdates.ts – event wiring, caching, props mutation.
+- src/app/components/CustomNode.tsx – how props influence visuals.
+- src/app/panels/GraphPanel.tsx – conversion between GraphSnapshot and ReactFlow.
+- src/app/panels/InspectorPanel.tsx & src/app/components/PropertyEditor.tsx – live property panel behavior.
+- src/app/routes/Splash.tsx / Hub.tsx – user journey before editor loads.
+- src/state/hooks/useProjectPersistence.ts – hydration/saving rules.
+- src/state/hooks/useProjectCommands.ts & src/services/persistence/index.ts – bridging to storage/native project API.
+
+9. GRAPH STATE SCHEMA
+---------------------
+- `GraphSnapshot`: { nodes: GraphNodeSnapshot[], edges: GraphEdgeSnapshot[] }.
+- `GraphNodeSnapshot`: { id, type, label?, position {x,y}, ptr?, props? }.
+  * `id` string is ReactFlow node id; `ptr` is numeric engine pointer (double-casted).
+  * `props` is arbitrary record mirrored from engine (status/progress, etc.).
+- `GraphEdgeSnapshot`: { id, source, target, animated? } – currently only supports single input/output per node (loose contract).
+- Persistence (src/services/persistence/index.ts)
+  * `coerceGraphSnapshot` converts engine DTO (nodes[].pos, params) into snapshot.
+  * Local snapshot store keeps JSON in IndexedDB via localforage; also caches recents list.
+
+10. KNOWN LIMITATIONS / TODOs
+-----------------------------
+- No reconciliation if engine deletes a node outside UI: we rely on node_update to infer presence. Need explicit removal events.
+- Edge list does not sync from engine; GraphPanel shows stale connections if engine modifies graph behind UI.
+- Property schema caching never expires; if node type changes dynamic props, UI might ignore new fields until reload.
+- Splash auto-redirect delay is fixed; consider making it configurable or storing last action preference.
+  * Auto-continue toggle now stored per-user (localStorage key `vortex.splash.autoContinue`) and can be changed from Hub or Splash. Still consider exposing delay/timeout controls.
+- Tests missing for new hooks; manual testing only (npm run typecheck + interactive dev session).
+
+11. ENGINE API SUMMARY
+----------------------
+- Vortex bridge methods (src/bridge/vortex.ts)
+  * `getNodeTypes`, `createNode`, `connect`, `disconnect`, `removeNode`, `getNodeProperties`, `setNodeProperty`, `setNodePropertyByName`, `play/stop`.
+- Engine wrapper (src/bridge/engine.ts)
+  * `onNodeUpdate(cb)` returns unsubscribe; ensure to remove listeners when component unmounts (currently handled via DockLayout-level hook).
+- Additional native IPC (src/app/services/ipc/cefBridge.ts)
+  * `engine.getLastProject()`, `engine.listRecent()`, `engine.browseForProject()`, `engine.browseForFolder()`, `engine.createProject()` etc.
+- When adding new endpoints, extend both `cefBridge.ts` (TypeScript types) and `bridge/vortex.ts` (call wrapper).
+
+END-OF-DOCUMENT NOTES
+---------------------
+Keep this file updated whenever behavior changes, especially around boot flow, graph synchronization, or engine contracts. Future contributors should be able to reconstruct current UX without re-reading the entire git history.
+
+END OF HAND-OFF

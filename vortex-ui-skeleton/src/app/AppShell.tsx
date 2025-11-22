@@ -1,7 +1,8 @@
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { DockLayout } from '@/app/layout/DockLayout';
 import { Splash } from '@/app/routes/Splash';
 import { Hub } from '@/app/routes/Hub';
+import { EditorGate } from '@/app/routes/EditorGate';
+import { useProjectPersistence } from '@state/hooks/useProjectPersistence';
 
 const shouldUseHashRouter = () => {
   if (typeof window === 'undefined') {
@@ -18,15 +19,16 @@ const shouldUseHashRouter = () => {
 };
 
 export function AppShell() {
+  useProjectPersistence();
   const RouterComponent = shouldUseHashRouter() ? HashRouter : BrowserRouter;
 
   return (
     <RouterComponent>
       <Routes>
-        <Route path="/" element={<Navigate to="/hub" replace />} />
+        <Route path="/" element={<Navigate to="/splash" replace />} />
         <Route path="/splash" element={<Splash />} />
         <Route path="/hub" element={<Hub />} />
-        <Route path="/editor" element={<DockLayout />} />
+        <Route path="/editor" element={<EditorGate />} />
       </Routes>
     </RouterComponent>
   );

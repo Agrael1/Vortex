@@ -1,11 +1,11 @@
-import React from 'react'
+import React from 'react';
 
 const groups: Record<string, string[]> = {
-  Inputs: ['StreamInput','ImageInput','NDIInput'],
-  Filters: ['Blend','ColorCorrect','Blur'],
-  Output: ['NDIOutput','WindowOutput','FileWriter'],
-  Utility: ['Switch','Timer','Constant'],
-}
+  Inputs: ['StreamInput', 'ImageInput', 'NDIInput'],
+  Filters: ['Blend', 'ColorCorrect', 'Blur'],
+  Output: ['NDIOutput', 'WindowOutput', 'FileWriter'],
+  Utility: ['Switch', 'Timer', 'Constant'],
+};
 
 export function LibraryPanel() {
   return (
@@ -26,5 +26,5 @@ export function LibraryPanel() {
         ))}
       </div>
     </div>
-  )
+  );
 }

@@ -42,12 +42,14 @@ struct value_traits<bool> {
     }
     static bool extract_value(bool& out, CefListValue& list, size_t index)
     {
-        if (list.GetType(index) != VTYPE_BOOL) {
-            return false;
+        const auto type = list.GetType(index);
+        if (type == VTYPE_BOOL) {
+            out = list.GetBool(index);
+            return true;
         }
 
-        out = list.GetBool(index);
-        return true;
+        vortex::warn("value_traits<bool> expected bool but got {}", reflect::enum_name(type));
+        return false;
     }
 };
 
@@ -75,11 +77,25 @@ struct value_traits<double> {
     }
     static bool extract_value(double& out, CefListValue& list, size_t index)
     {
-        if (list.GetType(index) != VTYPE_DOUBLE) {
-            return false;
+        const auto type = list.GetType(index);
+        if (type == VTYPE_DOUBLE) {
+            out = list.GetDouble(index);
+            return true;
         }
-        out = list.GetDouble(index);
-        return true;
+        if (type == VTYPE_INT) {
+            out = static_cast<double>(list.GetInt(index));
+            return true;
+        }
+        if (type == VTYPE_STRING) {
+            auto raw = list.GetString(index).ToString();
+            try {
+                out = std::stod(raw);
+                return true;
+            } catch (...) {
+            }
+        }
+        vortex::warn("value_traits<double> expected numeric type but got {}", reflect::enum_name(type));
+        return false;
     }
 };
 

@@ -1,13 +1,102 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRecoilCallback, useRecoilValue } from 'recoil';
-import { Vortex } from '@/bridge/vortex';
+import { useRecoilValue } from 'recoil';
 import { PropertyEditor, PropertySpec } from '@/app/components/PropertyEditor';
 import { graphSnapshotAtom } from '@state/atoms/project';
 import { selectedNodePtrAtom } from '@state/atoms/editor';
+import { engine } from '@/app/services/ipc/cefBridge';
+import { useGraphCommands } from '@state/hooks/useGraphCommands';
 
 interface PropertySchema {
   properties: PropertySpec[];
 }
+
+const sanitizePropertyList = (schema: PropertySchema | null | undefined): PropertySpec[] => {
+  if (!schema || !Array.isArray(schema.properties)) {
+    return [];
+  }
+
+  return schema.properties
+    .filter((prop): prop is PropertySpec => Boolean(prop && typeof prop.name === 'string'))
+    .map((prop, index) => ({
+      ...prop,
+      index: typeof prop.index === 'number' ? prop.index : index,
+      label: prop.label ?? prop.name,
+    }));
+};
+
+const inferTypeFromValue = (value: unknown): PropertySpec['type'] => {
+  if (typeof value === 'boolean') return 'bool';
+  if (typeof value === 'number') return Number.isInteger(value) ? 'int' : 'float';
+  if (typeof value === 'string') return 'string';
+  if (Array.isArray(value)) {
+    if (value.length === 2) return 'vec2';
+    if (value.length === 3) return 'vec3';
+    if (value.length === 4) return 'vec4';
+    return 'string';
+  }
+  if (value && typeof value === 'object') return 'string';
+  return 'string';
+};
+
+const buildSchemaFromDict = (dict: Record<string, unknown>): PropertySpec[] => {
+  const entries = Object.entries(dict);
+  return entries.map(([name, value], index) => ({
+    name,
+    label: name,
+    index,
+    type: inferTypeFromValue(value),
+    value,
+    default: value,
+  }));
+};
+
+const loosenJson = (raw: string): any | null => {
+  const trimmed = raw.trim();
+  if (!trimmed.length) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // fallthrough to relaxed parsing
+  }
+
+  const withQuotedKeys = trimmed
+    .replace(/([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":')
+    .replace(/:\s*(?=[,}])/g, ': null')
+    .replace(/,\s*([}\]])/g, '$1');
+
+  try {
+    return JSON.parse(withQuotedKeys);
+  } catch {
+    return null;
+  }
+};
+
+const coercePropertySchema = (payload: unknown): PropertySpec[] | null => {
+  if (payload == null) {
+    return null;
+  }
+
+  if (Array.isArray((payload as PropertySchema).properties)) {
+    return sanitizePropertyList(payload as PropertySchema);
+  }
+
+  if (typeof payload === 'object') {
+    return buildSchemaFromDict(payload as Record<string, unknown>);
+  }
+
+  if (typeof payload === 'string') {
+    const parsed = loosenJson(payload);
+    if (parsed == null) {
+      return null;
+    }
+    return coercePropertySchema(parsed);
+  }
+
+  return null;
+};
 
 export function InspectorPanel() {
   const selectedPtr = useRecoilValue(selectedNodePtrAtom);
@@ -16,6 +105,7 @@ export function InspectorPanel() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
+  const { updateNodeLabel } = useGraphCommands();
 
   const selectedNode = useMemo(() => {
     if (!selectedPtr) return null;
@@ -37,34 +127,19 @@ export function InspectorPanel() {
     setNameDraft(selectedNode.label ?? selectedNode.type ?? '');
   }, [selectedNode]);
 
-  const updateNodeLabel = useRecoilCallback(
-    ({ set }) =>
-      (ptr: number, label: string) => {
-        set(graphSnapshotAtom, (prev) => ({
-          ...prev,
-          nodes: prev.nodes.map((node) =>
-            node.ptr === ptr || node.id === String(ptr) ? { ...node, label: label?.trim().length ? label : node.type } : node,
-          ),
-        }));
-      },
-    [],
-  );
-
   const handleNameChange = useCallback(
     async (value: string) => {
       setNameDraft(value);
-      if (!selectedPtr) return;
+      if (!selectedNode) return;
 
-      const normalized = value?.trim()?.length ? value : (selectedNode?.type ?? 'Node');
-      updateNodeLabel(selectedPtr, normalized);
-
+      const normalized = value?.trim()?.length ? value : selectedNode.type ?? 'Node';
       try {
-        await Vortex.setNodeProperty(selectedPtr, 'label', normalized);
+        await updateNodeLabel(selectedNode.id ?? selectedNode.ptr ?? null, normalized);
       } catch (error) {
         console.warn('[Inspector] Failed to sync label with engine', error);
       }
     },
-    [selectedNode?.type, selectedPtr, updateNodeLabel],
+    [selectedNode, updateNodeLabel],
   );
 
   useEffect(() => {
@@ -81,31 +156,20 @@ export function InspectorPanel() {
 
     (async () => {
       try {
-        const raw = await Vortex.getNodeProperties(selectedPtr);
+        const schema = await engine.getNodeProperties(selectedPtr);
 
         if (cancelled) return;
 
-        let parsedProps: PropertySchema;
+        const parsedProps = coercePropertySchema(schema ?? {}) ?? [];
 
-        if (typeof raw === 'string') {
-          try {
-            parsedProps = JSON.parse(raw);
-          } catch {
-            // If parsing fails, treat it as raw text and show error
-            setError(`Invalid JSON response: ${raw}`);
-            setProperties([]);
-            return;
-          }
-        } else {
-          parsedProps = raw as PropertySchema;
-        }
-
-        if (parsedProps && parsedProps.properties && Array.isArray(parsedProps.properties)) {
-          setProperties(parsedProps.properties);
-        } else {
-          setError('Invalid properties format received from engine');
+        if (parsedProps.length === 0) {
           setProperties([]);
+          setError(null);
+          return;
         }
+
+        setProperties(parsedProps);
+        setError(null);
       } catch (e: any) {
         if (!cancelled) {
           setError(`Failed to load properties: ${e?.message ?? e}`);
@@ -164,7 +228,7 @@ export function InspectorPanel() {
       {selectedNode && (
         <div className="p-4 border-b border-ui-border/50 text-xs text-gray-400 space-y-2">
           <div>
-            <label className="text-[11px] uppercase tracking-wide text-gray-500">Имя узла</label>
+            <label className="text-[11px] uppercase tracking-wide text-gray-500">Node Name</label>
             <input
               type="text"
               value={nameDraft}
@@ -184,11 +248,11 @@ export function InspectorPanel() {
               </div>
             )}
             <div>
-              <div className="text-[10px] uppercase text-gray-500">Тип</div>
+              <div className="text-[10px] uppercase text-gray-500">Type</div>
               <div className="text-sm text-gray-200">{selectedNode.type}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase text-gray-500">Поз.</div>
+              <div className="text-[10px] uppercase text-gray-500">Pos.</div>
               <div className="text-sm text-gray-200">
                 {Math.round(selectedNode.position?.x ?? 0)}×{Math.round(selectedNode.position?.y ?? 0)}
               </div>

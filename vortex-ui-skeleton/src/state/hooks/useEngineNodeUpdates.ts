@@ -1,10 +1,9 @@
-import { useEffect } from 'react';
-import { useSetRecoilState } from 'recoil';
+import { useEffect, useRef } from 'react';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
 import type { SetterOrUpdater } from 'recoil';
 import { graphSnapshotAtom } from '@state/atoms/project';
 import type { GraphNodeSnapshot, GraphSnapshot } from '@state/types';
-import { engine as nativeEngine } from '@/bridge/engine';
-import { Vortex } from '@/bridge/vortex';
+import { engine } from '@/app/services/ipc/cefBridge';
 
 type PropertySchema = {
   properties?: {
@@ -15,24 +14,33 @@ type PropertySchema = {
 
 type Position = { x: number; y: number };
 
-const propertyNameCache = new Map<number, Map<number, string>>();
-const pendingPropertyFetch = new Map<number, Promise<Map<number, string>>>();
-
-const toPosition = (value: unknown): Position | null => {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const x = Number(candidate.x);
-  const y = Number(candidate.y);
-
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    return null;
-  }
-
-  return { x, y };
+type NodeUpdatePayload = {
+  nodePtr: number;
+  propIndex: number;
+  value: unknown;
 };
+
+type NodeCreatedPayload = {
+  ptr: number;
+  id: string;
+  type?: string;
+  label?: string;
+  position?: Position;
+  clientNodeId?: string | null;
+  props?: Record<string, unknown> | null;
+};
+
+type PropertyCacheEntry = {
+  map: Map<number, string>;
+  fetchedAt: number;
+};
+
+type NodeMutator = (node: GraphNodeSnapshot) => GraphNodeSnapshot | null;
+
+const PROPERTY_CACHE_TTL_MS = 60_000;
+
+const propertyNameCache = new Map<number, PropertyCacheEntry>();
+const pendingFetches = new Map<number, Promise<Map<number, string>>>();
 
 const parseSchema = (raw: unknown): PropertySchema => {
   if (!raw) return {};
@@ -50,54 +58,55 @@ const parseSchema = (raw: unknown): PropertySchema => {
   return {};
 };
 
-const cachePropertyNames = async (nodePtr: number): Promise<Map<number, string>> => {
-  if (propertyNameCache.has(nodePtr)) {
-    return propertyNameCache.get(nodePtr)!;
-  }
-
-  if (pendingPropertyFetch.has(nodePtr)) {
-    return pendingPropertyFetch.get(nodePtr)!;
-  }
-
-  const fetchPromise = (async () => {
-    try {
-      const raw = await Vortex.getNodeProperties(nodePtr);
-      const schema = parseSchema(raw);
-      const map = new Map<number, string>();
-
-      for (const prop of schema.properties ?? []) {
-        if (!prop) continue;
-        if (typeof prop.index !== 'number') continue;
-        if (typeof prop.name !== 'string' || prop.name.length === 0) continue;
-        map.set(prop.index, prop.name);
-      }
-
-      propertyNameCache.set(nodePtr, map);
-      return map;
-    } catch (error) {
-      console.warn('[NodeUpdateSync] Failed to fetch properties for node', { nodePtr, error });
-      const empty = new Map<number, string>();
-      propertyNameCache.set(nodePtr, empty);
-      return empty;
-    } finally {
-      pendingPropertyFetch.delete(nodePtr);
-    }
-  })();
-
-  pendingPropertyFetch.set(nodePtr, fetchPromise);
-  return fetchPromise;
+const storePropertyCache = (nodePtr: number, map: Map<number, string>) => {
+  propertyNameCache.set(nodePtr, { map, fetchedAt: Date.now() });
+  return map;
 };
 
-const resolvePropertyName = async (nodePtr: number, propIndex: number): Promise<string | null> => {
-  if (!Number.isFinite(nodePtr) || !Number.isFinite(propIndex)) {
+const buildPropertyMap = (schema: unknown) => {
+  const parsed = parseSchema(schema);
+  const map = new Map<number, string>();
+  for (const prop of parsed.properties ?? []) {
+    if (!prop) continue;
+    if (typeof prop.index !== 'number') continue;
+    if (typeof prop.name !== 'string' || prop.name.length === 0) continue;
+    map.set(prop.index, prop.name);
+  }
+  return map;
+};
+
+const primePropertyCache = async (nodePtr: number) => {
+  try {
+    const schema = await engine.getNodeProperties(nodePtr);
+    return storePropertyCache(nodePtr, buildPropertyMap(schema));
+  } catch (error) {
+    console.warn('[NodeUpdateSync] Failed to fetch property schema', { nodePtr, error });
+    return storePropertyCache(nodePtr, new Map());
+  }
+};
+
+const isEntryFresh = (entry: PropertyCacheEntry | undefined) => {
+  if (!entry) {
+    return false;
+  }
+  return Date.now() - entry.fetchedAt <= PROPERTY_CACHE_TTL_MS;
+};
+
+const toPosition = (value: unknown): Position | null => {
+  if (!value || typeof value !== 'object') {
     return null;
   }
 
-  const map = await cachePropertyNames(nodePtr);
-  return map.get(propIndex) ?? null;
-};
+  const candidate = value as Record<string, unknown>;
+  const x = Number(candidate.x);
+  const y = Number(candidate.y);
 
-type NodeMutator = (node: GraphNodeSnapshot) => GraphNodeSnapshot | null;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  return { x, y };
+};
 
 const mutateNode = (
   nodePtr: number,
@@ -159,7 +168,7 @@ const storeNodeProp = (
   mutateNode(
     nodePtr,
     (node) => {
-      const nextProps = { ...(node.props ?? {}) };
+      const nextProps = { ...(node.props ?? {}) } as Record<string, unknown>;
       if (Object.prototype.hasOwnProperty.call(nextProps, propName) && Object.is(nextProps[propName], value)) {
         return node;
       }
@@ -171,73 +180,194 @@ const storeNodeProp = (
   );
 };
 
-export function useEngineNodeUpdates() {
-  const setGraphSnapshot = useSetRecoilState(graphSnapshotAtom);
+const fetchPropertyNames = async (nodePtr: number, options?: { force?: boolean }): Promise<Map<number, string>> => {
+  const { force = false } = options ?? {};
+  const entry = propertyNameCache.get(nodePtr);
+  if (!force && isEntryFresh(entry)) {
+    return entry!.map;
+  }
 
-  useEffect(() => {
-    if (typeof nativeEngine.onNodeUpdate !== 'function') {
+  if (force) {
+    pendingFetches.delete(nodePtr);
+  }
+
+  if (!pendingFetches.has(nodePtr)) {
+    const task = primePropertyCache(nodePtr).finally(() => {
+      if (pendingFetches.get(nodePtr) === task) {
+        pendingFetches.delete(nodePtr);
+      }
+    });
+    pendingFetches.set(nodePtr, task);
+  }
+
+  return pendingFetches.get(nodePtr)!;
+};
+
+const upsertNodeFromCreation = (
+  payload: NodeCreatedPayload,
+  setGraphSnapshot: SetterOrUpdater<GraphSnapshot>,
+) => {
+  const { ptr, id, type, label, position, clientNodeId, props } = payload;
+  if (!Number.isFinite(ptr) || !id) {
+    return;
+  }
+
+  setGraphSnapshot((prev) => {
+    const nodes = prev.nodes ?? [];
+    const matchIndex = nodes.findIndex((node) => {
+      if (!node) return false;
+      if (typeof node.ptr === 'number' && node.ptr === ptr) return true;
+      if (node.id === id) return true;
+      if (clientNodeId && node.id === clientNodeId) return true;
+      return false;
+    });
+
+    const base: GraphNodeSnapshot = {
+      id,
+      type: type || 'Node',
+      label: label || id,
+      position: position ?? { x: 0, y: 0 },
+      ptr,
+      props: props ? { ...props } : undefined,
+    };
+
+    if (matchIndex >= 0) {
+      const nextNodes = [...nodes];
+      const existing = nextNodes[matchIndex];
+      nextNodes[matchIndex] = {
+        ...existing,
+        ...base,
+        position: base.position ?? existing?.position,
+        props: { ...(existing?.props ?? {}), ...(base.props ?? {}) },
+      };
+      return { ...prev, nodes: nextNodes };
+    }
+
+    return { ...prev, nodes: [...nodes, base] };
+  });
+};
+
+const resolvePropertyName = async (nodePtr: number, propIndex: number): Promise<string | null> => {
+  if (!Number.isFinite(nodePtr) || !Number.isFinite(propIndex)) {
+    return null;
+  }
+
+  let map = await fetchPropertyNames(nodePtr);
+  if (!map.has(propIndex)) {
+    map = await fetchPropertyNames(nodePtr, { force: true });
+  }
+  return map.get(propIndex) ?? null;
+};
+
+const handleNodeUpdate = async (
+  payload: NodeUpdatePayload,
+  setGraphSnapshot: SetterOrUpdater<GraphSnapshot>,
+) => {
+  const { nodePtr, propIndex, value } = payload;
+  try {
+    const propName = await resolvePropertyName(nodePtr, propIndex);
+    if (!propName) {
       return;
     }
 
-    let disposed = false;
-
-    const unsubscribe = nativeEngine.onNodeUpdate(async (nodePtr, propIndex, value) => {
-      try {
-        const propName = await resolvePropertyName(nodePtr, propIndex);
-        if (disposed || !propName) {
-          return;
-        }
-
-        if (propName === 'position') {
-          const nextPosition = toPosition(value);
-          if (!nextPosition) {
-            return;
-          }
-
-          mutateNode(
-            nodePtr,
-            (node) => {
-              const prevPos = node.position ?? { x: 0, y: 0 };
-              if (prevPos.x === nextPosition.x && prevPos.y === nextPosition.y) {
-                return node;
-              }
-              return { ...node, position: nextPosition };
-            },
-            setGraphSnapshot,
-            { createIfMissing: true },
-          );
-          storeNodeProp(nodePtr, propName, nextPosition, setGraphSnapshot);
-          return;
-        }
-
-        if (propName === 'label' && typeof value === 'string') {
-          const nextLabel = value.length ? value : nodePtr.toString();
-          mutateNode(
-            nodePtr,
-            (node) => {
-              if (node.label === nextLabel) {
-                return node;
-              }
-              return { ...node, label: nextLabel };
-            },
-            setGraphSnapshot,
-            { createIfMissing: true },
-          );
-          storeNodeProp(nodePtr, propName, value, setGraphSnapshot);
-          return;
-        }
-
-        storeNodeProp(nodePtr, propName, value, setGraphSnapshot);
-      } catch (error) {
-        console.warn('[NodeUpdateSync] Failed to handle node update', { nodePtr, propIndex, error });
+    if (propName === 'position') {
+      const nextPosition = toPosition(value);
+      if (!nextPosition) {
+        return;
       }
+
+      mutateNode(
+        nodePtr,
+        (node) => {
+          const prevPos = node.position ?? { x: 0, y: 0 };
+          if (prevPos.x === nextPosition.x && prevPos.y === nextPosition.y) {
+            return node;
+          }
+          return { ...node, position: nextPosition };
+        },
+        setGraphSnapshot,
+        { createIfMissing: true },
+      );
+      storeNodeProp(nodePtr, propName, nextPosition, setGraphSnapshot);
+      return;
+    }
+
+    if (propName === 'label' && typeof value === 'string') {
+      const nextLabel = value.length ? value : nodePtr.toString();
+      mutateNode(
+        nodePtr,
+        (node) => {
+          if (node.label === nextLabel) {
+            return node;
+          }
+          return { ...node, label: nextLabel };
+        },
+        setGraphSnapshot,
+        { createIfMissing: true },
+      );
+      storeNodeProp(nodePtr, propName, value, setGraphSnapshot);
+      return;
+    }
+
+    storeNodeProp(nodePtr, propName, value, setGraphSnapshot);
+  } catch (error) {
+    console.warn('[NodeUpdateSync] Failed to handle node update', { nodePtr, propIndex, error });
+  }
+};
+
+export function useEngineNodeUpdates() {
+  const setGraphSnapshot = useSetRecoilState(graphSnapshotAtom);
+  const graphSnapshot = useRecoilValue(graphSnapshotAtom);
+  const knownPtrsRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    const unsubscribe = engine.on<NodeUpdatePayload>('node:update', async (payload) => {
+      if (!payload) {
+        return;
+      }
+
+      await handleNodeUpdate(payload, setGraphSnapshot);
     });
 
     return () => {
-      disposed = true;
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
+      unsubscribe?.();
+      pendingFetches.clear();
     };
   }, [setGraphSnapshot]);
+
+  useEffect(() => {
+    const unsubscribe = engine.on<NodeCreatedPayload>('node:created', (payload) => {
+      if (!payload) {
+        return;
+      }
+      upsertNodeFromCreation(payload, setGraphSnapshot);
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [setGraphSnapshot]);
+
+  useEffect(() => {
+    const nextPtrs = new Set<number>();
+    for (const node of graphSnapshot.nodes ?? []) {
+      if (!node) continue;
+      const { ptr } = node;
+      if (typeof ptr === 'number' && Number.isFinite(ptr)) {
+        nextPtrs.add(ptr);
+      }
+    }
+
+    const prev = knownPtrsRef.current;
+    if (prev.size) {
+      prev.forEach((ptr) => {
+        if (!nextPtrs.has(ptr)) {
+          propertyNameCache.delete(ptr);
+          pendingFetches.delete(ptr);
+        }
+      });
+    }
+
+    knownPtrsRef.current = nextPtrs;
+  }, [graphSnapshot.nodes]);
 }

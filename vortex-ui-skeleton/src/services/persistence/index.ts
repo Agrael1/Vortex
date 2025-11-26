@@ -1,104 +1,37 @@
-import localforage from 'localforage';
+import { compare, type Operation } from 'fast-json-patch';
 import type { ProjectSnapshot, GraphSnapshot, GraphNodeSnapshot, GraphEdgeSnapshot } from '@state/types';
-import { engine, type ProjectDTO } from '@/app/services/ipc/cefBridge';
+import { engine, type ProjectDTO, type NodeDTO } from '@/app/services/ipc/cefBridge';
 
-export interface SnapshotStore {
-  load(path: string | null): Promise<ProjectSnapshot | null>;
-  save(snapshot: ProjectSnapshot): Promise<void>;
-  listRecent(): Promise<ProjectSnapshot[]>;
-}
-
-export class MemorySnapshotStore implements SnapshotStore {
-  private readonly store = new Map<string, ProjectSnapshot>();
-
-  async load(path: string | null): Promise<ProjectSnapshot | null> {
-    if (!path) return null;
-    return this.store.get(path) ?? null;
-  }
-
-  async save(snapshot: ProjectSnapshot): Promise<void> {
-    if (!snapshot.path) return;
-    this.store.set(snapshot.path, snapshot);
-  }
-
-  async listRecent(): Promise<ProjectSnapshot[]> {
-    return Array.from(this.store.values());
-  }
-}
-
-type SnapshotRecord = ProjectSnapshot & { updatedAt: string };
-
-const SNAPSHOT_PREFIX = 'vortex.snapshot:';
-const RECENTS_KEY = 'vortex.snapshot:recents';
-const MAX_RECENT = 20;
-
-const makeSnapshotKey = (path: string) => `${SNAPSHOT_PREFIX}${encodeURIComponent(path)}`;
-
-export type LocalSnapshotStoreOptions = {
-  name?: string;
-  storeName?: string;
-  recentsKey?: string;
-  maxRecent?: number;
-};
-
-export class LocalSnapshotStore implements SnapshotStore {
-  private readonly driver: ReturnType<typeof localforage.createInstance>;
-  private readonly recentsKey: string;
-  private readonly maxRecent: number;
-
-  constructor(options?: LocalSnapshotStoreOptions) {
-    this.driver = localforage.createInstance({
-      name: options?.name ?? 'vortex-ui',
-      storeName: options?.storeName ?? 'snapshots',
-      description: 'Vortex UI project snapshots',
-    });
-
-    this.recentsKey = options?.recentsKey ?? RECENTS_KEY;
-    this.maxRecent = options?.maxRecent ?? MAX_RECENT;
-  }
-
-  async load(path: string | null): Promise<ProjectSnapshot | null> {
-    if (!path) return null;
-    const record = await this.driver.getItem<SnapshotRecord>(makeSnapshotKey(path));
-    return record ?? null;
-  }
-
-  async save(snapshot: ProjectSnapshot): Promise<void> {
-    if (!snapshot.path) return;
-    const record: SnapshotRecord = {
-      ...snapshot,
-      updatedAt: snapshot.updatedAt ?? new Date().toISOString(),
-    };
-
-    await this.driver.setItem(makeSnapshotKey(snapshot.path), record);
-    await this.touchRecents(record);
-  }
-
-  async listRecent(): Promise<ProjectSnapshot[]> {
-    const items = await this.driver.getItem<SnapshotRecord[]>(this.recentsKey);
-    return Array.isArray(items) ? items : [];
-  }
-
-  private async touchRecents(record: SnapshotRecord) {
-    const existing = (await this.driver.getItem<SnapshotRecord[]>(this.recentsKey)) ?? [];
-    const merged = [record, ...existing.filter((item: SnapshotRecord) => item.path !== record.path)].slice(0, this.maxRecent);
-    await this.driver.setItem(this.recentsKey, merged);
-  }
-}
+const cloneSnapshot = (snapshot: ProjectSnapshot): ProjectSnapshot => JSON.parse(JSON.stringify(snapshot));
 
 type NativeProjectGateway = {
   openProject: (path: string) => Promise<ProjectDTO>;
   saveProject: (snapshot: ProjectSnapshot) => Promise<void>;
+  applyPatch: (path: string, patch: Operation[]) => Promise<void>;
+  replaceSnapshot: (snapshot: ProjectSnapshot) => Promise<void>;
+  persistProject: (path: string) => Promise<void>;
 };
 
 const defaultNativeGateway: NativeProjectGateway = {
   openProject: (path: string) => engine.openProject(path),
-  saveProject: async () => {
-    await engine.saveProject();
+  saveProject: async (snapshot: ProjectSnapshot) => {
+    await engine.saveProject(snapshot);
+  },
+  applyPatch: async (path: string, patch: Operation[]) => {
+    if (!patch.length) {
+      return;
+    }
+    await engine.applyProjectPatch(path, patch);
+  },
+  replaceSnapshot: async (snapshot: ProjectSnapshot) => {
+    await engine.resetProjectState(snapshot);
+  },
+  persistProject: async (path: string) => {
+    await engine.persistProject(path);
   },
 };
 
-export type LoadSource = 'native' | 'cache';
+export type LoadSource = 'native';
 
 export type LoadResult = {
   source: LoadSource;
@@ -139,13 +72,20 @@ export const coerceGraphSnapshot = (graph: ProjectDTO['graph'] | GraphSnapshot |
     ? nativeGraph.nodes.map((node, index) => {
         const x = Array.isArray(node.pos) && typeof node.pos[0] === 'number' ? node.pos[0] : 0;
         const y = Array.isArray(node.pos) && typeof node.pos[1] === 'number' ? node.pos[1] : 0;
-        const ptrCandidate = Number(node.id);
+        const dtoNode = node as NodeDTO;
+        const ptrFromDto = Number(dtoNode.ptr);
+        const ptrFromId = Number(node.id);
+        const resolvedPtr = Number.isFinite(ptrFromDto) && ptrFromDto > 0
+          ? ptrFromDto
+          : Number.isFinite(ptrFromId) && ptrFromId > 0
+            ? ptrFromId
+            : undefined;
         return {
           id: typeof node.id === 'string' && node.id.length ? node.id : `node-${index}`,
           type: node.type ?? 'Node',
           label: (node.params as Record<string, unknown>)?.label as string | undefined,
           position: { x, y },
-          ptr: Number.isFinite(ptrCandidate) ? ptrCandidate : undefined,
+          ptr: resolvedPtr,
           props: typeof node.params === 'object' && node.params != null ? { ...(node.params as Record<string, unknown>) } : undefined,
         };
       })
@@ -164,23 +104,36 @@ export const coerceGraphSnapshot = (graph: ProjectDTO['graph'] | GraphSnapshot |
 };
 
 export class ProjectPersistence {
-  constructor(
-    private readonly store: SnapshotStore,
-    private readonly gateway: NativeProjectGateway = defaultNativeGateway,
-  ) {}
+  private readonly syncedSnapshots = new Map<string, ProjectSnapshot>();
+
+  constructor(private readonly gateway: NativeProjectGateway = defaultNativeGateway) {}
+
+  private rememberSnapshot(snapshot: ProjectSnapshot) {
+    if (!snapshot.path) {
+      return;
+    }
+
+    this.syncedSnapshots.set(snapshot.path, cloneSnapshot(snapshot));
+  }
+
+  private async loadFromNative(path: string): Promise<ProjectSnapshot | null> {
+    const nativeProject = await this.gateway.openProject(path);
+    if (!nativeProject) {
+      return null;
+    }
+    const snapshot = this.fromNativeProject(nativeProject);
+    this.rememberSnapshot(snapshot);
+    return snapshot;
+  }
 
   async load(path: string | null): Promise<LoadResult | null> {
     if (!path) return null;
 
-    const cached = await this.store.load(path);
-    if (cached) {
-      return { source: 'cache', snapshot: cached };
+    const nativeSnapshot = await this.loadFromNative(path);
+    if (!nativeSnapshot) {
+      return null;
     }
-
-    const nativeProject = await this.gateway.openProject(path);
-    const snapshot = this.fromNativeProject(nativeProject);
-    await this.store.save(snapshot);
-    return { source: 'native', snapshot };
+    return { source: 'native', snapshot: nativeSnapshot };
   }
 
   async save(snapshot: ProjectSnapshot): Promise<void> {
@@ -188,12 +141,54 @@ export class ProjectPersistence {
       throw new Error('Cannot save snapshot without a project path');
     }
 
-    await this.store.save({ ...snapshot, updatedAt: new Date().toISOString() });
-    await this.gateway.saveProject(snapshot);
+    const stamped: ProjectSnapshot = {
+      ...snapshot,
+      updatedAt: snapshot.updatedAt ?? new Date().toISOString(),
+    };
+
+    const previous = this.syncedSnapshots.get(snapshot.path) ?? null;
+    const patch = previous ? compare(previous, stamped) : null;
+    const usedNative = await this.tryNativeSync(stamped, previous, patch);
+
+    if (!usedNative) {
+      await this.gateway.saveProject(stamped);
+    }
+
+    this.rememberSnapshot(stamped);
   }
 
-  async listRecent(): Promise<ProjectSnapshot[]> {
-    return this.store.listRecent();
+  private async tryNativeSync(
+    snapshot: ProjectSnapshot,
+    previous: ProjectSnapshot | null,
+    patch: Operation[] | null,
+  ): Promise<boolean> {
+    if (!snapshot.path) {
+      return false;
+    }
+
+    try {
+      if (!previous) {
+        await this.gateway.replaceSnapshot(snapshot);
+      } else if (patch && patch.length) {
+        await this.gateway.applyPatch(snapshot.path, patch);
+      }
+
+      await this.gateway.persistProject(snapshot.path);
+      return true;
+    } catch (error) {
+      console.warn('[Persistence] Native patch/persist failed, falling back to legacy save', error);
+      return false;
+    }
+  }
+
+  async refreshFromNative(path: string | null): Promise<ProjectSnapshot | null> {
+    if (!path) return null;
+    try {
+      return await this.loadFromNative(path);
+    } catch (error) {
+      console.warn('[Persistence] Native refresh failed', error);
+      return null;
+    }
   }
 
   fromNativeProject(dto: ProjectDTO): ProjectSnapshot {
@@ -213,5 +208,4 @@ export class ProjectPersistence {
   }
 }
 
-const defaultStore = new LocalSnapshotStore();
-export const projectPersistence = new ProjectPersistence(defaultStore);
+export const projectPersistence = new ProjectPersistence();

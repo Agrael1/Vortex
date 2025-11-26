@@ -1,11 +1,61 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CreateProjectModal } from '@/app/components/CreateProjectModal';
 import { engine, type CreateProjectPayload, type Recent, type LastProject } from '@/app/services/ipc/cefBridge';
-import { projectPersistence } from '@services/persistence';
-import type { ProjectSnapshot } from '@state/types';
 import { useProjectCommands } from '@state/hooks/useProjectCommands';
-import { SPLASH_AUTO_CONTINUE_KEY } from '@/app/constants/preferences';
+import { useNotificationCenter } from '@state/hooks/useNotificationCenter';
+import {
+  SPLASH_AUTO_CONTINUE_KEY,
+  clampAutoDelay,
+  clampFallbackDelay,
+  readAutoDelayPreference,
+  readFallbackDelayPreference,
+  writeAutoDelayPreference,
+  writeFallbackDelayPreference,
+} from '@/app/constants/preferences';
+import {
+  compareRecents,
+  deriveNameFromPath,
+  formatLastUsed,
+  loadRecentsFromStorage,
+  mergeRecentCollections,
+  persistRecents,
+} from './helpers/recents';
+import { recentsReducer, type RecentsAction } from './helpers/recentsReducer';
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const highlightMatches = (text: string, query: string): ReactNode => {
+  const normalized = query.trim();
+  if (!normalized.length) {
+    return text;
+  }
+  const escaped = escapeRegExp(normalized);
+  if (!escaped.length) {
+    return text;
+  }
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  const parts = text.split(regex);
+  if (parts.length === 1) {
+    return text;
+  }
+  const lowered = normalized.toLowerCase();
+  return parts.map((part, index) => {
+    if (!part.length) {
+      return null;
+    }
+    if (part.toLowerCase() === lowered) {
+      return (
+        <mark key={`match-${index}`} className="rounded bg-blue-500/30 px-0.5 text-inherit" data-testid="search-highlight">
+          {part}
+        </mark>
+      );
+    }
+    return (
+      <span key={`text-${index}`}>{part}</span>
+    );
+  });
+};
 
 export type TemplateSpec = {
   name: string;
@@ -22,22 +72,6 @@ export type CreateFormState = {
   height: string;
   fps: string;
   colorSpace: string;
-};
-
-const RECENTS_STORAGE_KEY = 'vortex.hub.recents';
-const MAX_RECENTS = 30;
-
-const compareRecents = (a: Recent, b: Recent) => {
-  const pinDiff = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned));
-  if (pinDiff !== 0) return pinDiff;
-
-  const timeA = Date.parse(a.last);
-  const timeB = Date.parse(b.last);
-  if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) {
-    return timeB - timeA;
-  }
-
-  return a.name.localeCompare(b.name);
 };
 
 const TEMPLATES: TemplateSpec[] = [
@@ -80,134 +114,24 @@ const DEFAULT_FORM: CreateFormState = {
   colorSpace: 'Rec.709',
 };
 
-const deriveNameFromPath = (path: string) => {
-  if (!path) return 'Untitled';
-  const normalized = path.replace(/\\/g, '/').split('/');
-  const last = normalized[normalized.length - 1] || path;
-  return last.replace(/\.[^.]+$/, '') || last;
+const AUTO_DELAY_PRESETS = [500, 800, 1200, 2000, 3000, 5000];
+const FALLBACK_DELAY_PRESETS = [800, 1200, 2000, 3000, 5000, 8000];
+
+const formatDelayLabel = (ms: number) => {
+  const seconds = ms / 1000;
+  const display = Number.isInteger(seconds) ? seconds.toString() : seconds.toFixed(1).replace(/\.0$/, '');
+  return `${display}s`;
 };
 
-const formatLastUsed = (value: string) => {
-  const ts = Date.parse(value);
-  if (Number.isNaN(ts)) return 'Unknown date';
+const AUTO_DELAY_OPTIONS = AUTO_DELAY_PRESETS.map((ms) => ({
+  value: ms,
+  label: formatDelayLabel(ms),
+}));
 
-  const diff = Date.now() - ts;
-  const minutes = Math.round(diff / 60000);
-  if (minutes <= 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days} d ago`;
-
-  return new Date(ts).toLocaleDateString();
-};
-
-const loadRecentsFromStorage = (): Recent[] => {
-  if (typeof window === 'undefined' || !('localStorage' in window)) return [];
-  try {
-    const raw = localStorage.getItem(RECENTS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const normalized = parsed
-      .map((item) => {
-        if (!item || typeof item !== 'object') return null;
-        const rawPath = (item as any).path;
-        if (typeof rawPath !== 'string' || !rawPath.length) return null;
-        const nameValue = (item as any).name;
-        const lastValue = (item as any).last;
-        const name = typeof nameValue === 'string' && nameValue.trim().length ? nameValue.trim() : deriveNameFromPath(rawPath);
-        const last = typeof lastValue === 'string' && lastValue.trim().length ? lastValue : new Date().toISOString();
-        const template = typeof (item as any).template === 'string' ? (item as any).template : null;
-        const width = Number.isFinite((item as any).width) ? Number((item as any).width) : undefined;
-        const height = Number.isFinite((item as any).height) ? Number((item as any).height) : undefined;
-        const fps = Number.isFinite((item as any).fps) ? Number((item as any).fps) : undefined;
-        const colorSpace = typeof (item as any).colorSpace === 'string' ? (item as any).colorSpace : undefined;
-        const preview = typeof (item as any).preview === 'string' ? (item as any).preview : null;
-        const pinned = (item as any).pinned === true;
-        const error = typeof (item as any).error === 'string' ? (item as any).error : null;
-
-        const result: Recent = {
-          name,
-          path: rawPath,
-          last,
-          template,
-          width,
-          height,
-          fps,
-          colorSpace,
-          preview,
-          error,
-        };
-
-        if (pinned) {
-          result.pinned = true;
-        }
-
-        return result;
-      })
-      .filter((item): item is Recent => Boolean(item));
-
-    return normalized.sort(compareRecents);
-  } catch {
-    return [];
-  }
-};
-
-const persistRecents = (recents: Recent[]) => {
-  if (typeof window === 'undefined' || !('localStorage' in window)) return;
-  try {
-    const ordered = [...recents].sort(compareRecents);
-    const limited = ordered.slice(0, MAX_RECENTS);
-    localStorage.setItem(RECENTS_STORAGE_KEY, JSON.stringify(limited));
-  } catch {
-    /* ignore storage write errors */
-  }
-};
-
-const mapSnapshotToRecent = (snapshot: ProjectSnapshot): Recent | null => {
-  if (!snapshot.path) return null;
-
-  const name = snapshot.meta?.name?.trim()?.length ? snapshot.meta.name.trim() : deriveNameFromPath(snapshot.path);
-  const last = snapshot.meta?.lastOpened ?? snapshot.updatedAt ?? new Date().toISOString();
-
-  return {
-    name,
-    path: snapshot.path,
-    last,
-    template: snapshot.meta?.template ?? null,
-    width: snapshot.settings.width,
-    height: snapshot.settings.height,
-    fps: snapshot.settings.fps,
-    colorSpace: snapshot.settings.colorSpace,
-  };
-};
-
-const mergeRecentCollections = (...collections: Recent[][]): Recent[] => {
-  const map = new Map<string, Recent>();
-  collections.forEach((list) => {
-    list.forEach((item) => {
-      if (!item?.path) return;
-      const previous = map.get(item.path);
-      const merged: Recent = {
-        ...previous,
-        ...item,
-        name: item.name?.trim()?.length ? item.name : (previous?.name ?? deriveNameFromPath(item.path)),
-        last: item.last ?? previous?.last ?? new Date().toISOString(),
-        pinned: previous?.pinned ?? item.pinned,
-        template: item.template ?? previous?.template ?? null,
-        preview: item.preview ?? previous?.preview ?? null,
-        error: item.error ?? previous?.error ?? null,
-      };
-      map.set(item.path, merged);
-    });
-  });
-
-  return Array.from(map.values()).sort(compareRecents);
-};
+const FALLBACK_DELAY_OPTIONS = FALLBACK_DELAY_PRESETS.map((ms) => ({
+  value: ms,
+  label: formatDelayLabel(ms),
+}));
 
 export function Hub() {
   const nav = useNavigate();
@@ -224,13 +148,27 @@ export function Hub() {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem(SPLASH_AUTO_CONTINUE_KEY) === 'true';
   });
+  const [autoDelay, setAutoDelay] = useState(() => readAutoDelayPreference());
+  const [fallbackDelay, setFallbackDelay] = useState(() => readFallbackDelayPreference());
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateSpec | null>(null);
   const [form, setForm] = useState<CreateFormState>(DEFAULT_FORM);
+  const [renameTarget, setRenameTarget] = useState<{ path: string; name: string } | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const { loadProject } = useProjectCommands();
+  const { push: pushNotification } = useNotificationCenter();
+  const highlightTerm = searchTerm.trim();
+  const renderHighlight = useCallback((value: string) => highlightMatches(value, highlightTerm), [highlightTerm]);
+
+  const lastProjectPinned = useMemo(() => {
+    if (!lastProject) return false;
+    return recents.some((item) => item.path === lastProject.path && item.pinned);
+  }, [lastProject, recents]);
 
   const sortedRecents = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -245,31 +183,52 @@ export function Hub() {
     return filtered.sort(compareRecents);
   }, [recents, searchTerm]);
 
-  const updateRecents = useCallback((entry: Partial<Recent> & { path: string }) => {
+  const delayOptions = useMemo(() => {
+    const hasMatch = AUTO_DELAY_OPTIONS.some((option) => option.value === autoDelay);
+    if (hasMatch) return AUTO_DELAY_OPTIONS;
+    return [...AUTO_DELAY_OPTIONS, { value: autoDelay, label: `${formatDelayLabel(autoDelay)} (custom)` }];
+  }, [autoDelay]);
+
+  const fallbackOptions = useMemo(() => {
+    const hasMatch = FALLBACK_DELAY_OPTIONS.some((option) => option.value === fallbackDelay);
+    if (hasMatch) {
+      return FALLBACK_DELAY_OPTIONS;
+    }
+    return [...FALLBACK_DELAY_OPTIONS, { value: fallbackDelay, label: `${formatDelayLabel(fallbackDelay)} (custom)` }];
+  }, [fallbackDelay]);
+
+  useEffect(() => {
+    if (!sortedRecents.length) {
+      setFocusedIndex(-1);
+      return;
+    }
+
+    setFocusedIndex((prev) => {
+      if (prev < 0) return 0;
+      if (prev >= sortedRecents.length) return Math.max(0, sortedRecents.length - 1);
+      const currentPath = sortedRecents[prev]?.path;
+      const matchingIndex = sortedRecents.findIndex((item) => item.path === currentPath);
+      return matchingIndex >= 0 ? matchingIndex : 0;
+    });
+  }, [sortedRecents]);
+
+  const dispatchRecents = useCallback((action: RecentsAction) => {
     setRecents((prev) => {
-      const existing = prev.find((item) => item.path === entry.path);
-
-      const next: Recent = {
-        name: entry.name?.trim()?.length ? entry.name.trim() : existing?.name || deriveNameFromPath(entry.path),
-        path: entry.path,
-        last: entry.last ?? existing?.last ?? new Date().toISOString(),
-        pinned: entry.pinned ?? existing?.pinned,
-        template: entry.template ?? existing?.template ?? null,
-        width: entry.width ?? existing?.width,
-        height: entry.height ?? existing?.height,
-        fps: entry.fps ?? existing?.fps,
-        colorSpace: entry.colorSpace ?? existing?.colorSpace,
-        preview: entry.preview ?? existing?.preview ?? null,
-        error: entry.error ?? existing?.error ?? null,
-      };
-
-      const combined = [next, ...prev.filter((item) => item.path !== entry.path)];
-      const ordered = combined.sort(compareRecents);
-      const limited = ordered.slice(0, MAX_RECENTS);
-      persistRecents(limited);
-      return limited;
+      const next = recentsReducer(prev, action);
+      if (next === prev) {
+        return prev;
+      }
+      persistRecents(next);
+      return next;
     });
   }, []);
+
+  const updateRecents = useCallback(
+    (entry: Partial<Recent> & { path: string }) => {
+      dispatchRecents({ type: 'update', entry });
+    },
+    [dispatchRecents],
+  );
 
   const fetchRecents = useCallback(async () => {
     setIsLoading(true);
@@ -277,38 +236,18 @@ export function Hub() {
     const stored = loadRecentsFromStorage();
 
     try {
-      const [engineResult, snapshotResult] = await Promise.allSettled([engine.listRecent(), projectPersistence.listRecent()]);
-
-      const engineRecents = engineResult.status === 'fulfilled' ? engineResult.value : [];
-      if (engineResult.status === 'rejected') {
-        console.warn('[Hub] engine.listRecent failed', engineResult.reason);
-      }
-
-      const snapshotRecents =
-        snapshotResult.status === 'fulfilled'
-          ? snapshotResult.value.map(mapSnapshotToRecent).filter((item): item is Recent => Boolean(item))
-          : [];
-      if (snapshotResult.status === 'rejected') {
-        console.warn('[Hub] projectPersistence.listRecent failed', snapshotResult.reason);
-      }
-
-      const merged = mergeRecentCollections(stored, snapshotRecents, engineRecents);
-      setRecents(merged);
-      persistRecents(merged);
-
-      if (engineResult.status === 'rejected' && snapshotResult.status === 'rejected') {
-        setLoadError('Unable to load recent projects');
-      } else if (engineResult.status === 'rejected' || snapshotResult.status === 'rejected') {
-        setLoadError('Showing partial list due to sync issues');
-      }
+      const engineRecents = await engine.listRecent();
+      const merged = mergeRecentCollections(stored, [], engineRecents);
+      dispatchRecents({ type: 'hydrate', payload: merged });
+      setLoadError(null);
     } catch (error) {
       console.warn('[Hub] Failed to fetch recent projects', error);
       setLoadError(error instanceof Error ? error.message : 'Unable to load recent projects');
-      setRecents(stored);
+      dispatchRecents({ type: 'hydrate', payload: stored });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [dispatchRecents]);
 
   useEffect(() => {
     fetchRecents();
@@ -317,17 +256,13 @@ export function Hub() {
   useEffect(() => {
     const off = engine.on('recents:updated', (payload) => {
       if (!Array.isArray(payload)) return;
-      setRecents((current) => {
-        const merged = mergeRecentCollections(current, payload as Recent[]);
-        persistRecents(merged);
-        return merged;
-      });
+      dispatchRecents({ type: 'merge', collections: [payload as Recent[]] });
     });
 
     return () => {
       off?.();
     };
-  }, []);
+  }, [dispatchRecents]);
 
   useEffect(() => {
     const off = engine.on('lastProject:updated', (payload) => {
@@ -347,6 +282,14 @@ export function Hub() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(SPLASH_AUTO_CONTINUE_KEY, autoContinue ? 'true' : 'false');
   }, [autoContinue]);
+
+  useEffect(() => {
+    writeAutoDelayPreference(autoDelay);
+  }, [autoDelay]);
+
+  useEffect(() => {
+    writeFallbackDelayPreference(fallbackDelay);
+  }, [fallbackDelay]);
 
   const openProjectByPath = useCallback(
     async (path: string) => {
@@ -375,12 +318,14 @@ export function Hub() {
         nav('/editor');
       } catch (error) {
         console.error('[Hub] Failed to open project', error);
-        setActionError(error instanceof Error ? error.message : 'Unable to open project');
+        const message = error instanceof Error ? error.message : 'Unable to open project';
+        setActionError(message);
+        pushNotification({ level: 'error', title: 'Open project failed', message, durationMs: 8000 });
       } finally {
         setBusyPath(null);
       }
     },
-    [loadProject, nav, updateRecents],
+      [loadProject, nav, pushNotification, updateRecents],
   );
 
   const handleOpenFromDisk = useCallback(async () => {
@@ -391,9 +336,11 @@ export function Hub() {
       await openProjectByPath(selected);
     } catch (error) {
       console.error('[Hub] File dialog failed', error);
-      setActionError(error instanceof Error ? error.message : 'Unable to open file dialog');
+      const message = error instanceof Error ? error.message : 'Unable to open file dialog';
+      setActionError(message);
+      pushNotification({ level: 'error', title: 'Open project failed', message, durationMs: 6000 });
     }
-  }, [openProjectByPath]);
+  }, [openProjectByPath, pushNotification]);
 
   const handleForgetLastProject = useCallback(() => {
     const stalePath = lastProject?.path ?? null;
@@ -401,9 +348,35 @@ export function Hub() {
     setLastProject(null);
     setActionError(null);
     if (stalePath) {
-      setRecents((prev) => prev.filter((item) => item.path !== stalePath));
+      dispatchRecents({ type: 'remove', path: stalePath });
     }
-  }, [lastProject]);
+  }, [dispatchRecents, lastProject]);
+
+  const handleToggleLastProjectPin = useCallback(() => {
+    if (!lastProject) return;
+    dispatchRecents({
+      type: 'update',
+      entry: {
+        path: lastProject.path,
+        name: lastProject.name,
+        template: lastProject.template ?? null,
+        last: lastProject.lastOpened,
+        pinned: !lastProjectPinned,
+      },
+    });
+  }, [dispatchRecents, lastProject, lastProjectPinned]);
+
+  const handleDelayChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = Number(event.target.value);
+    if (Number.isNaN(nextValue)) return;
+    setAutoDelay(clampAutoDelay(nextValue));
+  }, []);
+
+  const handleFallbackDelayChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = Number(event.target.value);
+    if (Number.isNaN(nextValue)) return;
+    setFallbackDelay(clampFallbackDelay(nextValue));
+  }, []);
 
   const handleFormChange = useCallback((patch: Partial<CreateFormState>) => {
     setForm((prev) => ({ ...prev, ...patch }));
@@ -417,29 +390,107 @@ export function Hub() {
       setCreateError(null);
     } catch (error) {
       console.error('[Hub] File dialog failed', error);
-      setCreateError(error instanceof Error ? error.message : 'Unable to open folder dialog');
+      const message = error instanceof Error ? error.message : 'Unable to open folder dialog';
+      setCreateError(message);
+      pushNotification({ level: 'error', title: 'Folder dialog failed', message, durationMs: 6000 });
     }
-  }, [handleFormChange, setCreateError]);
+  }, [handleFormChange, pushNotification, setCreateError]);
 
-  const handleRemoveRecent = useCallback((path: string) => {
-    setRecents((prev) => {
-      const filtered = prev.filter((item) => item.path !== path);
-      const ordered = filtered.sort(compareRecents);
-      persistRecents(ordered);
-      return ordered;
-    });
-    setActiveMenuPath((current) => (current === path ? null : current));
-  }, []);
+  const handleRemoveRecent = useCallback(
+    (path: string) => {
+      dispatchRecents({ type: 'remove', path });
+      setActiveMenuPath((current) => (current === path ? null : current));
+    },
+    [dispatchRecents],
+  );
 
-  const handleTogglePin = useCallback((path: string) => {
-    setRecents((prev) => {
-      const updated = prev.map((item) => (item.path === path ? { ...item, pinned: !item.pinned } : item));
-      const ordered = updated.sort(compareRecents);
-      persistRecents(ordered);
-      return ordered;
-    });
+  const handleTogglePin = useCallback(
+    (path: string) => {
+      dispatchRecents({ type: 'togglePin', path });
+      setActiveMenuPath(null);
+    },
+    [dispatchRecents],
+  );
+
+  const handleOpenRename = useCallback((project: Recent) => {
     setActiveMenuPath(null);
+    setRenameTarget({ path: project.path, name: project.name });
+    setRenameValue(project.name ?? deriveNameFromPath(project.path));
   }, []);
+
+  const handleRenameSubmit = useCallback(
+    (event?: FormEvent<HTMLFormElement>) => {
+      event?.preventDefault();
+      if (!renameTarget) return;
+
+      const nextName = renameValue.trim();
+      if (!nextName.length) {
+        setRenameValue(renameTarget.name);
+        return;
+      }
+
+      dispatchRecents({ type: 'update', entry: { path: renameTarget.path, name: nextName } });
+      setRenameTarget(null);
+      setRenameValue('');
+    },
+    [dispatchRecents, renameTarget, renameValue],
+  );
+
+  const handleRenameCancel = useCallback(() => {
+    setRenameTarget(null);
+    setRenameValue('');
+  }, []);
+
+  const handleListKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (!sortedRecents.length) return;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setFocusedIndex((prev) => {
+          if (prev < 0) return 0;
+          return prev >= sortedRecents.length - 1 ? 0 : prev + 1;
+        });
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setFocusedIndex((prev) => {
+          if (prev < 0) return sortedRecents.length - 1;
+          return prev === 0 ? sortedRecents.length - 1 : prev - 1;
+        });
+        return;
+      }
+
+      const current = sortedRecents[focusedIndex];
+      if (!current) {
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void openProjectByPath(current.path);
+        return;
+      }
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        handleRemoveRecent(current.path);
+        setFocusedIndex((prev) => {
+          const next = Math.min(prev, sortedRecents.length - 2);
+          return Math.max(next, -1);
+        });
+        return;
+      }
+
+      if ((event.key === 'p' || event.key === 'P') && event.ctrlKey) {
+        event.preventDefault();
+        handleTogglePin(current.path);
+      }
+    },
+    [focusedIndex, handleRemoveRecent, handleTogglePin, openProjectByPath, sortedRecents],
+  );
 
   const handleCopyPath = useCallback((path: string) => {
     setActiveMenuPath(null);
@@ -538,12 +589,14 @@ export function Hub() {
         nav('/editor');
       } catch (error) {
         console.error('[Hub] Failed to create project', error);
-        setCreateError(error instanceof Error ? error.message : 'Unable to create project');
+        const message = error instanceof Error ? error.message : 'Unable to create project';
+        setCreateError(message);
+        pushNotification({ level: 'error', title: 'Create project failed', message, durationMs: 8000 });
       } finally {
         setIsCreating(false);
       }
     },
-    [form, loadProject, nav, selectedTemplate, updateRecents],
+      [form, loadProject, nav, pushNotification, selectedTemplate, updateRecents],
   );
 
   return (
@@ -613,7 +666,7 @@ export function Hub() {
                 {lastProject.lastOpened && <span>Last opened {formatLastUsed(lastProject.lastOpened)}</span>}
               </div>
             </div>
-            <div className="flex flex-col gap-2 sm:items-end">
+            <div className="flex flex-col gap-3 sm:items-end">
               <button
                 type="button"
                 onClick={() => openProjectByPath(lastProject.path)}
@@ -629,15 +682,54 @@ export function Hub() {
               >
                 Forget this project
               </button>
-              <label className="flex items-center gap-2 text-xs text-gray-400">
-                <input
-                  type="checkbox"
-                  checked={autoContinue}
-                  onChange={(event) => setAutoContinue(event.target.checked)}
-                  className="h-3.5 w-3.5 rounded border border-ui-border bg-black/40 text-ui-accent focus:ring-ui-accent"
-                />
-                Auto-continue on launch
-              </label>
+              <button
+                type="button"
+                onClick={handleToggleLastProjectPin}
+                className="text-xs text-gray-500 hover:text-gray-200"
+                aria-pressed={lastProjectPinned}
+              >
+                {lastProjectPinned ? 'Unpin from recents' : 'Pin in recents'}
+              </button>
+              <div className="flex flex-col gap-2 text-xs text-gray-400 sm:items-end">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={autoContinue}
+                    onChange={(event) => setAutoContinue(event.target.checked)}
+                    className="h-3.5 w-3.5 rounded border border-ui-border bg-black/40 text-ui-accent focus:ring-ui-accent"
+                  />
+                  Auto-continue on launch
+                </label>
+                <label className="flex flex-col gap-1 sm:items-end">
+                  <span>Auto-continue delay</span>
+                  <select
+                    value={autoDelay}
+                    onChange={handleDelayChange}
+                    className="rounded border border-ui-border bg-black/30 px-2 py-1 text-gray-100 focus:border-blue-500/60 focus:outline-none"
+                  >
+                    {delayOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 sm:items-end">
+                  <span>Splash fallback delay</span>
+                  <select
+                    value={fallbackDelay}
+                    onChange={handleFallbackDelayChange}
+                    className="rounded border border-ui-border bg-black/30 px-2 py-1 text-gray-100 focus:border-blue-500/60 focus:outline-none"
+                  >
+                    {fallbackOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-gray-500">Controls automatic redirect to Hub</span>
+                </label>
+              </div>
             </div>
           </section>
         )}
@@ -698,7 +790,14 @@ export function Hub() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-ui-border bg-ui-panel">
+            <div
+              ref={listRef}
+              tabIndex={sortedRecents.length ? 0 : -1}
+              onKeyDown={handleListKeyDown}
+              role="listbox"
+              aria-label="Recent projects"
+              className="overflow-hidden rounded-2xl border border-ui-border bg-ui-panel focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            >
               {isLoading ? (
                 <div className="divide-y divide-ui-border/70">
                   {Array.from({ length: 3 }).map((_, idx) => (
@@ -735,20 +834,24 @@ export function Hub() {
                 </div>
               ) : (
                 <div className="divide-y divide-ui-border/70">
-                  {sortedRecents.map((project) => {
+                  {sortedRecents.map((project, index) => {
                     const isMenuOpen = activeMenuPath === project.path;
                     const details = [];
                     if (project.template) details.push(project.template);
                     if (project.width && project.height) details.push(`${project.width}×${project.height}`);
                     if (project.fps) details.push(`${project.fps} fps`);
                     if (project.colorSpace) details.push(project.colorSpace);
+                    const isFocused = index === focusedIndex;
 
                     return (
-                      <div key={project.path} className="relative">
-                        <button
-                          type="button"
+                      <div key={project.path} className="relative" role="option" aria-selected={isFocused}>
+                        <div
+                          role="button"
+                          tabIndex={-1}
                           onClick={() => openProjectByPath(project.path)}
-                          className="flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-white/5"
+                          onMouseEnter={() => setFocusedIndex(index)}
+                          onFocus={() => setFocusedIndex(index)}
+                          className={`flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-white/5 cursor-pointer ${isFocused ? 'bg-white/5 ring-1 ring-blue-500/40' : ''}`}
                         >
                           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/5 text-lg">
                             {project.template ? <span>{project.template.slice(0, 1)}</span> : <span>🎬</span>}
@@ -756,17 +859,21 @@ export function Hub() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-gray-100 truncate" title={project.name}>
-                                {project.name}
+                                {renderHighlight(project.name ?? deriveNameFromPath(project.path))}
                               </span>
-                              {project.pinned && <span className="text-xs text-amber-300">★</span>}
+                              {project.pinned && (
+                                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-200" title="Pinned" aria-label="Pinned">
+                                  ★
+                                </span>
+                              )}
                               {project.error && (
-                                <span className="rounded bg-red-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-200">
-                                  Issue
+                                <span className="rounded bg-red-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-200" title={project.error}>
+                                  {project.error.length > 18 ? `Issue` : project.error}
                                 </span>
                               )}
                             </div>
                             <div className="mt-1 text-xs text-gray-500 break-all" title={project.path}>
-                              {project.path}
+                              {renderHighlight(project.path)}
                             </div>
                             {details.length > 0 && (
                               <div className="mt-1 text-xs text-gray-400 flex flex-wrap gap-2">
@@ -777,6 +884,30 @@ export function Hub() {
                                 ))}
                               </div>
                             )}
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleTogglePin(project.path);
+                                }}
+                                className="rounded border border-transparent px-2 py-1 transition hover:border-amber-300/60 hover:text-amber-200"
+                                aria-label={project.pinned ? 'Unpin project' : 'Pin project'}
+                              >
+                                {project.pinned ? 'Unpin' : 'Pin'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleOpenRename(project);
+                                }}
+                                className="rounded border border-transparent px-2 py-1 transition hover:border-blue-400/60 hover:text-blue-200"
+                                aria-label="Rename project"
+                              >
+                                Rename
+                              </button>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-gray-500">{formatLastUsed(project.last)}</span>
@@ -796,7 +927,7 @@ export function Hub() {
                               <span className="text-gray-500">↗</span>
                             )}
                           </div>
-                        </button>
+                        </div>
 
                         {isMenuOpen && (
                           <div className="absolute right-6 top-12 z-20 w-48 rounded-lg border border-ui-border bg-ui-panel shadow-lg">
@@ -813,6 +944,13 @@ export function Hub() {
                               className="block w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-white/5"
                             >
                               {project.pinned ? 'Unpin' : 'Pin to top'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenRename(project)}
+                              className="block w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-white/5"
+                            >
+                              Rename…
                             </button>
                             <button
                               type="button"
@@ -910,6 +1048,45 @@ export function Hub() {
         error={createError}
         isSubmitting={isCreating}
       />
+
+      {renameTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <form
+            className="w-full max-w-md space-y-4 rounded-2xl border border-ui-border bg-ui-panel p-6"
+            onSubmit={handleRenameSubmit}
+          >
+            <div>
+              <h3 className="text-lg font-semibold text-gray-100">Rename project</h3>
+              <p className="text-sm text-gray-500">Update how "{renameTarget.name}" appears in recents.</p>
+            </div>
+            <label className="block space-y-1 text-sm text-gray-300">
+              <span>Display name</span>
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                className="w-full rounded-lg border border-ui-border bg-black/30 px-3 py-2 text-gray-100 focus:border-blue-500/60 focus:outline-none"
+                placeholder="Project name"
+              />
+            </label>
+            <div className="flex justify-end gap-3 text-sm">
+              <button
+                type="button"
+                onClick={handleRenameCancel}
+                className="rounded-lg border border-transparent px-4 py-2 text-gray-400 transition hover:border-ui-border"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-lg border border-blue-500/50 bg-blue-500/20 px-4 py-2 text-blue-100 transition hover:bg-blue-500/30"
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

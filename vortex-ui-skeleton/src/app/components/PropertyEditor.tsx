@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { Vortex } from '@/bridge/vortex';
+import { useGraphCommands } from '@state/hooks/useGraphCommands';
 
 export interface PropertySpec {
   name: string;
@@ -24,6 +24,7 @@ interface PropertyEditorProps {
 
 export function PropertyEditor({ nodePtr, properties, className = '', liveValues }: PropertyEditorProps) {
   const [localValues, setLocalValues] = useState<Record<string, any>>({});
+  const { updateNodeProps } = useGraphCommands();
 
   useEffect(() => {
     setLocalValues({});
@@ -52,9 +53,7 @@ export function PropertyEditor({ nodePtr, properties, className = '', liveValues
         // Update local state immediately for responsiveness
         setLocalValues((prev) => ({ ...prev, [prop.name]: value }));
 
-        // Send to engine
-        await Vortex.setNodeProperty(nodePtr, prop.name, String(value));
-        console.log(`Property ${prop.name} updated to:`, value);
+        await updateNodeProps(nodePtr, { [prop.name]: value });
       } catch (error) {
         console.error(`Failed to update property ${prop.name}:`, error);
         // Revert local value on error
@@ -65,7 +64,7 @@ export function PropertyEditor({ nodePtr, properties, className = '', liveValues
         });
       }
     },
-    [nodePtr],
+    [nodePtr, updateNodeProps],
   );
 
   const getCurrentValue = (prop: PropertySpec) => {

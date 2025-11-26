@@ -6,6 +6,8 @@
 #include <functional>
 #include <filesystem>
 #include <vector>
+#include <type_traits>
+#include <vortex/ui/message_routing.h>
 
 namespace vortex::ui {
 class UIApp
@@ -86,7 +88,12 @@ public:
             // Add arguments to the message
             if constexpr (size > 0) {
                 size_t i = 0;
-                (value_traits<std::remove_reference_t<std::remove_all_extents_t<Args>>>::add_value(*msg_args, i++, std::forward<Args>(args)), ...);
+                (
+                    value_traits<std::remove_const_t<std::remove_reference_t<std::remove_all_extents_t<Args>>>>::add_value(
+                        *msg_args,
+                        i++,
+                        std::forward<Args>(args)),
+                    ...);
             }
 
             // Send the message
@@ -97,6 +104,13 @@ public:
     void SendUIReturn(Args&&... args)
     {
         SendUIMessage(u"co_return", std::forward<Args>(args)...);
+    }
+
+    template<typename... Args>
+    void SendRoutedUIReturn(uint64_t request_id, Args&&... args)
+    {
+        auto routed = vortex::ui::BuildRoutedMessageName(u"co_return", request_id);
+        SendUIMessage(routed.ToString16(), std::forward<Args>(args)...);
     }
 
     void ExecuteJavaScript(std::string_view script)

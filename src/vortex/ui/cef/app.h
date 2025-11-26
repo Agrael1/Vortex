@@ -2,9 +2,14 @@
 #include <vortex/ui/implements.h>
 #include <vortex/ui/value.h>
 #include <vortex/ui/call_handler.h>
+#include <vortex/ui/message_routing.h>
+#include <vortex/ui/value.h>
 #include <vortex/util/lib/reflect.h>
 
 #include <fstream>
+#include <unordered_map>
+#include <mutex>
+#include <atomic>
 
 #include <include/cef_app.h>
 #include <include/cef_api_versions.h>
@@ -46,7 +51,7 @@ public:
         return new vortex::ui::VortexResourceHandler();
     }
 };
-class VortexCefApp : public CefImplements<VortexCefApp, CefApp, CefBrowserProcessHandler, CefRenderProcessHandler>
+class VortexCefApp : public CefImplements<VortexCefApp, CefApp, CefBrowserProcessHandler, CefRenderProcessHandler>, public PromiseRegistry
 {
     struct InitGuard
     {
@@ -66,6 +71,8 @@ class VortexCefApp : public CefImplements<VortexCefApp, CefApp, CefBrowserProces
     private:
         bool init = false;
     };
+
+    friend class VortexV8Handler;
 
 public:
     VortexCefApp([[maybe_unused]] int argc, [[maybe_unused]] char** argv)
@@ -99,7 +106,7 @@ public:
                           CefRefPtr<CefFrame> frame,
                           CefRefPtr<CefV8Context> context) override
     {
-        _handler = new vortex::ui::VortexV8Handler();
+        _handler = new vortex::ui::VortexV8Handler(*this);
     }
     virtual bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                           CefRefPtr<CefFrame> frame,
@@ -107,9 +114,14 @@ public:
                                           CefRefPtr<CefProcessMessage> message) override
     {
         vortex::info("VortexCefApp::OnProcessMessageReceived: Received message from process {}: {}", reflect::enum_name(source_process), message->GetName().ToString());
-        if (message->GetName() == "co_return") {
+        auto routing = ParseRoutedMessage(message->GetName());
+        if (routing.base_name == u"co_return") {
+            if (!routing.request_id) {
+                vortex::error("Received co_return without request id");
+                return true;
+            }
             // Handle the message using the VortexV8Handler
-            _handler->ResolvePromise(message->GetArgumentList());
+            ResolvePromise(*routing.request_id, message->GetArgumentList());
             return true; // Message handled
         }
         return false; // Message not handled
@@ -141,7 +153,55 @@ public:
     }
 
 private:
+    struct PendingPromise {
+        CefRefPtr<CefV8Context> context;
+        CefRefPtr<CefV8Value> resolver;
+    };
+
+    uint64_t RegisterPromise(CefRefPtr<CefV8Context> context, CefRefPtr<CefV8Value> resolver) override
+    {
+        if (!context || !resolver) {
+            vortex::error("Attempted to register promise with invalid context or resolver");
+            return 0;
+        }
+
+        const uint64_t request_id = _next_request_id.fetch_add(1, std::memory_order_relaxed);
+        {
+            std::scoped_lock lock(_promise_mutex);
+            _pending_promises[request_id] = PendingPromise{ std::move(context), std::move(resolver) };
+        }
+        return request_id;
+    }
+
+    void ResolvePromise(uint64_t request_id, CefRefPtr<CefListValue> value)
+    {
+        PendingPromise pending;
+        {
+            std::scoped_lock lock(_promise_mutex);
+            auto it = _pending_promises.find(request_id);
+            if (it == _pending_promises.end()) {
+                vortex::error("Received co_return for unknown request id {}", request_id);
+                return;
+            }
+            pending = it->second;
+            _pending_promises.erase(it);
+        }
+
+        auto promise_context = pending.context;
+        if (!promise_context || !promise_context->IsValid()) {
+            vortex::error("V8 context is not valid while resolving promise (request {})", request_id);
+            return;
+        }
+
+        promise_context->Enter();
+        pending.resolver->ResolvePromise(bridge<v8_value_traits>(std::move(value), 0));
+        promise_context->Exit();
+    }
+
     CefRefPtr<VortexV8Handler> _handler;
+    std::atomic<uint64_t> _next_request_id { 1 };
+    std::mutex _promise_mutex;
+    std::unordered_map<uint64_t, PendingPromise> _pending_promises;
     CefMainArgs _main_args;
 };
 } // namespace vortex::ui

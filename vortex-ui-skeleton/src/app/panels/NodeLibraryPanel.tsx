@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DragEvent } from 'react';
-import { Vortex } from '@/bridge/vortex';
+import { engine } from '@/app/services/ipc/cefBridge';
 import { useGraphCommands } from '@state/hooks/useGraphCommands';
+
+const SHOW_NODE_DEBUG = Boolean(import.meta.env && import.meta.env.DEV);
 
 export function NodeLibraryPanel() {
   const [query, setQuery] = useState('');
@@ -15,26 +17,14 @@ export function NodeLibraryPanel() {
     (async () => {
       try {
         setLoadError(null);
-        const res = await Vortex.getNodeTypes();
-        console.debug('[getNodeTypes] raw ->', res);
-
-        let list: string[] = [];
-
-        if (Array.isArray(res)) {
-          // If array of strings
-          list = res.map(String);
-        } else if (res && typeof res === 'object') {
-          if (Array.isArray(res.types)) {
-            // If object with types field
-            list = res.types.map(String);
-          } else {
-            // If object dictionary {nodeName: nodeInfo} - take keys
-            list = Object.keys(res);
-          }
+        const res = await engine.listNodeTypes();
+        if (SHOW_NODE_DEBUG) {
+          console.debug('[getNodeTypes] raw ->', res);
         }
-
-        console.debug('[getNodeTypes] parsed list ->', list);
-        if (alive) setTypes(list);
+        if (SHOW_NODE_DEBUG) {
+          console.debug('[getNodeTypes] parsed list ->', res);
+        }
+        if (alive) setTypes(res);
       } catch (e: any) {
         console.error('[getNodeTypes] error ->', e);
         if (alive) setLoadError(`Bridge error: ${e?.message ?? String(e)}`);

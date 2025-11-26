@@ -2,11 +2,18 @@ import { useCallback } from 'react';
 import { GraphPanel } from '@/app/panels/GraphPanel';
 import { NodeLibraryPanel } from '@/app/panels/NodeLibraryPanel';
 import { InspectorPanel } from '@/app/panels/InspectorPanel';
-import { Vortex } from '@/bridge/vortex';
+import { engine } from '@/app/services/ipc/cefBridge';
 import { useGraphCommands } from '@state/hooks/useGraphCommands';
 
+const ensurePtr = (value: number | null, context: string): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`[${context}] Node pointer is not available`);
+  }
+  return value;
+};
+
 export function AppShell() {
-  const { createNode } = useGraphCommands();
+  const { createNode, connectNodes, updateNodeProps } = useGraphCommands();
 
   const quickTestPattern = useCallback(async () => {
     try {
@@ -21,13 +28,15 @@ export function AppShell() {
       console.log('[Quick Test] WindowOutput created with ptr:', windowPtr);
 
       console.log('[Quick Test] Connecting nodes...', imagePtr, '->', windowPtr);
-      await Vortex.connect(imagePtr, 0, windowPtr, 0);
+      const imageHandle = ensurePtr(imagePtr, 'Quick Test image');
+      const windowHandle = ensurePtr(windowPtr, 'Quick Test window');
+      await connectNodes({ source: imageHandle, target: windowHandle });
       console.log('[Quick Test] Image→Window pipeline created successfully!');
       console.log('[Quick Test] Now click Play to see test pattern');
     } catch (error) {
       console.error('[Quick Test] Error creating Image→Window:', error);
     }
-  }, [createNode]);
+  }, [connectNodes, createNode]);
   const quickStreamToWindow = useCallback(async () => {
     try {
       console.log('[Quick] Starting Stream→Window creation...');
@@ -41,12 +50,14 @@ export function AppShell() {
       console.log('[Quick] WindowOutput created with ptr:', windowPtr);
 
       console.log('[Quick] Connecting nodes...', streamPtr, '->', windowPtr);
-      await Vortex.connect(streamPtr, 0, windowPtr, 0);
+      const streamHandle = ensurePtr(streamPtr, 'Quick Stream source');
+      const windowHandle = ensurePtr(windowPtr, 'Quick Stream target');
+      await connectNodes({ source: streamHandle, target: windowHandle });
       console.log('[Quick] Stream→Window pipeline created successfully!');
     } catch (error) {
       console.error('[Quick] Error creating Stream→Window:', error);
     }
-  }, [createNode]);
+  }, [connectNodes, createNode]);
 
   const quickStreamToWindowWithVideo = useCallback(async () => {
     try {
@@ -64,20 +75,22 @@ export function AppShell() {
       console.log('[Quick Video] StreamInput created with ptr:', streamPtr);
 
       console.log('[Quick Video] Setting stream_url to:', videoPath);
-      await Vortex.setNodeProperty(streamPtr, 'stream_url', videoPath);
+      const streamHandle = ensurePtr(streamPtr, 'Quick Video stream');
+      await updateNodeProps(streamHandle, { stream_url: videoPath });
 
       console.log('[Quick Video] Creating WindowOutput node...');
       const windowPtr = await createNode('WindowOutput', { x: 520, y: 220 });
       console.log('[Quick Video] WindowOutput created with ptr:', windowPtr);
 
       console.log('[Quick Video] Connecting nodes...', streamPtr, '->', windowPtr);
-      await Vortex.connect(streamPtr, 0, windowPtr, 0);
+      const windowHandle = ensurePtr(windowPtr, 'Quick Video window');
+      await connectNodes({ source: streamHandle, target: windowHandle });
       console.log('[Quick Video] Stream→Window pipeline created successfully!');
       console.log('[Quick Video] Now click Play button to start video playback');
     } catch (error) {
       console.error('[Quick Video] Error creating Stream→Window with video:', error);
     }
-  }, [createNode]);
+  }, [connectNodes, createNode, updateNodeProps]);
 
   const quickSampleVideo = useCallback(async () => {
     try {
@@ -91,20 +104,22 @@ export function AppShell() {
       console.log('[Quick Sample] StreamInput created with ptr:', streamPtr);
 
       console.log('[Quick Sample] Setting stream_url to sample video:', videoPath);
-      await Vortex.setNodeProperty(streamPtr, 'stream_url', videoPath);
+      const streamHandle = ensurePtr(streamPtr, 'Quick Sample stream');
+      await updateNodeProps(streamHandle, { stream_url: videoPath });
 
       console.log('[Quick Sample] Creating WindowOutput node...');
       const windowPtr = await createNode('WindowOutput', { x: 520, y: 220 });
       console.log('[Quick Sample] WindowOutput created with ptr:', windowPtr);
 
       console.log('[Quick Sample] Connecting nodes...', streamPtr, '->', windowPtr);
-      await Vortex.connect(streamPtr, 0, windowPtr, 0);
+      const windowHandle = ensurePtr(windowPtr, 'Quick Sample window');
+      await connectNodes({ source: streamHandle, target: windowHandle });
       console.log('[Quick Sample] Sample video pipeline created successfully!');
       console.log('[Quick Sample] Now click Play button to start sample video playback');
     } catch (error) {
       console.error('[Quick Sample] Error creating sample video pipeline:', error);
     }
-  }, [createNode]);
+  }, [connectNodes, createNode, updateNodeProps]);
 
   return (
     <div
@@ -129,10 +144,20 @@ export function AppShell() {
           background: '#101010',
         }}
       >
-        <button onClick={() => Vortex.play()} style={{ padding: '6px 12px', borderRadius: 6, background: '#116149', color: '#fff' }}>
+        <button
+          onClick={() => {
+            engine.play().catch((error) => console.error('[AppShell] Play failed', error));
+          }}
+          style={{ padding: '6px 12px', borderRadius: 6, background: '#116149', color: '#fff' }}
+        >
           Play
         </button>
-        <button onClick={() => Vortex.stop()} style={{ padding: '6px 12px', borderRadius: 6, background: '#7a1f2c', color: '#fff' }}>
+        <button
+          onClick={() => {
+            engine.stop().catch((error) => console.error('[AppShell] Stop failed', error));
+          }}
+          style={{ padding: '6px 12px', borderRadius: 6, background: '#7a1f2c', color: '#fff' }}
+        >
           Stop
         </button>
         <button

@@ -1,11 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { projectSnapshotSelector } from '@state/selectors/projectSnapshot';
 import { projectPathAtom, projectMetaAtom, projectSettingsAtom, graphSnapshotAtom } from '@state/atoms/project';
 import { persistenceStatusAtom } from '@state/atoms/persistence';
+import { autosavePreferenceAtom } from '@state/atoms/preferences';
 import { normalizeSnapshot, serializeSnapshot } from '@state/utils/snapshot';
 import type { ProjectSnapshot } from '@state/types';
 import { projectPersistence } from '@services/persistence';
+import { engine, DEFAULT_AUTOSAVE_DELAY_MS } from '@/app/services/ipc/cefBridge';
+import type { LoadSource } from '@services/persistence';
+
+const MIN_NATIVE_REFRESH_INTERVAL_MS = 4000;
 
 export function useProjectPersistence() {
   const snapshot = useRecoilValue(projectSnapshotSelector);
@@ -15,10 +20,14 @@ export function useProjectPersistence() {
   const setSettings = useSetRecoilState(projectSettingsAtom);
   const setGraph = useSetRecoilState(graphSnapshotAtom);
   const setPersistenceStatus = useSetRecoilState(persistenceStatusAtom);
-  const lastSavedHash = useRecoilValue(persistenceStatusAtom).lastSavedHash;
+  const { lastSavedHash } = useRecoilValue(persistenceStatusAtom);
+  const autosaveEnabled = useRecoilValue(autosavePreferenceAtom);
 
   const hydratedRef = useRef(false);
   const lastSavedHashRef = useRef<string | null>(null);
+  const lastNativeSyncRef = useRef(0);
+  const currentSnapshotHashRef = useRef<string | null>(null);
+  const lastLoadedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (lastSavedHash) {
@@ -30,52 +39,24 @@ export function useProjectPersistence() {
     if (projectPath) return;
     hydratedRef.current = true;
     lastSavedHashRef.current = null;
-    setPersistenceStatus((prev) => ({ ...prev, isHydrated: true, isDirty: false }));
+    lastNativeSyncRef.current = 0;
+    currentSnapshotHashRef.current = null;
+    lastLoadedPathRef.current = null;
+    setPersistenceStatus((prev) => ({ ...prev, isHydrated: true, isDirty: false, isReloading: false }));
   }, [projectPath, setPersistenceStatus]);
 
   useEffect(() => {
-    if (!projectPath) return;
-    hydratedRef.current = false;
-    setPersistenceStatus((prev) => ({ ...prev, isHydrated: false, lastError: null }));
+    if (!projectPath) {
+      return;
+    }
+
     let cancelled = false;
-
-    const applySnapshot = (next: ProjectSnapshot) => {
-      if (next.path && next.path !== projectPath) {
-        setPath(next.path);
-      }
-      setMeta(next.meta);
-      setSettings(next.settings);
-      setGraph(next.graph);
-    };
-
     (async () => {
       try {
-        const result = await projectPersistence.load(projectPath);
-        if (!result || cancelled) return;
-        applySnapshot(result.snapshot);
-        const normalized = normalizeSnapshot(result.snapshot);
-        const hash = serializeSnapshot(normalized);
-        lastSavedHashRef.current = hash;
-        setPersistenceStatus((prev) => ({
-          ...prev,
-          lastSavedAt: result.snapshot.updatedAt ?? new Date().toISOString(),
-          lastSavedHash: hash,
-          isDirty: false,
-          lastError: null,
-          lastLoadSource: result.source,
-        }));
+        await engine.configureAutosave({ enabled: autosaveEnabled, delayMs: DEFAULT_AUTOSAVE_DELAY_MS });
       } catch (error) {
-        console.error('[Persistence] Failed to load project snapshot', error);
         if (!cancelled) {
-          setPersistenceStatus((prev) => ({
-            ...prev,
-            lastError: error instanceof Error ? error.message : 'Failed to load project snapshot',
-          }));
-        }
-      } finally {
-        if (!cancelled) {
-          hydratedRef.current = true;
-          setPersistenceStatus((prev) => ({ ...prev, isHydrated: true }));
+          console.warn('[Persistence] Failed to configure native autosave', error);
         }
       }
     })();
@@ -83,56 +64,147 @@ export function useProjectPersistence() {
     return () => {
       cancelled = true;
     };
-  }, [projectPath, setGraph, setMeta, setPath, setPersistenceStatus, setSettings]);
+  }, [autosaveEnabled, projectPath]);
+
+  const applySnapshotState = useCallback(
+    (next: ProjectSnapshot, source: LoadSource) => {
+      if (next.path && next.path !== projectPath) {
+        setPath(next.path);
+      }
+      setMeta(next.meta);
+      setSettings(next.settings);
+      setGraph(next.graph ?? { nodes: [], edges: [] });
+
+      const normalized = normalizeSnapshot(next);
+      const hash = serializeSnapshot(normalized);
+      if (hash) {
+        lastSavedHashRef.current = hash;
+      }
+      currentSnapshotHashRef.current = hash ?? null;
+
+      setPersistenceStatus((prev) => ({
+        ...prev,
+        lastSavedAt: next.updatedAt ?? new Date().toISOString(),
+        lastSavedHash: hash ?? prev.lastSavedHash,
+        isDirty: false,
+        lastError: null,
+        lastLoadSource: source,
+        isReloading: false,
+      }));
+    },
+    [projectPath, setGraph, setMeta, setPath, setPersistenceStatus, setSettings],
+  );
 
   useEffect(() => {
-    if (!hydratedRef.current) return;
-    if (!snapshot.path) {
-      setPersistenceStatus((prev) => ({ ...prev, isDirty: false }));
-      return;
-    }
+    if (!projectPath) return;
 
-    const serialized = serializeSnapshot(snapshot);
-    if (serialized && lastSavedHashRef.current && lastSavedHashRef.current === serialized) {
-      setPersistenceStatus((prev) => ({ ...prev, isDirty: false }));
-      return;
+    const shouldHydrate = lastLoadedPathRef.current !== projectPath || !hydratedRef.current;
+    if (shouldHydrate) {
+      lastLoadedPathRef.current = projectPath;
+      hydratedRef.current = false;
+      lastSavedHashRef.current = null;
+      lastNativeSyncRef.current = 0;
+      currentSnapshotHashRef.current = null;
+      setPersistenceStatus((prev) => ({ ...prev, isHydrated: false, lastError: null, isReloading: false }));
     }
 
     let cancelled = false;
-    const updatedAt = new Date().toISOString();
+    let refreshInFlight: Promise<void> | null = null;
 
-    if (!serialized) return;
+    const syncFromNative = (reason: 'initial' | 'focus') => {
+      if (!projectPath || cancelled) {
+        return Promise.resolve();
+      }
+      if (refreshInFlight) {
+        return refreshInFlight;
+      }
 
-    setPersistenceStatus((prev) => ({ ...prev, isDirty: true, isSaving: true, lastError: null }));
+      const task = (async () => {
+        try {
+          const refreshed = await projectPersistence.refreshFromNative(projectPath);
+          if (!refreshed || cancelled) {
+            return;
+          }
+          const normalized = normalizeSnapshot(refreshed);
+          const hash = serializeSnapshot(normalized);
+          const hasUnsavedLocalChanges =
+            currentSnapshotHashRef.current !== null && currentSnapshotHashRef.current !== lastSavedHashRef.current;
 
-    void projectPersistence
-      .save({ ...snapshot, updatedAt })
-      .then(() => {
-        if (!cancelled) {
-          lastSavedHashRef.current = serialized;
-          setPersistenceStatus((prev) => ({
-            ...prev,
-            isSaving: false,
-            isDirty: false,
-            lastSavedAt: updatedAt,
-            lastSavedHash: serialized,
-            lastError: null,
-          }));
+          if (hasUnsavedLocalChanges) {
+            return;
+          }
+
+          if (hash && hash === currentSnapshotHashRef.current) {
+            return;
+          }
+          applySnapshotState(refreshed, 'native');
+        } catch (error) {
+          console.warn('[Persistence] Native sync failed', { reason, error });
+        } finally {
+          lastNativeSyncRef.current = Date.now();
         }
-      })
-      .catch((error) => {
-        console.error('[Persistence] Failed to save project snapshot', error);
-        if (!cancelled) {
-          setPersistenceStatus((prev) => ({
-            ...prev,
-            isSaving: false,
-            lastError: error instanceof Error ? error.message : 'Failed to save project snapshot',
-          }));
-        }
+      })();
+
+      refreshInFlight = task.finally(() => {
+        refreshInFlight = null;
       });
+
+      return refreshInFlight;
+    };
+
+    if (shouldHydrate) {
+      (async () => {
+        try {
+          const result = await projectPersistence.load(projectPath);
+          if (!result || cancelled) return;
+          applySnapshotState(result.snapshot, result.source);
+          if (result.source === 'native') {
+            lastNativeSyncRef.current = Date.now();
+          }
+        } catch (error) {
+          console.error('[Persistence] Failed to load project snapshot', error);
+          if (!cancelled) {
+            setPersistenceStatus((prev) => ({
+              ...prev,
+              lastError: error instanceof Error ? error.message : 'Failed to load project snapshot',
+            }));
+          }
+        } finally {
+          if (!cancelled) {
+            hydratedRef.current = true;
+            setPersistenceStatus((prev) => ({ ...prev, isHydrated: true, isReloading: false }));
+          }
+        }
+      })();
+    }
+
+    const handleFocus = () => {
+      if (cancelled) return;
+      if (refreshInFlight) return;
+      const now = Date.now();
+      if (now - lastNativeSyncRef.current < MIN_NATIVE_REFRESH_INTERVAL_MS) {
+        return;
+      }
+      void syncFromNative('focus');
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      handleFocus();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       cancelled = true;
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [setPersistenceStatus, snapshot]);
+  }, [applySnapshotState, projectPath, setPersistenceStatus]);
+
+  useEffect(() => {
+    const serialized = serializeSnapshot(snapshot);
+    currentSnapshotHashRef.current = serialized;
+  }, [snapshot]);
 }

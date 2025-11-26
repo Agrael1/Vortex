@@ -1,54 +1,59 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Vortex } from '@/bridge/vortex';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
+import { engine } from '@/app/services/ipc/cefBridge';
+import { useTransportState } from '@/state/hooks/useTransportState';
+import { selectedNodePtrAtom } from '@/state/atoms/editor';
 
 interface PlaybackControlsProps {
   className?: string;
 }
 
 export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [fps, setFps] = useState(60);
-  const [status, setStatus] = useState<'ready' | 'playing' | 'stopped' | 'error'>('ready');
+  const transport = useTransportState();
+  const [pendingAction, setPendingAction] = useState<'play' | 'stop' | null>(null);
+  const selectedPtr = useRecoilValue(selectedNodePtrAtom);
+  const setSelectedPtr = useSetRecoilState(selectedNodePtrAtom);
+  const dropValue = typeof transport.droppedFrames === 'number' ? transport.droppedFrames : null;
+  const dropTarget = transport.dropTarget && transport.dropTarget.trim().length ? transport.dropTarget : null;
+  const dropTargetIdHex = typeof transport.dropTargetId === 'number' && Number.isFinite(transport.dropTargetId)
+    ? `0x${Math.round(transport.dropTargetId).toString(16)}`
+    : null;
+  const dropTargetId = useMemo(() => {
+    if (typeof transport.dropTargetId === 'number' && Number.isFinite(transport.dropTargetId)) {
+      return Math.round(transport.dropTargetId);
+    }
+    return null;
+  }, [transport.dropTargetId]);
+  const lastAutoFocusedId = useRef<number | null>(null);
 
   const handlePlay = useCallback(async () => {
     try {
-      setStatus('playing');
-      await Vortex.play();
-      setIsPlaying(true);
+      setPendingAction('play');
+      await engine.play();
     } catch (error) {
       console.error('Failed to start playback:', error);
-      setStatus('error');
-      setIsPlaying(false);
+    } finally {
+      setPendingAction(null);
     }
   }, []);
 
   const handleStop = useCallback(async () => {
     try {
-      setStatus('stopped');
-      await Vortex.stop();
-      setIsPlaying(false);
+      setPendingAction('stop');
+      await engine.stop();
     } catch (error) {
       console.error('Failed to stop playback:', error);
-      setStatus('error');
+    } finally {
+      setPendingAction(null);
     }
   }, []);
 
-  // FPS monitoring (mock for now, can be enhanced with real data)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // In a real implementation, this would come from the engine
-      setFps(Math.round(58 + Math.random() * 4)); // 58-62 fps simulation
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
   const getStatusColor = () => {
-    switch (status) {
+    switch (transport.status) {
       case 'playing':
         return '#22c55e'; // green
-      case 'stopped':
-        return '#ef4444'; // red
+      case 'paused':
+        return '#f97316'; // orange
       case 'error':
         return '#f59e0b'; // amber
       default:
@@ -57,17 +62,46 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
   };
 
   const getStatusText = () => {
-    switch (status) {
-      case 'playing':
-        return 'Playing';
-      case 'stopped':
-        return 'Stopped';
-      case 'error':
-        return 'Error';
-      default:
-        return 'Ready';
-    }
+    if (transport.status === 'playing') return 'Playing';
+    if (transport.status === 'paused') return 'Paused';
+    if (transport.status === 'error') return 'Error';
+    return 'Ready';
   };
+
+  const getDropColorClass = () => {
+    if (dropValue == null) return 'text-gray-400';
+    if (dropValue === 0) return 'text-green-400';
+    if (dropValue <= 2) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
+  const disablePlay = transport.isPlaying || pendingAction === 'play';
+  const disableStop = !transport.isPlaying || pendingAction === 'stop';
+  const canFocusDropTarget = transport.hasRecentDrops && dropTargetId != null;
+
+  const handleFocusDropTarget = useCallback(() => {
+    if (dropTargetId != null && dropTargetId !== selectedPtr) {
+      setSelectedPtr(dropTargetId);
+    }
+  }, [dropTargetId, selectedPtr, setSelectedPtr]);
+
+  useEffect(() => {
+    if (!transport.hasRecentDrops || dropTargetId == null) {
+      return;
+    }
+
+    if (lastAutoFocusedId.current === dropTargetId) {
+      return;
+    }
+
+    if (dropTargetId === selectedPtr) {
+      lastAutoFocusedId.current = dropTargetId;
+      return;
+    }
+
+    lastAutoFocusedId.current = dropTargetId;
+    setSelectedPtr(dropTargetId);
+  }, [transport.hasRecentDrops, dropTargetId, selectedPtr, setSelectedPtr]);
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
@@ -75,10 +109,10 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
       <div className="flex items-center gap-2">
         <button
           onClick={handlePlay}
-          disabled={isPlaying}
+          disabled={disablePlay}
           className={`
             flex items-center justify-center w-8 h-8 rounded-md transition-colors
-            ${isPlaying ? 'bg-green-600/20 text-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'}
+            ${disablePlay ? 'bg-green-600/20 text-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'}
           `}
           title="Play"
         >
@@ -89,10 +123,10 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
 
         <button
           onClick={handleStop}
-          disabled={!isPlaying}
+          disabled={disableStop}
           className={`
             flex items-center justify-center w-8 h-8 rounded-md transition-colors
-            ${!isPlaying ? 'bg-red-600/20 text-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'}
+            ${disableStop ? 'bg-red-600/20 text-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'}
           `}
           title="Stop"
         >
@@ -103,7 +137,10 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
       </div>
 
       {/* Status indicator */}
-      <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-black/20 border border-gray-600">
+      <div
+        className="flex items-center gap-2 px-3 py-1 rounded-md bg-black/20 border border-gray-600"
+        title={transport.reason ?? undefined}
+      >
         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getStatusColor() }} />
         <span className="text-sm text-gray-300">{getStatusText()}</span>
       </div>
@@ -111,7 +148,42 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
       {/* FPS Counter */}
       <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-black/20 border border-gray-600">
         <span className="text-sm text-gray-400">FPS:</span>
-        <span className={`text-sm font-mono ${fps < 55 ? 'text-red-400' : fps < 58 ? 'text-yellow-400' : 'text-green-400'}`}>{fps}</span>
+        <span
+          className={`text-sm font-mono ${transport.fps < 55 ? 'text-red-400' : transport.fps < 58 ? 'text-yellow-400' : 'text-green-400'}`}
+        >
+          {transport.fps}
+        </span>
+      </div>
+
+      {/* Dropped frames */}
+      <div
+        className="flex items-center gap-3 px-3 py-1 rounded-md bg-black/20 border border-gray-600"
+        title={transport.hasRecentDrops ? transport.reason ?? dropTarget ?? undefined : 'Нет зафиксированных дропов'}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-400">Dropped:</span>
+          <span className={`text-sm font-mono ${getDropColorClass()}`}>
+            {dropValue == null ? '—' : dropValue}
+          </span>
+        </div>
+        {transport.hasRecentDrops && (dropTarget || dropTargetIdHex) && (
+          <span
+            className="text-xs text-gray-400 truncate max-w-[180px]"
+            title={[dropTarget, dropTargetIdHex].filter(Boolean).join(' ')}
+          >
+            {[dropTarget, dropTargetIdHex].filter(Boolean).join(' · ')}
+          </span>
+        )}
+        {canFocusDropTarget && (
+          <button
+            type="button"
+            onClick={handleFocusDropTarget}
+            className="text-xs font-medium text-blue-300 hover:text-blue-200 underline-offset-2 hover:underline"
+            title="Выделить проблемный выход"
+          >
+            Focus
+          </button>
+        )}
       </div>
 
       {/* GPU Info */}

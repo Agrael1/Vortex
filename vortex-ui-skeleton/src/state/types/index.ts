@@ -28,6 +28,8 @@ export type GraphEdgeSnapshot = {
   source: string;
   target: string;
   animated?: boolean;
+  sourceSlot?: number;
+  targetSlot?: number;
 };
 
 export type GraphSnapshot = {

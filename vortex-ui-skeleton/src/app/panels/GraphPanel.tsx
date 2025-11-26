@@ -18,7 +18,6 @@ import {
 import type { DragEvent } from 'react';
 import type { NodeChange } from '@xyflow/react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
-import { Vortex } from '@/bridge/vortex';
 import { CustomNode, CustomNodeData } from '@/app/components/CustomNode';
 import { graphSnapshotAtom } from '@state/atoms/project';
 import { selectedNodePtrAtom } from '@state/atoms/editor';
@@ -30,6 +29,13 @@ const idFromPtr = (ptr: number) => String(ptr);
 
 type RFNode = Node<CustomNodeData>;
 type RFEdge = Edge;
+
+declare global {
+  interface Window {
+    __VortexDebugSelection?: boolean;
+    __VortexSkipSelectionSync?: boolean;
+  }
+}
 
 const nodeTypes = {
   custom: CustomNode,
@@ -54,6 +60,10 @@ const toRFEdge = (edge: GraphEdgeSnapshot): RFEdge => ({
   source: edge.source,
   target: edge.target,
   animated: edge.animated ?? true,
+  data: {
+    sourceSlot: edge.sourceSlot,
+    targetSlot: edge.targetSlot,
+  },
 });
 
 const toSnapshotNode = (node: RFNode): GraphNodeSnapshot => ({
@@ -70,6 +80,8 @@ const toSnapshotEdge = (edge: RFEdge): GraphEdgeSnapshot => ({
   source: edge.source,
   target: edge.target,
   animated: edge.animated,
+  sourceSlot: typeof edge.data?.sourceSlot === 'number' ? edge.data.sourceSlot : undefined,
+  targetSlot: typeof edge.data?.targetSlot === 'number' ? edge.data.targetSlot : undefined,
 });
 
 const snapshotToReactFlow = (snapshot: GraphSnapshot, selectedPtr?: number | null): { nodes: RFNode[]; edges: RFEdge[] } => {
@@ -100,13 +112,43 @@ function GraphInner() {
   const setGraphSnapshot = useSetRecoilState(graphSnapshotAtom);
   const setSelectedPtr = useSetRecoilState(selectedNodePtrAtom);
   const selectedPtr = useRecoilValue(selectedNodePtrAtom);
-  const { createNode, removeNode, removeEdges } = useGraphCommands();
+  const { createNode, removeNode, removeEdges, connectNodes, updateNodePosition } = useGraphCommands();
   const initialGraph = useRef(snapshotToReactFlow(graphSnapshot));
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>(initialGraph.current.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>(initialGraph.current.edges);
   const rf = useReactFlow();
   const lastHydratedRef = useRef<string>(JSON.stringify(graphSnapshot));
   const selectedEdgesRef = useRef<RFEdge[]>([]);
+  const previousSelectionRef = useRef<number | null>(null);
+  const debugSelection = typeof window !== 'undefined' ? window.__VortexDebugSelection !== false : false;
+  const skipSelectionSync = typeof window !== 'undefined' ? window.__VortexSkipSelectionSync === true : false;
+
+  const logSelection = useCallback(
+    (...args: unknown[]) => {
+      if (debugSelection) {
+        console.debug('[GraphPanel]', ...args);
+      }
+    },
+    [debugSelection],
+  );
+
+  useEffect(() => {
+    if (debugSelection) {
+      console.debug('[GraphPanel] selection debugging enabled. Toggle window.__VortexDebugSelection = false to disable.');
+    }
+  }, [debugSelection]);
+
+  useEffect(() => {
+    if (debugSelection) {
+      console.debug('[GraphPanel] window.__VortexSkipSelectionSync =', skipSelectionSync);
+    }
+  }, [debugSelection, skipSelectionSync]);
+
+  useEffect(() => {
+    if (debugSelection) {
+      console.debug('[GraphPanel] Recoil selectedPtr observed ->', selectedPtr);
+    }
+  }, [debugSelection, selectedPtr]);
   useEffect(() => {
     const handler = (type: string, x?: number, y?: number) => createNode(type, x != null && y != null ? { x, y } : undefined);
     (window as any).__GraphPanelAddNode = handler;
@@ -119,21 +161,61 @@ function GraphInner() {
 
   const onConnect = useCallback<OnConnect>(
     async (conn: Connection) => {
+      if (!conn.source || !conn.target) {
+        return;
+      }
+
       setEdges((eds) => addEdge({ ...conn, animated: true } as RFEdge, eds));
-      const srcPtr = Number(conn.source);
-      const dstPtr = Number(conn.target);
-      await Vortex.connect(srcPtr, 0, dstPtr, 0);
+      try {
+        await connectNodes({ source: conn.source, target: conn.target });
+      } catch (error) {
+        console.error('[GraphPanel] Failed to connect nodes', error);
+      }
     },
-    [setEdges],
+    [connectNodes, setEdges],
   );
 
   const onSelectionChange = useCallback(
     (params: { nodes: RFNode[]; edges: RFEdge[] }) => {
       const first = params.nodes[0];
-      setSelectedPtr(first ? first.data.ptr : null);
+      const rawPtr = first?.data?.ptr;
+      const nextPtr = typeof rawPtr === 'number' && Number.isFinite(rawPtr) ? rawPtr : null;
+      logSelection('selection event', {
+        previous: previousSelectionRef.current,
+        rawPtr,
+        normalizedPtr: nextPtr,
+        nodeId: first?.id ?? null,
+        nodes: params.nodes.map((node) => ({ id: node.id, ptr: node.data.ptr })),
+      });
       selectedEdgesRef.current = params.edges ?? [];
+
+      if (skipSelectionSync) {
+        logSelection('skipSelectionSync flag is true, aborting selection sync');
+        return;
+      }
+
+      if (first && nextPtr == null) {
+        logSelection('selection target missing numeric ptr, ignoring until engine provides one', {
+          nodeId: first.id,
+          rawPtr,
+        });
+        previousSelectionRef.current = null;
+        return;
+      }
+
+      setSelectedPtr((current) => {
+        if (current === (nextPtr ?? null)) {
+          logSelection('selection already synced, skipping update');
+          previousSelectionRef.current = current;
+          return current;
+        }
+        const normalized = nextPtr ?? null;
+        logSelection('updating selectedPtr', { previous: current, next: normalized, stack: new Error().stack });
+        previousSelectionRef.current = normalized;
+        return normalized;
+      });
     },
-    [setSelectedPtr],
+    [logSelection, setSelectedPtr, skipSelectionSync],
   );
 
   const onDrop = useCallback(
@@ -237,21 +319,16 @@ function GraphInner() {
         const position = change.position ?? change.positionAbsolute;
         if (!position) return [];
 
-        const node = nodes.find((n) => n.id === change.id);
-        const ptr = node?.data.ptr;
-        if (!Number.isFinite(ptr)) return [];
-
-        return [{ ptr: Number(ptr), position }];
+        return [{ id: change.id, position }];
       });
 
-      updates.forEach(({ ptr, position }) => {
-        const payload = JSON.stringify(position);
-        Vortex.setNodeProperty(ptr, 'position', payload).catch((error) => {
-          console.error('[GraphPanel] Failed to sync node position', { ptr, error });
+      updates.forEach(({ id, position }) => {
+        updateNodePosition(id, position).catch((error) => {
+          console.error('[GraphPanel] Failed to sync node position', { id, error });
         });
       });
     },
-    [nodes, onNodesChange],
+    [onNodesChange, updateNodePosition],
   );
 
   return (

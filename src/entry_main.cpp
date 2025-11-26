@@ -1,11 +1,31 @@
 #include <csignal>
+#include <cstdlib>
+#include <filesystem>
+#include <string_view>
 #include <vortex/app.h>
 #include <vortex/ui/cef/app.h>
 #include <vortex/util/log_storage.h>
 
+namespace {
+bool ShouldWriteLogsToFiles()
+{
+    if (const char* env = std::getenv("VORTEX_CONSOLE_ONLY_LOGS")) {
+        std::string_view value(env);
+        return !(value == "1" || value == "true" || value == "TRUE");
+    }
+    return true;
+}
+} // namespace
+
 int EntryMain(std::span<std::string_view> args, CefRefPtr<vortex::ui::VortexCefApp> cef_app)
 try {
-    bool debug = true;
+    const bool log_to_files = ShouldWriteLogsToFiles();
+    if (log_to_files) {
+        std::error_code ec;
+        std::filesystem::create_directories("logs", ec);
+    }
+
+    bool debug = !log_to_files;
     vortex::MainArgs parsed_args = vortex::ParseArgs(args);
     vortex::TerminalHandler::Instance();
     vortex::LogStorage log_storage;
@@ -13,7 +33,7 @@ try {
     // Make a default log for UI / CEF
     vortex::LogOptions options_cef{ .name = vortex::ui_log_name,
                                     .pattern_prefix = "vortex.cef",
-                                    .output_file_path = debug ? "" : "logs/vortex.cef.log" };
+                                    .output_file_path = debug ? "" : "cef_debug.log" };
     vortex::LogView log_ui = log_storage.CreateLog(options_cef, true);
 
     // Initialize CEF subprocess

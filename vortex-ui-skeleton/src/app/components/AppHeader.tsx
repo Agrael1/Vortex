@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { PlaybackControls } from '@/app/components/PlaybackControls';
-import { Vortex } from '@/bridge/vortex';
 import { engine, type Recent } from '@/app/services/ipc/cefBridge';
 import { useProjectCommands } from '@state/hooks/useProjectCommands';
 import { useGraphCommands } from '@state/hooks/useGraphCommands';
@@ -14,6 +13,13 @@ type MenuItem =
   | { type: 'action'; label: string; shortcut?: string; description?: string; disabled?: boolean; onSelect?: () => void }
   | { type: 'separator' }
   | { type: 'heading'; label: string };
+
+const ensurePtr = (value: number | null, context: string): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`[${context}] Node pointer is not available`);
+  }
+  return value;
+};
 
 interface AppHeaderProps {
   className?: string;
@@ -36,7 +42,7 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
   const [isPerformingAction, setIsPerformingAction] = useState(false);
   const { saveProject, openProject, createProject } = useProjectCommands();
   const persistenceStatus = useRecoilValue(persistenceStatusAtom);
-  const { createNode } = useGraphCommands();
+  const { createNode, connectNodes } = useGraphCommands();
 
   const closeMenus = useCallback(() => {
     setActiveMenu(null);
@@ -124,7 +130,9 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
       console.log('[Quick Test] WindowOutput created with ptr:', windowPtr);
 
       console.log('[Quick Test] Connecting nodes...', imagePtr, '->', windowPtr);
-      await Vortex.connect(imagePtr, 0, windowPtr, 0);
+      const imageHandle = ensurePtr(imagePtr, 'Quick Test image');
+      const windowHandle = ensurePtr(windowPtr, 'Quick Test window');
+      await connectNodes({ source: imageHandle, target: windowHandle });
       console.log('[Quick Test] Image→Window pipeline created successfully!');
       console.log('[Quick Test] Now click Play to see test pattern');
     } catch (error) {
@@ -146,12 +154,14 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
       console.log('[Quick] WindowOutput created with ptr:', windowPtr);
 
       console.log('[Quick] Connecting nodes...', streamPtr, '->', windowPtr);
-      await Vortex.connect(streamPtr, 0, windowPtr, 0);
+      const streamHandle = ensurePtr(streamPtr, 'Quick Stream source');
+      const windowHandle = ensurePtr(windowPtr, 'Quick Stream target');
+      await connectNodes({ source: streamHandle, target: windowHandle });
       console.log('[Quick] Stream→Window pipeline created successfully!');
     } catch (error) {
       console.error('[Quick] Error creating Stream→Window:', error);
     }
-  }, [closeMenus, createNode]);
+  }, [closeMenus, connectNodes, createNode]);
 
   const handleNavigateHub = useCallback(() => {
     closeMenus();

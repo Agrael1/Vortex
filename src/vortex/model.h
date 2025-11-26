@@ -8,12 +8,18 @@
 #include <atomic>
 #include <unordered_set>
 #include <algorithm>
+#include <functional>
 
 namespace vortex::graph {
 class GraphModel
 {
 public:
     GraphModel() = default;
+
+    using EdgeEventCallback = std::function<void(uintptr_t sourcePtr,
+                                                 int32_t sourceSlot,
+                                                 uintptr_t targetPtr,
+                                                 int32_t targetSlot)>;
 
 public: // Model API
     auto CreateNode(const vortex::Graphics& gfx,
@@ -34,7 +40,7 @@ public: // Model API
                       int32_t output_index,
                       uintptr_t node_ptr_to,
                       int32_t input_index);
-    void DisconnectNodes(uintptr_t node_ptr_from,
+    bool DisconnectNodes(uintptr_t node_ptr_from,
                          int32_t output_index,
                          uintptr_t node_ptr_to,
                          int32_t input_index);
@@ -48,6 +54,12 @@ public: // Model API
     void RemoveKeyframe(uintptr_t track_ptr, uint32_t keyframe_index);
     void Play();
     void Stop();
+
+    void SetEdgeEventCallbacks(EdgeEventCallback onConnect, EdgeEventCallback onDisconnect)
+    {
+        _on_edge_connected = std::move(onConnect);
+        _on_edge_disconnected = std::move(onDisconnect);
+    }
 
 public:
     INode* GetNode(uintptr_t node_ptr) const
@@ -110,6 +122,8 @@ public:
 
     // Get the output scheduler for external access
     const OutputScheduler& GetOutputScheduler() const noexcept { return _output_scheduler; }
+    OutputSchedulerStats SampleTransportStats() noexcept { return _output_scheduler.SampleStats(); }
+    bool IsPlaying() const noexcept { return _playing; }
 
     anim::AnimationSystem& GetAnimationManager() noexcept { return _animation_manager; }
 
@@ -222,6 +236,29 @@ private:
     std::unordered_map<uintptr_t, std::unique_ptr<INode>> _nodes;
     std::unordered_set<Connection> _connections; ///< Map of connections by node pointers
     std::unordered_set<INode*> _dirty_nodes; ///< Set of nodes that have pending property updates
+
+    EdgeEventCallback _on_edge_connected;
+    EdgeEventCallback _on_edge_disconnected;
+
+    void NotifyEdgeConnected(uintptr_t sourcePtr,
+                             int32_t sourceSlot,
+                             uintptr_t targetPtr,
+                             int32_t targetSlot)
+    {
+        if (_on_edge_connected) {
+            _on_edge_connected(sourcePtr, sourceSlot, targetPtr, targetSlot);
+        }
+    }
+
+    void NotifyEdgeDisconnected(uintptr_t sourcePtr,
+                                int32_t sourceSlot,
+                                uintptr_t targetPtr,
+                                int32_t targetSlot)
+    {
+        if (_on_edge_disconnected) {
+            _on_edge_disconnected(sourcePtr, sourceSlot, targetPtr, targetSlot);
+        }
+    }
 
     std::vector<IOutput*> _outputs;
     OutputScheduler _output_scheduler; ///< Frame-rate aware output scheduler

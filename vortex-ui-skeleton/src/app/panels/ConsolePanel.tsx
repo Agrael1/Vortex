@@ -30,7 +30,7 @@ export function ConsolePanel() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-ui-border text-gray-300">
         <span>Console · {entries.length}</span>
         <button type="button" onClick={clearLogs} className="text-gray-400 hover:text-white transition-colors text-[11px]">
-          Очистить
+          Clear
         </button>
       </div>
       <div className="flex-1 overflow-auto px-3 py-2 space-y-1">
@@ -41,7 +41,7 @@ export function ConsolePanel() {
             <span className="flex-1 whitespace-pre-wrap break-all">{entry.message}</span>
           </div>
         ))}
-        {entries.length === 0 ? <div className="text-gray-500">Пока что нет сообщений…</div> : null}
+        {entries.length === 0 ? <div className="text-gray-500">No messages yet…</div> : null}
       </div>
     </div>
   );

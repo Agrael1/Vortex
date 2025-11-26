@@ -4,6 +4,7 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <filesystem>
 #include <format>
+#include <system_error>
 
 namespace vortex {
 #ifdef _WIN32
@@ -97,9 +98,14 @@ class Log
 public:
     Log(const LogOptions& options)
     {
+        std::filesystem::path file_path(options.output_file_path);
+        if (!options.output_file_path.empty() && file_path.has_parent_path()) {
+            std::error_code ec;
+            std::filesystem::create_directories(file_path.parent_path(), ec);
+        }
         sinks[0] = std::make_shared<cross_process_console_sink>();
         sinks[1] = !options.output_file_path.empty()
-                ? std::make_shared<spdlog::sinks::basic_file_sink_st>(options.output_file_path.string(), true)
+                ? std::make_shared<spdlog::sinks::basic_file_sink_st>(file_path.string(), true)
                 : nullptr;
         std::string pattern = std::format("[{}] [%^%l%$] %v", options.pattern_prefix);
         bool to_file = sinks[1] != nullptr;

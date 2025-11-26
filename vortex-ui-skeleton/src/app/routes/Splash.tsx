@@ -3,7 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { engine, type LastProject } from '@/app/services/ipc/cefBridge';
 import { useProjectCommands } from '@state/hooks/useProjectCommands';
-import { SPLASH_AUTO_CONTINUE_KEY } from '@/app/constants/preferences';
+import {
+  SPLASH_AUTO_CONTINUE_KEY,
+  readAutoDelayPreference,
+  readFallbackDelayPreference,
+  resolveFallbackDelayForContext,
+} from '@/app/constants/preferences';
 
 export function Splash() {
   const nav = useNavigate();
@@ -17,8 +22,12 @@ export function Splash() {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem(SPLASH_AUTO_CONTINUE_KEY) === 'true';
   });
+  const [autoDelay] = useState(() => readAutoDelayPreference());
+  const [fallbackDelay] = useState(() => readFallbackDelayPreference());
+  const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
   const fallbackTimerRef = useRef<number | null>(null);
   const autoTimerRef = useRef<number | null>(null);
+  const countdownIntervalRef = useRef<number | null>(null);
 
   const clearFallback = useCallback(() => {
     if (fallbackTimerRef.current) {
@@ -32,6 +41,11 @@ export function Splash() {
       window.clearTimeout(autoTimerRef.current);
       autoTimerRef.current = null;
     }
+    if (countdownIntervalRef.current) {
+      window.clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setAutoCountdown(null);
   }, []);
 
   const goToHub = useCallback(() => {
@@ -51,19 +65,21 @@ export function Splash() {
     const nextStatus = lastProject ? `Welcome back, ${lastProject.name}` : 'Opening Hub…';
     setStatus(nextStatus);
     setHint(lastProject?.path ?? null);
-    scheduleHubRedirect(lastProject ? 3000 : 1200);
+    const computedFallback = resolveFallbackDelayForContext(fallbackDelay, Boolean(lastProject));
+    scheduleHubRedirect(computedFallback);
 
     return () => {
       clearFallback();
       clearAutoTimer();
     };
-  }, [clearAutoTimer, clearFallback, lastProject, scheduleHubRedirect]);
+  }, [clearAutoTimer, clearFallback, fallbackDelay, lastProject, scheduleHubRedirect]);
 
   const handleContinueLast = useCallback(async () => {
     if (!lastProject?.path || isContinuing) {
       goToHub();
       return;
     }
+    clearAutoTimer();
     setIsContinuing(true);
     setError(null);
     setStatus(`Opening ${lastProject.name}…`);
@@ -80,7 +96,7 @@ export function Splash() {
     } finally {
       setIsContinuing(false);
     }
-  }, [clearFallback, goToHub, lastProject, loadProject, nav, scheduleHubRedirect, isContinuing]);
+  }, [clearAutoTimer, clearFallback, goToHub, lastProject, loadProject, nav, scheduleHubRedirect, isContinuing]);
 
   const handleForgetLast = useCallback(() => {
     engine.clearLastProject();
@@ -104,12 +120,20 @@ export function Splash() {
 
     autoTimerRef.current = window.setTimeout(() => {
       handleContinueLast();
-    }, 1200);
+    }, autoDelay);
+
+    setAutoCountdown(Math.ceil(autoDelay / 1000));
+    const startedAt = Date.now();
+    countdownIntervalRef.current = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(0, autoDelay - elapsed);
+      setAutoCountdown(Math.max(0, Math.ceil(remaining / 1000)));
+    }, 250);
 
     return () => {
       clearAutoTimer();
     };
-  }, [autoContinue, clearAutoTimer, handleContinueLast, isContinuing, lastProject]);
+  }, [autoContinue, autoDelay, clearAutoTimer, handleContinueLast, isContinuing, lastProject]);
 
   return (
     <div className="w-screen h-screen grid place-items-center bg-ui-bg">
@@ -164,6 +188,21 @@ export function Splash() {
             />
             Auto-continue next time
           </label>
+        )}
+        {lastProject?.path && autoContinue && autoCountdown != null && !isContinuing && (
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <span>Auto-continue in {autoCountdown}s</span>
+            <button
+              type="button"
+              onClick={() => {
+                clearAutoTimer();
+                setAutoContinue(false);
+              }}
+              className="rounded border border-ui-border/40 px-2 py-0.5 text-[11px] text-gray-200 transition hover:border-ui-border"
+            >
+              Cancel
+            </button>
+          </div>
         )}
         {error && <div className="text-xs text-red-300 text-center px-6">{error}</div>}
         <motion.div className="w-48 h-1 rounded bg-[#1f2430] overflow-hidden" initial={false}>

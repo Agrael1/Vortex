@@ -57,6 +57,13 @@ void vortex::graph::GraphModel::RemoveNode(uintptr_t node_ptr)
         connection_to_remove.to_index = i;
         _connections.erase(connection_to_remove); // Remove all connections to this node
 
+        if (sink.source_node) {
+            NotifyEdgeDisconnected(std::bit_cast<uintptr_t>(sink.source_node),
+                                   static_cast<int32_t>(sink.source_index),
+                                   node_ptr,
+                                   static_cast<int32_t>(i));
+        }
+
         // Remove the source from the sink
         sink.source_node->GetSources()[sink.source_index].targets.erase(
                 SourceTarget{ uint32_t(i), node });
@@ -78,6 +85,13 @@ void vortex::graph::GraphModel::RemoveNode(uintptr_t node_ptr)
             connection_to_remove.to_node = target.sink_node;
             connection_to_remove.to_index = target.sink_index;
             _connections.erase(connection_to_remove); // Remove all connections from this node
+
+            if (target.sink_node) {
+                NotifyEdgeDisconnected(node_ptr,
+                                       static_cast<int32_t>(i),
+                                       std::bit_cast<uintptr_t>(target.sink_node),
+                                       static_cast<int32_t>(target.sink_index));
+            }
         }
     }
 
@@ -199,6 +213,13 @@ bool vortex::graph::GraphModel::ConnectNodes(uintptr_t node_ptr_from,
         auto prev_target_sources = target_sink.source_node->GetSources();
         prev_target_sources[target_sink.source_index].targets.erase(
                 SourceTarget{ uint32_t(input_index), to_node });
+
+        if (target_sink.source_node) {
+            NotifyEdgeDisconnected(std::bit_cast<uintptr_t>(target_sink.source_node),
+                                   static_cast<int32_t>(target_sink.source_index),
+                                   node_ptr_to,
+                                   input_index);
+        }
     }
 
     target_sink.source_node = from_node; // Set the source node for the sink
@@ -207,10 +228,11 @@ bool vortex::graph::GraphModel::ConnectNodes(uintptr_t node_ptr_from,
     target_source.targets.emplace(uint32_t(input_index), to_node); // Add the target to the source
 
     UpdateIfStatic(to_node);
+    NotifyEdgeConnected(node_ptr_from, output_index, node_ptr_to, input_index);
     return true; // Connection successful
 }
 
-void vortex::graph::GraphModel::DisconnectNodes(uintptr_t node_ptr_from,
+bool vortex::graph::GraphModel::DisconnectNodes(uintptr_t node_ptr_from,
                                                 int32_t output_index,
                                                 uintptr_t node_ptr_to,
                                                 int32_t input_index)
@@ -219,17 +241,17 @@ void vortex::graph::GraphModel::DisconnectNodes(uintptr_t node_ptr_from,
     auto* to_node = GetNode(node_ptr_to);
     if (!from_node || !to_node) {
         vortex::error("Failed to disconnect nodes: one or both nodes not found.");
-        return; // One or both nodes not found, cannot disconnect
+        return false; // One or both nodes not found, cannot disconnect
     }
     auto right_sinks = to_node->GetSinks();
     auto left_sources = from_node->GetSources();
     if (output_index < 0 || output_index >= static_cast<int32_t>(left_sources.size())) {
         vortex::error("Invalid output index {} for node {}", output_index, from_node->GetInfo());
-        return; // Invalid output index
+        return false; // Invalid output index
     }
     if (input_index < 0 || input_index >= static_cast<int32_t>(right_sinks.size())) {
         vortex::error("Invalid input index {} for node {}", input_index, to_node->GetInfo());
-        return; // Invalid input index
+        return false; // Invalid input index
     }
     vortex::info("Disconnecting nodes: {} (output {}) -> {} (input {})",
                  from_node->GetInfo(),
@@ -250,7 +272,7 @@ void vortex::graph::GraphModel::DisconnectNodes(uintptr_t node_ptr_from,
                      to_node->GetInfo(),
                      output_index,
                      input_index);
-        return; // Connection does not exist
+        return false; // Connection does not exist
     }
     // Reset the sink and source to remove the connection
     auto& target_sink = right_sinks[input_index];
@@ -261,6 +283,8 @@ void vortex::graph::GraphModel::DisconnectNodes(uintptr_t node_ptr_from,
             SourceTarget{ uint32_t(input_index), to_node }); // Remove the target from the source
 
     UpdateIfStatic(to_node); // Update the right node if it was static
+    NotifyEdgeDisconnected(node_ptr_from, output_index, node_ptr_to, input_index);
+    return true;
 }
 
 void vortex::graph::GraphModel::SetNodeInfo(uintptr_t node_ptr, std::string info)

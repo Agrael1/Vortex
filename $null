@@ -1,7 +1,0 @@
-Remove-Item : Cannot find path 'C:\Users\ruslan.rassamakhin\Repos\My\Vortex\out\build\x64-release' because it does not exist.
-At line:1 char:1
-+ Remove-Item -Recurse -Force 'out/build/x64-release'
-+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : ObjectNotFound: (C:\Users\ruslan...ild\x64-release:String) [Remove-Item], ItemNotFoundException
-    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.RemoveItemCommand
- 

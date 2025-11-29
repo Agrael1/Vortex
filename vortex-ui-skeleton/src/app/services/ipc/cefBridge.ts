@@ -71,6 +71,7 @@ type NativeLike = {
   CreateProjectAsync?: (payload: CreateProjectPayload | string) => Promise<ProjectDTO>;
   ShowOpenProjectDialogAsync?: () => Promise<string | null | undefined>;
   ShowSelectFolderDialogAsync?: () => Promise<string | null | undefined>;
+  ShowOpenFileDialogAsync?: (optionsJson?: string) => Promise<string | null | undefined> | string | null | undefined;
   saveProject?: (path: string, snapshotJson: string) => Promise<void | boolean> | void | boolean;
   SaveProjectAsync?: (path: string, snapshotJson: string) => Promise<void | boolean> | void | boolean;
   applyProjectPatch?: (path: string, patchJson: string) => Promise<void | boolean> | void | boolean;
@@ -198,6 +199,11 @@ export type TransportStatePayload = {
 export type ConfigureAutosaveOptions = {
   enabled: boolean;
   delayMs?: number;
+};
+
+type FileDialogOptions = {
+  filters?: string[];
+  title?: string;
 };
 
 const getLocalStorage = (): Storage | null => {
@@ -399,6 +405,34 @@ class EngineBridge {
     const hasVortexCall = typeof (win as any).vortexCallAsync === 'function';
     if (hasVortexCall) {
       const call = (method: string, ...args: unknown[]) => (win as any).vortexCallAsync(method, ...args);
+      const callSync = typeof (win as any).vortexCall === 'function'
+        ? (method: string, ...args: unknown[]) => {
+            try {
+              (win as any).vortexCall(method, ...args);
+              return true;
+            } catch (error) {
+              console.warn(`[EngineBridge] vortexCall ${method} failed`, error);
+              return false;
+            }
+          }
+        : null;
+      const fireAndForget = (method: string, ...args: unknown[]) => {
+        if (callSync) {
+          return callSync(method, ...args);
+        }
+        try {
+          const task = call(method, ...args);
+          if (task && typeof (task as Promise<unknown>).then === 'function') {
+            (task as Promise<unknown>).catch((error) => {
+              console.warn(`[EngineBridge] ${method} async call failed`, error);
+            });
+          }
+        } catch (error) {
+          console.warn(`[EngineBridge] ${method} dispatch failed`, error);
+          return false;
+        }
+        return true;
+      };
       const serializeCreatePayload = (payload: CreateProjectPayload | string) =>
         typeof payload === 'string' ? payload : JSON.stringify(payload);
       return {
@@ -407,6 +441,7 @@ class EngineBridge {
         createProject: (payload: CreateProjectPayload | string) => call('CreateProjectAsync', serializeCreatePayload(payload)),
         ShowOpenProjectDialogAsync: () => call('ShowOpenProjectDialogAsync'),
         ShowSelectFolderDialogAsync: () => call('ShowSelectFolderDialogAsync'),
+        ShowOpenFileDialogAsync: (optionsJson?: string) => call('ShowOpenFileDialogAsync', optionsJson ?? '{}'),
         getNodeTypes: () => call('GetNodeTypesAsync'),
         GetNodeTypesAsync: () => call('GetNodeTypesAsync'),
         getNodeProperties: (nodePtr: number) => call('GetNodePropertiesAsync', nodePtr),
@@ -424,8 +459,8 @@ class EngineBridge {
         CreateProjectAsync: (payload: CreateProjectPayload | string) => call('CreateProjectAsync', serializeCreatePayload(payload)),
         configureAutosave: (enabled: boolean, delayMs?: number) => call('ConfigureAutosaveAsync', enabled, normalizeAutosaveDelay(delayMs)),
         ConfigureAutosaveAsync: (enabled: boolean, delayMs?: number) => call('ConfigureAutosaveAsync', enabled, normalizeAutosaveDelay(delayMs)),
-        play: () => call('Play'),
-        stop: () => call('Stop'),
+        play: () => fireAndForget('Play'),
+        stop: () => fireAndForget('Stop'),
       };
     }
 
@@ -670,19 +705,14 @@ class EngineBridge {
 
   async browseForProject(): Promise<string | null> {
     if (this.native?.ShowOpenProjectDialogAsync) {
-      const selected = await this.native.ShowOpenProjectDialogAsync();
-      if (typeof selected === 'string') {
-        const trimmed = selected.trim();
-        return trimmed.length ? trimmed : null;
-      }
-      return null;
+      return this.normalizeSelectedPath(await this.native.ShowOpenProjectDialogAsync());
     }
 
     if (typeof window !== 'undefined') {
       const fallback = window.prompt('Enter absolute path to a Vortex project (*.vortex)');
-      if (typeof fallback === 'string') {
-        const trimmed = fallback.trim();
-        return trimmed.length ? trimmed : null;
+      const normalized = this.normalizeSelectedPath(fallback);
+      if (normalized) {
+        return normalized;
       }
     }
 
@@ -691,19 +721,42 @@ class EngineBridge {
 
   async browseForFolder(): Promise<string | null> {
     if (this.native?.ShowSelectFolderDialogAsync) {
-      const selected = await this.native.ShowSelectFolderDialogAsync();
-      if (typeof selected === 'string') {
-        const trimmed = selected.trim();
-        return trimmed.length ? trimmed : null;
-      }
-      return null;
+      return this.normalizeSelectedPath(await this.native.ShowSelectFolderDialogAsync());
     }
 
     if (typeof window !== 'undefined') {
       const fallback = window.prompt('Enter destination folder path');
-      if (typeof fallback === 'string') {
-        const trimmed = fallback.trim();
-        return trimmed.length ? trimmed : null;
+      const normalized = this.normalizeSelectedPath(fallback);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    return null;
+  }
+
+  async browseForAsset(options?: FileDialogOptions): Promise<string | null> {
+    const normalizedFilters = (options?.filters ?? [])
+      .map((filter) => (typeof filter === 'string' ? filter.trim() : ''))
+      .filter((filter) => filter.length > 0);
+    const dialogTitle = typeof options?.title === 'string' ? options.title.trim() : '';
+    const payloadNeeded = normalizedFilters.length > 0 || dialogTitle.length > 0;
+    const payload = payloadNeeded ? JSON.stringify({ filters: normalizedFilters, title: dialogTitle || undefined }) : '{}';
+
+    if (this.native?.ShowOpenFileDialogAsync) {
+      const selected = await this.tryNativeCall('ShowOpenFileDialogAsync', () => this.native?.ShowOpenFileDialogAsync?.(payload));
+      const normalized = this.normalizeSelectedPath(selected);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      const fallbackMessage = dialogTitle.length ? `${dialogTitle} (enter full path)` : 'Enter absolute file path';
+      const fallback = window.prompt(fallbackMessage);
+      const normalized = this.normalizeSelectedPath(fallback);
+      if (normalized) {
+        return normalized;
       }
     }
 
@@ -1126,18 +1179,91 @@ class EngineBridge {
     });
   }
 
-  private normalizePropertySchema(raw: unknown): NodePropertySchema {
+  private parseLooseJson(raw: string): unknown {
+    const trimmed = raw?.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      /* fall through */
+    }
+
+    const relaxed = trimmed
+      .replace(/([,{]\s*)([A-Za-z_][A-Za-z0-9_\-.]*)\s*:/g, '$1"$2":')
+      .replace(/'([^']*)'/g, '"$1"')
+      .replace(/,\s*([}\]])/g, '$1');
+
+    try {
+      return JSON.parse(relaxed);
+    } catch (error) {
+      console.warn('[EngineBridge] Failed to parse property payload', error);
+      return null;
+    }
+  }
+
+  private inferPropertyType(value: unknown): string {
+    if (typeof value === 'boolean') return 'bool';
+    if (typeof value === 'number') return Number.isInteger(value) ? 'int' : 'float';
+    if (typeof value === 'string') return 'string';
+    if (Array.isArray(value)) {
+      if (value.length === 2) return 'vec2';
+      if (value.length === 3) return 'vec3';
+      if (value.length === 4) return 'vec4';
+      return 'string';
+    }
+    if (value && typeof value === 'object') return 'string';
+    return 'string';
+  }
+
+  private buildSchemaFromDictionary(dict: Record<string, unknown>): NodePropertySchema {
+    const entries = Object.entries(dict ?? {});
+    const properties = entries
+      .map(([name, rawValue], fallbackIndex) => {
+        if (!name) {
+          return null;
+        }
+
+        if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+          const candidate = rawValue as Record<string, unknown>;
+          const explicitIndex = typeof candidate.index === 'number' ? candidate.index : fallbackIndex;
+          const value = Object.prototype.hasOwnProperty.call(candidate, 'value') ? candidate.value : rawValue;
+          return {
+            ...candidate,
+            name,
+            label: typeof candidate.label === 'string' ? candidate.label : name,
+            index: explicitIndex,
+            value,
+            type: typeof candidate.type === 'string' ? candidate.type : this.inferPropertyType(value),
+          } as NodePropertySpec;
+        }
+
+        return {
+          name,
+          label: name,
+          index: fallbackIndex,
+          value: rawValue,
+          type: this.inferPropertyType(rawValue),
+        } as NodePropertySpec;
+      })
+      .filter((prop): prop is NodePropertySpec => Boolean(prop));
+
+    return { properties };
+  }
+
+  private coercePropertySchema(raw: unknown): NodePropertySchema {
     if (!raw) {
       return { properties: [] };
     }
 
     if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw);
-        return this.normalizePropertySchema(parsed);
-      } catch {
+      const parsed = this.parseLooseJson(raw);
+      if (!parsed) {
         return { properties: [] };
       }
+      return this.coercePropertySchema(parsed);
     }
 
     if (typeof raw !== 'object') {
@@ -1145,12 +1271,49 @@ class EngineBridge {
     }
 
     const candidate = raw as NodePropertySchema;
-    if (!Array.isArray(candidate.properties)) {
+    if (Array.isArray(candidate.properties)) {
+      return { properties: candidate.properties.slice() };
+    }
+
+    return this.buildSchemaFromDictionary(raw as Record<string, unknown>);
+  }
+
+  private normalizePropertySchema(raw: unknown): NodePropertySchema {
+    const coerced = this.coercePropertySchema(raw);
+    if (!coerced.properties?.length) {
       return { properties: [] };
     }
 
-    const filtered = candidate.properties.filter((prop) => prop && typeof prop.index === 'number');
-    return { properties: filtered };
+    const normalized = coerced.properties
+      .map((prop, fallbackIndex) => {
+        if (!prop || typeof prop.name !== 'string') {
+          return null;
+        }
+
+        const index = Number.isFinite(prop.index) ? Number(prop.index) : fallbackIndex;
+        const value = Object.prototype.hasOwnProperty.call(prop, 'value') ? (prop as any).value : undefined;
+        const label = typeof (prop as any).label === 'string' ? (prop as any).label : prop.name;
+        const type = typeof (prop as any).type === 'string' ? (prop as any).type : this.inferPropertyType(value);
+
+        return {
+          ...prop,
+          name: prop.name,
+          label,
+          index,
+          type,
+        } as NodePropertySpec;
+      })
+      .filter((prop): prop is NodePropertySpec => Boolean(prop));
+
+    return { properties: normalized };
+  }
+
+  private normalizeSelectedPath(candidate: unknown): string | null {
+    if (typeof candidate !== 'string') {
+      return null;
+    }
+    const trimmed = candidate.trim();
+    return trimmed.length ? trimmed : null;
   }
 
   private async callNativeVoid(methodName: keyof NativeLike, timeoutOverrideMs?: number, args: unknown[] = []): Promise<boolean> {

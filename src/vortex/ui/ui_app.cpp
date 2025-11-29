@@ -137,7 +137,8 @@ void vortex::ui::UIApp::ResizeCEFBrowser(int width, int height)
 }
 
 void vortex::ui::UIApp::ShowOpenFileDialog(const std::vector<std::string>& filters,
-                                           std::function<void(std::vector<std::filesystem::path>)> callback)
+                                           std::function<void(std::vector<std::filesystem::path>)> callback,
+                                           std::string title)
 {
     if (!_cef_client) {
         if (callback) {
@@ -164,8 +165,9 @@ void vortex::ui::UIApp::ShowOpenFileDialog(const std::vector<std::string>& filte
         // cef_file_dialog_mode_t does not expose named constants via the C++ alias.
         constexpr auto kOpenDialogMode = static_cast<CefBrowserHost::FileDialogMode>(0); // FILE_DIALOG_OPEN
 
+        const auto dialog_title = title.empty() ? CefString("Select file") : CefString(title);
         host->RunFileDialog(kOpenDialogMode,
-                CefString("Open project"),
+            dialog_title,
                 CefString(),
                 cef_filters,
                 new FileDialogCallback(std::move(callback)));

@@ -73,8 +73,7 @@ void vortex::ImageInput::Update(const vortex::Graphics& gfx)
             auto result = codec::CodecFFmpeg::LoadTexture(gfx, image_path);
             if (!result) {
                 vortex::error("ImageInput: Failed to load texture from path: {}. Error: {}", image_path, result.error().message());
-                image_path = ""; // Clear the path if loading failed
-                path_changed = false; // Reset the path changed flag
+                path_changed = false; // Reset the path changed flag but keep the path visible
                 return; // Skip rendering if texture loading failed
             }
 

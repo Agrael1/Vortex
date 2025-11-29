@@ -78,8 +78,7 @@ public:
                 this);
 
         wis::Result res = wis::success;
-        vortex::UpdateNotifier::External external_observer{ .observer = this,
-                                                            .callback = &App::OnNodeUpdateThunk };
+        _node_update_observer = { .observer = this, .callback = &App::OnNodeUpdateThunk };
         _ui_app.BindMessageHandler([this](CefRefPtr<CefProcessMessage> args) {
             return UIMessageHandler(std::move(args));
         });
@@ -124,20 +123,20 @@ public:
         //// Test setup of the model
         // auto i1 = _model.CreateNode(_gfx,
         //                             "StreamInput",
-        //                             external_observer,
+        //                             _node_update_observer,
         //                             stream_values); // Create a default node for testing
         //// auto o1 = _model.CreateNode(_gfx,
         ////                             "WindowOutput",
-        ////                             external_observer,
+        ////                             _node_update_observer,
         ////                             output_values3); // Create a default output for testing
         // auto o2 = _model.CreateNode(_gfx,
         //                             "NDIOutput",
-        //                             external_observer,
+        //                             _node_update_observer,
         //                             output_values2); // Create a default output for testing
-        // auto b1 = _model.CreateNode(_gfx, "Blend", external_observer, image_values3);
-        // auto i2 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values);
-        //// auto i3 = _model.CreateNode(_gfx, "ImageInput", external_observer, image_values2);
-        // auto s1 = _model.CreateNode(_gfx, "Select", external_observer);
+        // auto b1 = _model.CreateNode(_gfx, "Blend", _node_update_observer, image_values3);
+        // auto i2 = _model.CreateNode(_gfx, "ImageInput", _node_update_observer, image_values);
+        //// auto i3 = _model.CreateNode(_gfx, "ImageInput", _node_update_observer, image_values2);
+        // auto s1 = _model.CreateNode(_gfx, "Select", _node_update_observer);
 
         //_model.SetNodeInfo(i1, "Stream 1"); // Set some info for the node
         //_model.SetNodeInfo(i2, "Image 1"); // Set some info for the node
@@ -385,8 +384,8 @@ private:
                            int32_t target_slot)
     {
         _ui_app.SendUIMessage(u"edge_connected",
-                              std::bit_cast<double>(source_ptr),
-                              std::bit_cast<double>(target_ptr),
+                      static_cast<double>(source_ptr),
+                      static_cast<double>(target_ptr),
                               BuildEdgeId(source_ptr, source_slot, target_ptr, target_slot),
                               source_slot,
                               target_slot);
@@ -398,8 +397,8 @@ private:
                               int32_t target_slot)
     {
         _ui_app.SendUIMessage(u"edge_disconnected",
-                              std::bit_cast<double>(source_ptr),
-                              std::bit_cast<double>(target_ptr),
+                      static_cast<double>(source_ptr),
+                      static_cast<double>(target_ptr),
                               BuildEdgeId(source_ptr, source_slot, target_ptr, target_slot),
                               source_slot,
                               target_slot);
@@ -477,7 +476,7 @@ private:
             if (!drop_target_ptr.has_value()) {
                 return std::nullopt;
             }
-            const double candidate = std::bit_cast<double>(*drop_target_ptr);
+            const double candidate = static_cast<double>(*drop_target_ptr);
             if (!std::isfinite(candidate)) {
                 return std::nullopt;
             }
@@ -594,13 +593,16 @@ private:
     }
     void SetNodeProperty(uintptr_t node_ptr, int index, std::string value)
     {
-        _model.SetNodeProperty(node_ptr, uint32_t(index), value); // Set the property in the model
+        _model.SetNodeProperty(node_ptr, uint32_t(index), value, true); // Set the property in the model
     }
     void SetNodePropertyByName(uintptr_t node_ptr, std::string name, std::string value)
     {
-        _model.SetNodePropertyByName(node_ptr, name, value); // Set the property in the model
+        _model.SetNodePropertyByName(node_ptr, name, value, true); // Set the property in the model
     }
-    auto CreateNode(std::string value) -> uintptr_t { return _model.CreateNode(_gfx, value); }
+    auto CreateNode(std::string value) -> uintptr_t
+    {
+        return _model.CreateNode(_gfx, value, _node_update_observer);
+    }
     void RemoveNode(uintptr_t node_ptr)
     {
         _model.RemoveNode(node_ptr); // Delete the node with the specified ID
@@ -665,7 +667,7 @@ private:
             } else {
                 SendUIReturnForRequest(request_id);
             }
-        });
+        }, "Open project");
     }
     void ShowSelectFolderDialog()
     {
@@ -678,6 +680,51 @@ private:
                 SendUIReturnForRequest(request_id);
             }
         });
+    }
+    void ShowOpenFileDialog(std::string options_json)
+    {
+        std::vector<std::string> filters;
+        std::string title = "Select file";
+
+        if (!options_json.empty()) {
+            if (auto payload = ParseJson(options_json, "ShowOpenFileDialog payload")) {
+                if (payload->is_object()) {
+                    const auto& object = *payload;
+                    if (object.contains("filters") && object["filters"].is_array()) {
+                        for (const auto& entry : object["filters"]) {
+                            if (!entry.is_string()) {
+                                continue;
+                            }
+                            auto trimmed = TrimCopy(entry.get<std::string>());
+                            if (!trimmed.empty()) {
+                                filters.emplace_back(std::move(trimmed));
+                            }
+                        }
+                    }
+                    if (object.contains("title") && object["title"].is_string()) {
+                        auto trimmed = TrimCopy(object["title"].get<std::string>());
+                        if (!trimmed.empty()) {
+                            title = std::move(trimmed);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (filters.empty()) {
+            filters.emplace_back("*.*");
+        }
+
+        const auto request_id = _active_request_id;
+        _ui_app.ShowOpenFileDialog(filters,
+                                   [this, request_id](std::vector<std::filesystem::path> paths) {
+                                       if (!paths.empty()) {
+                                           SendUIReturnForRequest(request_id, paths.front().string());
+                                       } else {
+                                           SendUIReturnForRequest(request_id);
+                                       }
+                                   },
+                                   title);
     }
     bool SaveProject(std::string path, std::string snapshot_json)
     {
@@ -946,7 +993,7 @@ private:
         // Handle node update logic here
         vortex::info("Node updated: {} (Property: {}, Value: {})", node, property_index, value);
         _ui_app.SendUIMessage(u"node_update",
-                              std::bit_cast<double>(node),
+                      static_cast<double>(node),
                               static_cast<int32_t>(property_index),
                               std::string(value));
     }
@@ -1302,6 +1349,14 @@ public:
         return std::string(value.substr(begin, end - begin + 1));
     }
 
+    static std::string SerializePropertyPatchValue(const json& value)
+    {
+        if (value.is_string()) {
+            return value.get<std::string>();
+        }
+        return value.dump();
+    }
+
     static json& EnsureGraphObject(json& snapshot)
     {
         if (!snapshot.contains("graph") || !snapshot["graph"].is_object()) {
@@ -1651,8 +1706,18 @@ public:
         if (!props.is_object()) {
             props = json::object();
         }
+        const bool has_engine_ptr = resolved->ptr != 0;
+        if (!has_engine_ptr) {
+            vortex::warn("graph.node.props resolved node {} without a native pointer", resolved->id);
+        }
         for (const auto& [key, value] : payload["props"].items()) {
             props[key] = value;
+            if (has_engine_ptr) {
+                _model.SetNodePropertyByName(resolved->ptr,
+                                             key,
+                                             SerializePropertyPatchValue(value),
+                                             true);
+            }
         }
         return true;
     }
@@ -2241,6 +2306,7 @@ private:
     vortex::ui::UIApp _ui_app;
     vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
     vortex::graph::GraphModel _model; ///< Model containing nodes and outputs
+    vortex::UpdateNotifier::External _node_update_observer{};
 
     // Message handlers map - this should be a simple map lookup as these are
     // used in hot code, so it should be fast
@@ -2273,6 +2339,7 @@ private:
         {                   u"Stop",                  ui::MessageDispatch<&App::Stop>::Dispatch },
         { u"ShowOpenProjectDialogAsync", ui::MessageDispatch<&App::ShowOpenProjectDialog>::Dispatch },
         { u"ShowSelectFolderDialogAsync", ui::MessageDispatch<&App::ShowSelectFolderDialog>::Dispatch },
+        { u"ShowOpenFileDialogAsync", ui::MessageDispatch<&App::ShowOpenFileDialog>::Dispatch },
     };
 
 private:

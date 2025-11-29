@@ -67,7 +67,8 @@ public:
     }
 
     void ShowOpenFileDialog(const std::vector<std::string>& filters,
-                            std::function<void(std::vector<std::filesystem::path>)> callback);
+                            std::function<void(std::vector<std::filesystem::path>)> callback,
+                            std::string title = "Select file");
     void ShowSelectFolderDialog(std::function<void(std::vector<std::filesystem::path>)> callback);
 
     template<typename... Args>

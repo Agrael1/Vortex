@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import { engine } from '@/app/services/ipc/cefBridge';
 import { useGraphCommands } from '@state/hooks/useGraphCommands';
 
 export interface PropertySpec {
@@ -14,6 +15,48 @@ export interface PropertySpec {
   enum?: { label: string; value: any }[] | null;
   value?: any;
 }
+
+type PropertyInputType = PropertySpec['type'] | 'path';
+
+const DEFAULT_FILE_FILTERS = ['*.*'];
+const IMAGE_FILE_FILTERS = ['*.png', '*.jpg', '*.jpeg', '*.bmp', '*.tga', '*.tiff', '*.gif', '*.*'];
+const VIDEO_FILE_FILTERS = ['*.mp4', '*.mov', '*.mkv', '*.avi', '*.mpg', '*.m4v', '*.webm', '*.*'];
+
+type PathContext = { filters: string[]; title: string };
+
+const PROPERTY_PATH_FILTERS: Record<string, string[]> = {
+  image_path: IMAGE_FILE_FILTERS,
+};
+
+const inferPathContext = (prop: PropertySpec): PathContext | null => {
+  const label = prop.label ?? prop.name;
+  const key = prop.name?.toLowerCase();
+  if (!key) {
+    return null;
+  }
+
+  if (PROPERTY_PATH_FILTERS[key]) {
+    return { filters: PROPERTY_PATH_FILTERS[key], title: label };
+  }
+
+  if (key.includes('stream') && key.includes('url')) {
+    return { filters: VIDEO_FILE_FILTERS, title: label };
+  }
+
+  if ((key.includes('video') || key.includes('movie')) && (key.includes('path') || key.includes('file'))) {
+    return { filters: VIDEO_FILE_FILTERS, title: label };
+  }
+
+  if (key.includes('image') && key.includes('path')) {
+    return { filters: IMAGE_FILE_FILTERS, title: label };
+  }
+
+  if (/(path|file|directory|dir)$/i.test(key)) {
+    return { filters: DEFAULT_FILE_FILTERS, title: label };
+  }
+
+  return null;
+};
 
 interface PropertyEditorProps {
   nodePtr: number;
@@ -79,12 +122,14 @@ export function PropertyEditor({ nodePtr, properties, className = '', liveValues
 
   const renderPropertyInput = (prop: PropertySpec) => {
     const currentValue = getCurrentValue(prop);
+    const pathContext = prop.type === 'string' ? inferPathContext(prop) : null;
+    const inputType: PropertyInputType = pathContext ? 'path' : prop.type;
     const commonProps = {
       key: prop.name,
       onChange: (value: any) => handleValueChange(prop, value),
     };
 
-    switch (prop.type) {
+    switch (inputType) {
       case 'bool':
         return <BooleanInput {...commonProps} value={currentValue} label={prop.label || prop.name} />;
 
@@ -116,6 +161,17 @@ export function PropertyEditor({ nodePtr, properties, className = '', liveValues
 
       case 'string':
         return <StringInput {...commonProps} value={currentValue} label={prop.label || prop.name} />;
+
+      case 'path':
+        return (
+          <PathInput
+            {...commonProps}
+            value={currentValue}
+            label={prop.label || prop.name}
+            filters={pathContext?.filters ?? DEFAULT_FILE_FILTERS}
+            dialogTitle={pathContext?.title ?? prop.label ?? prop.name}
+          />
+        );
 
       case 'enum':
         return <EnumInput {...commonProps} value={currentValue} label={prop.label || prop.name} options={prop.enum || []} />;
@@ -302,6 +358,53 @@ function VectorInput({ value, label, onChange, dimensions }: VectorInputProps) {
             />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+interface PathInputProps extends InputProps {
+  filters?: string[];
+  dialogTitle?: string;
+}
+
+function PathInput({ value, label, onChange, filters, dialogTitle }: PathInputProps) {
+  const [pending, setPending] = useState(false);
+
+  const handleBrowse = useCallback(async () => {
+    if (pending) return;
+    try {
+      setPending(true);
+      const selection = await engine.browseForAsset({ filters, title: dialogTitle ?? label });
+      if (selection) {
+        onChange(selection);
+      }
+    } catch (error) {
+      console.error(`[PropertyEditor] Failed to select file for ${label}`, error);
+    } finally {
+      setPending(false);
+    }
+  }, [filters, dialogTitle, label, onChange, pending]);
+
+  return (
+    <div className="space-y-1">
+      <label className="text-sm text-gray-300">{label}</label>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          className="flex-1 px-3 py-1 text-sm bg-gray-800 border border-gray-600 rounded focus:border-blue-500 focus:outline-none text-white"
+          placeholder="Select a file..."
+        />
+        <button
+          type="button"
+          onClick={handleBrowse}
+          disabled={pending}
+          className="px-3 py-1 text-sm bg-gray-700 border border-gray-600 rounded text-gray-100 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {pending ? 'Browsing...' : 'Browse'}
+        </button>
       </div>
     </div>
   );

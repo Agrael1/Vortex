@@ -2,6 +2,7 @@
 #include <include/cef_values.h>
 #include <include/cef_v8.h>
 #include <string_view>
+#include <cmath>
 #include <vortex/util/log.h>
 #include <vortex/util/reflection.h>
 
@@ -103,15 +104,26 @@ template<>
 struct value_traits<uintptr_t> {
     static void add_value(CefListValue& list, size_t index, uintptr_t value)
     {
-        list.SetDouble(index, std::bit_cast<double>(value));
+        list.SetDouble(index, static_cast<double>(value));
     }
     static bool extract_value(uintptr_t& out, CefListValue& list, size_t index)
     {
-        if (list.GetType(index) != VTYPE_DOUBLE) {
-            return false;
+        const auto type = list.GetType(index);
+        if (type == VTYPE_DOUBLE) {
+            const double candidate = list.GetDouble(index);
+            if (!std::isfinite(candidate)) {
+                return false;
+            }
+            out = static_cast<uintptr_t>(candidate);
+            return true;
         }
-        out = std::bit_cast<uintptr_t>(list.GetDouble(index));
-        return true;
+
+        if (type == VTYPE_INT) {
+            out = static_cast<uintptr_t>(list.GetInt(index));
+            return true;
+        }
+
+        return false;
     }
 };
 

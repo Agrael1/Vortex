@@ -120,33 +120,26 @@ bool vortex::Transform::Evaluate(const vortex::Graphics& gfx,
         return false;
     }
 
-    auto view = probe.texture_pool.AcquireTexture(gfx);
-    wis::RenderTargetDesc rtd{
-        .format = wis::DataFormat::RGBA8Unorm,
-    };
-
+    auto view = probe.texture_pool.AcquireTexture(gfx,
+                                                  output_info->depth,
+                                                  output_info->rt_generation);
     auto rt = view.GetRTV();
     auto sr = view.GetSRV();
     auto tex = view.GetTexture();
 
-    auto& cmd = *probe.command_list;
-    wis::TextureBarrier before{
-        .sync_before = wis::BarrierSync::Draw,
-        .sync_after = wis::BarrierSync::RenderTarget,
-        .access_before = wis::ResourceAccess::ShaderResource,
-        .access_after = wis::ResourceAccess::RenderTarget,
-        .state_before = wis::TextureState::ShaderResource,
-        .state_after = wis::TextureState::RenderTarget,
-    };
-    cmd.TextureBarrier(before, tex);
     RenderPassForwardDesc info{
         .current_rt_view = rt,
         .output_size = output_info->output_size,
+        .rt_index = view.GetIndex(),
+        .rt_generation = output_info->depth,
+        .depth = output_info->depth + 1,
     };
 
+    auto& cmd = *probe.command_list;
     bool eval = input_base.source_node->Evaluate(gfx, probe, &info);
 
-    wis::TextureBarrier after{
+    // Allocated textures are always in RenderTarget state, transition to ShaderResource
+    wis::TextureBarrier before{
         .sync_before = wis::BarrierSync::RenderTarget,
         .sync_after = wis::BarrierSync::PixelShading,
         .access_before = wis::ResourceAccess::RenderTarget,
@@ -154,7 +147,7 @@ bool vortex::Transform::Evaluate(const vortex::Graphics& gfx,
         .state_before = wis::TextureState::RenderTarget,
         .state_after = wis::TextureState::ShaderResource,
     };
-    cmd.TextureBarrier(after, tex);
+    cmd.TextureBarrier(before, tex);
 
     // If the input evaluation failed, skip rendering
     if (!eval) {
@@ -227,5 +220,16 @@ bool vortex::Transform::Evaluate(const vortex::Graphics& gfx,
     cmd.IASetPrimitiveTopology(wis::PrimitiveTopology::TriangleList);
     cmd.DrawInstanced(3);
     cmd.EndRenderPass();
+
+    wis::TextureBarrier after{
+        .sync_before = wis::BarrierSync::Draw,
+        .sync_after = wis::BarrierSync::RenderTarget,
+        .access_before = wis::ResourceAccess::ShaderResource,
+        .access_after = wis::ResourceAccess::RenderTarget,
+        .state_before = wis::TextureState::ShaderResource,
+        .state_after = wis::TextureState::RenderTarget,
+    };
+    cmd.TextureBarrier(after, tex);
+
     return true;
 }

@@ -142,12 +142,12 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
     DecodeVideoFrames(video_channel);
     DecodeAudioFrames(audio_channel);
 
-    // Remove old video frames (keep only the latest 100 frames)
-    while (_video_frames.size() > 100) {
+    // Remove old video frames (keep only the latest 16 frames)
+    while (_video_frames.size() > 16) {
         _video_frames.erase(_video_frames.begin());
     }
-    // Remove old audio frames (keep only the latest 100 frames)
-    while (_audio_frames.size() > 100) {
+    // Remove old audio frames (keep only the latest 16 frames)
+    while (_audio_frames.size() > 16) {
         _audio_frames.erase(_audio_frames.begin());
     }
 }

@@ -18,7 +18,7 @@ vortex::NDIOutput::NDIOutput(const vortex::Graphics& gfx, SerializedProperties p
                                          .sample_rate = audio_sample_rate,
                                          .channels = max_audio_channels },
                     std::chrono::seconds(1))
-    , _desc_buffer(gfx, 64, 8)
+    , _desc_buffer(gfx, 256, 32)
     , _texture_pool(gfx,
                     {
                             .format = format,
@@ -184,7 +184,9 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx,
     // Pass to the sink nodes for post-order processing
     RenderPassForwardDesc desc{
         .current_rt_view = current_render_target,
-        .output_size = { window_size.x, window_size.y }
+        .output_size = { window_size.x, window_size.y },
+        .rt_generation = invalid_generation,
+        .depth = 1, // send +1
     };
 
     // Barrier to ensure the render target is ready for rendering
@@ -209,7 +211,9 @@ bool vortex::NDIOutput::EvaluateVideo(const vortex::Graphics& gfx,
     }
 
     // Copy the current texture to the staging buffer (it will be presented next time)
-    _swapchain.CopyToStagingBuffer(gfx, _command_lists[current_texture_index], probe.descriptor_buffer);
+    _swapchain.CopyToStagingBuffer(gfx,
+                                   _command_lists[current_texture_index],
+                                   probe.descriptor_buffer);
 
     // End the command list
     if (!cmd_list.Close()) {

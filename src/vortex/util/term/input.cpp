@@ -1,6 +1,8 @@
 #include <vortex/util/term/input.h>
 #include <utf8.h>
 #include <mutex>
+#include <fstream>
+#include <filesystem>
 
 static size_t prev_cp(const std::string& s, size_t pos)
 {
@@ -282,5 +284,61 @@ void vortex::TerminalInput::AbortHistoryBrowseOnEdit()
     if (hist_index_valid) {
         hist_index_valid = 0;
         saved_before_history.clear();
+    }
+}
+
+// Persistent history implementation
+std::filesystem::path vortex::TerminalInput::GetHistoryFilePath() const
+{
+    // Try to use home directory, fallback to current directory
+    return std::filesystem::current_path() / history_filename;
+}
+
+void vortex::TerminalInput::LoadHistory()
+{
+    auto history_path = GetHistoryFilePath();
+    
+    std::ifstream file(history_path);
+    if (!file.is_open()) {
+        // File doesn't exist yet, which is fine
+        return;
+    }
+    
+    std::string line;
+    while (std::getline(file, line)) {
+        if (!line.empty()) {
+            history.push_back(line);
+        }
+    }
+    
+    // Trim to max_history if needed
+    if (history.size() > max_history) {
+        history.erase(history.begin(), history.begin() + (history.size() - max_history));
+    }
+}
+
+void vortex::TerminalInput::SaveHistory()
+{
+    auto history_path = GetHistoryFilePath();
+    
+    // Create parent directory if it doesn't exist
+    auto parent_path = history_path.parent_path();
+    if (!parent_path.empty() && !std::filesystem::exists(parent_path)) {
+        std::error_code ec;
+        std::filesystem::create_directories(parent_path, ec);
+        if (ec) {
+            return; // Can't create directory, skip saving
+        }
+    }
+    
+    std::ofstream file(history_path);
+    if (!file.is_open()) {
+        return; // Can't open file for writing
+    }
+    
+    // Save only the last max_history entries
+    size_t start_index = history.size() > max_history ? history.size() - max_history : 0;
+    for (size_t i = start_index; i < history.size(); ++i) {
+        file << history[i] << '\n';
     }
 }

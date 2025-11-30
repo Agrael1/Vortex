@@ -8,6 +8,8 @@
 
 namespace vortex {
 class Graphics;
+class TexturePool;
+
 struct OutputTextureDesc {
     wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Format of the texture (e.g.,
                                                           // RGBA8Unorm)
@@ -20,14 +22,53 @@ struct OutputTextureDesc {
     }
 };
 
+struct UseTexture {
+    wis::Texture texture; // The texture to use
+    wis::RenderTarget rtv; // Render target view for the texture
+    wis::ShaderResource srv; // Shader resource view for the texture
+    std::uint32_t generation = invalid_generation; // Generation of the texture (for tracking usage)
+    bool block = false;
+};
+
+struct UseTextureView {
+    friend class TexturePool;
+
+private:
+    UseTextureView(std::uint32_t index, std::uint32_t previous_gen, TexturePool& parent) noexcept
+        : texture_index(index)
+        , parent_entry(parent)
+        , previous_gen(previous_gen)
+    {
+    }
+
+public:
+    ~UseTextureView() noexcept;
+    operator bool() const noexcept { return texture_index != npos; }
+
+public:
+    wis::TextureView GetTexture() const noexcept;
+    wis::ShaderResourceView GetSRV() const noexcept;
+    wis::RenderTargetView GetRTV() const noexcept;
+    bool RequiresBarrier() const noexcept { return previous_gen != invalid_generation; }
+    uint32_t GetIndex() const noexcept { return texture_index; }
+
+private:
+    static constexpr std::size_t npos = std::numeric_limits<std::size_t>::max();
+    std::uint32_t texture_index = npos; // Index of the texture in the pool
+    std::uint32_t previous_gen = invalid_generation; // Generation of the texture
+    TexturePool& parent_entry; // Reference to the parent entry
+};
+
 class TexturePool
 {
+    friend class UseTextureView;
     static constexpr size_t initial_texture_count = 2; // Initial number of textures to allocate
 private:
-    void ReleaseTexture(size_t index) noexcept
+    void ReleaseTexture(size_t index, std::uint32_t previous_gen) noexcept
     {
         if (index < _current_ptr->size()) {
-            _current_ptr->at(index).in_use = false;
+            _current_ptr->at(index).generation = previous_gen; // Restore previous generation
+            _current_ptr->at(index).block = false; // Unblock the texture
         }
     }
     wis::TextureView GetTextureView(size_t index) noexcept
@@ -53,44 +94,6 @@ private:
     }
 
 public:
-    struct UseTexture {
-        wis::Texture texture; // The texture to use
-        wis::RenderTarget rtv; // Render target view for the texture
-        wis::ShaderResource srv; // Shader resource view for the texture
-        bool in_use = false; // Whether the texture is currently in use
-    };
-    struct UseTextureView {
-        friend class TexturePool;
-
-    private:
-        UseTextureView(size_t index, TexturePool& parent) noexcept
-            : texture_index(index)
-            , parent_entry(parent)
-        {
-        }
-
-    public:
-        ~UseTextureView() noexcept { parent_entry.ReleaseTexture(texture_index); }
-        operator bool() const noexcept { return texture_index != npos; }
-
-    public:
-        wis::TextureView GetTexture() const noexcept
-        {
-            return parent_entry.GetTextureView(texture_index);
-        }
-        wis::ShaderResourceView GetSRV() const noexcept
-        {
-            return parent_entry.GetSRV(texture_index);
-        }
-        wis::RenderTargetView GetRTV() const noexcept { return parent_entry.GetRTV(texture_index); }
-
-    private:
-        static constexpr std::size_t npos = std::numeric_limits<std::size_t>::max();
-        std::size_t texture_index = npos; // Index of the texture in the pool
-        TexturePool& parent_entry; // Reference to the parent entry
-    };
-
-public:
     TexturePool() = default;
     TexturePool(const vortex::Graphics& gfx, const OutputTextureDesc& desc) noexcept
         : _desc(desc)
@@ -108,22 +111,35 @@ public:
     bool ReallocateIfNeeded(const vortex::Graphics& gfx,
                             const OutputTextureDesc& new_desc) noexcept;
 
-    UseTextureView AcquireTexture(const vortex::Graphics& gfx) noexcept
+    // Acquires a texture from the pool for use
+    UseTextureView AcquireTexture(const vortex::Graphics& gfx,
+                                  uint32_t current_gen,
+                                  uint32_t rt_gen) noexcept
     {
         auto& textures = *_current_ptr;
         for (size_t i = 0; i < textures.size(); ++i) {
-            if (!textures[i].in_use) {
-                textures[i].in_use = true;
-                return UseTextureView(i, *this);
+            auto gen = textures[i].generation;
+            if (gen == invalid_generation || (!textures[i].block) && gen != rt_gen && gen != current_gen) {
+                textures[i].generation = current_gen;
+                return UseTextureView(i, gen, *this);
             }
         }
+
         // Allocate a new texture if none are available
-        bool succ = AllocateTextures(gfx, 1);
+        bool succ = AllocateTextures(gfx, _textures[0].size() + 1);
+        vortex::info("TexturePool: Allocated new texture, total count: {}", _textures[0].size());
         if (succ && !textures.empty()) {
-            textures.back().in_use = true;
-            return UseTextureView(textures.size() - 1, *this);
+            textures.back().generation = current_gen;
+            return UseTextureView(textures.size() - 1, invalid_generation, *this);
         }
-        return UseTextureView(UseTextureView::npos, *this);
+        return UseTextureView(UseTextureView::npos, invalid_generation, *this);
+    }
+
+    void BlockTexture(size_t index) noexcept
+    {
+        if (index < _current_ptr->size()) {
+            _current_ptr->at(index).block = true;
+        }
     }
 
 private:

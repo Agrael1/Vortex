@@ -8,8 +8,8 @@ static constexpr wis::BlendAttachmentDesc blend_descs[]{
      .src_color_blend = wis::BlendFactor::SrcAlpha,
      .dst_color_blend = wis::BlendFactor::InvSrcAlpha,
      .color_blend_op = wis::BlendOp::Add,
-     .src_alpha_blend = wis::BlendFactor::Zero,
-     .dst_alpha_blend = wis::BlendFactor::One,
+     .src_alpha_blend = wis::BlendFactor::SrcAlpha,
+     .dst_alpha_blend = wis::BlendFactor::InvSrcAlpha,
      .alpha_blend_op = wis::BlendOp::Add,
      .color_write_mask = wis::ColorComponents::All },
     // Multiply - Multiply colors together
@@ -174,6 +174,8 @@ bool vortex::Blend::Evaluate(const vortex::Graphics& gfx,
 
     if (input_base) {
         input_base.source_node->Evaluate(gfx, probe, output_info);
+        // Block the texture used by the base input to avoid overwriting
+        probe.texture_pool.BlockTexture(output_info->rt_index);
         source_valid = true;
     } // If there is no image, we will just render nothing (black)
 
@@ -183,28 +185,21 @@ bool vortex::Blend::Evaluate(const vortex::Graphics& gfx,
         return source_valid; // No overlay image, nothing to blend
     }
 
-    auto view = probe.texture_pool.AcquireTexture(gfx);
-    wis::RenderTargetDesc rtd{
-        .format = wis::DataFormat::RGBA8Unorm,
-    };
+    auto view = probe.texture_pool.AcquireTexture(gfx,
+                                                  output_info->depth,
+                                                  output_info->rt_generation);
 
     auto rt = view.GetRTV();
     auto sr = view.GetSRV();
     auto tex = view.GetTexture();
 
     auto& cmd = *probe.command_list;
-    wis::TextureBarrier before{
-        .sync_before = wis::BarrierSync::Draw,
-        .sync_after = wis::BarrierSync::RenderTarget,
-        .access_before = wis::ResourceAccess::ShaderResource,
-        .access_after = wis::ResourceAccess::RenderTarget,
-        .state_before = wis::TextureState::ShaderResource,
-        .state_after = wis::TextureState::RenderTarget,
-    };
-    cmd.TextureBarrier(before, tex);
     RenderPassForwardDesc info{
         .current_rt_view = rt,
         .output_size = output_info->output_size,
+        .rt_index = view.GetIndex(),
+        .rt_generation = output_info->depth,
+        .depth = output_info->depth + 1,
     };
 
     input_overlay.source_node->Evaluate(gfx, probe, &info);
@@ -214,7 +209,7 @@ bool vortex::Blend::Evaluate(const vortex::Graphics& gfx,
     auto desc_table = probe.descriptor_buffer.SuballocateTable(1);
     auto samp_table = probe.sampler_buffer.SuballocateTable(1);
 
-    wis::TextureBarrier after{
+    wis::TextureBarrier before{
         .sync_before = wis::BarrierSync::RenderTarget,
         .sync_after = wis::BarrierSync::PixelShading,
         .access_before = wis::ResourceAccess::RenderTarget,
@@ -222,7 +217,7 @@ bool vortex::Blend::Evaluate(const vortex::Graphics& gfx,
         .state_before = wis::TextureState::RenderTarget,
         .state_after = wis::TextureState::ShaderResource,
     };
-    cmd.TextureBarrier(after, tex);
+    cmd.TextureBarrier(before, tex);
 
     // Now blend the two images together
     wis::RenderPassRenderTargetDesc target_desc{
@@ -252,5 +247,16 @@ bool vortex::Blend::Evaluate(const vortex::Graphics& gfx,
     cmd.IASetPrimitiveTopology(wis::PrimitiveTopology::TriangleList);
     cmd.DrawInstanced(3);
     cmd.EndRenderPass();
+
+    wis::TextureBarrier after{
+        .sync_before = wis::BarrierSync::Draw,
+        .sync_after = wis::BarrierSync::RenderTarget,
+        .access_before = wis::ResourceAccess::ShaderResource,
+        .access_after = wis::ResourceAccess::RenderTarget,
+        .state_before = wis::TextureState::ShaderResource,
+        .state_after = wis::TextureState::RenderTarget,
+    };
+    cmd.TextureBarrier(after, tex);
+
     return true;
 }

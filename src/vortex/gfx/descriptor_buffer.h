@@ -91,11 +91,13 @@ public:
 
 private:
 #ifdef VORTEX_DX12
-    void DX12SetComputeDescriptorTableOffset(wis::DX12CommandListView cmd_list,
-                                             wis::DX12RootSignatureView root_signature,
-                                             uint32_t root_table_index,
-                                             wis::DX12DescriptorBufferGPUView buffer,
-                                             uint32_t table_aligned_byte_offset) const noexcept
+    void DX12SetComputeDescriptorTableOffset(
+            [[maybe_unused]] const wis::DX12DescriptorBufferExtension& desc_ext,
+            wis::DX12CommandListView cmd_list,
+            wis::DX12RootSignatureView root_signature,
+            uint32_t root_table_index,
+            wis::DX12DescriptorBufferGPUView buffer,
+            uint32_t table_aligned_byte_offset) const noexcept
     {
         auto handle = std::get<0>(buffer);
         auto* list = reinterpret_cast<ID3D12GraphicsCommandList*>(std::get<0>(cmd_list));
@@ -105,6 +107,27 @@ private:
         list->SetComputeRootDescriptorTable(
                 root_table_offset + root_table_index,
                 CD3DX12_GPU_DESCRIPTOR_HANDLE(handle, table_aligned_byte_offset));
+    }
+#elifdef VORTEX_VULKAN
+    void VKSetComputeDescriptorTableOffset(const wis::VKDescriptorBufferExtension& desc_ext,
+                                           wis::VKCommandListView cmd_list,
+                                           wis::VKRootSignatureView root_signature,
+                                           uint32_t root_table_index,
+                                           wis::VKDescriptorBufferGPUView buffer,
+                                           uint32_t table_aligned_byte_offset) const noexcept
+    {
+        auto binding = std::get<1>(buffer);
+        uint32_t index = uint32_t(binding == wis::DescriptorHeapType::Sampler);
+        VkDeviceSize offset = table_aligned_byte_offset;
+
+        desc_ext.GetInternal().ftable.vkCmdSetDescriptorBufferOffsetsEXT(
+                std::get<0>(cmd_list),
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                std::get<0>(root_signature),
+                root_table_index,
+                1,
+                &index,
+                &offset);
     }
 #endif
 

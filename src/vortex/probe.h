@@ -35,5 +35,8 @@ struct RenderPassForwardDesc {
     wis::RenderTargetView current_rt_view;
     wis::Size2D output_size; // Viewport
     wis::DataFormat format = wis::DataFormat::RGBA8Unorm; // Format of the render target
+    uint32_t rt_index = invalid_property_index; // Index of the render target if allocated from pool (for blocking)
+    uint32_t rt_generation = invalid_generation; // Generation of the render target
+    uint32_t depth = 0; // Depth of the graph
 };
 } // namespace vortex

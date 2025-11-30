@@ -106,9 +106,19 @@ void vortex::DescriptorBufferView::BindComputeOffset(const vortex::Graphics& gfx
 {
     assert(_desc_buffer != nullptr);
     auto& desc_ext = gfx.GetDescriptorBufferExtension();
-    DX12SetComputeDescriptorTableOffset(cmd_list,
+#ifdef VORTEX_DX12
+    DX12SetComputeDescriptorTableOffset(desc_ext,
+                                        cmd_list,
                                         root,
                                         root_table_index,
                                         *_desc_buffer,
                                         _info.offset_bytes);
+#elifdef VORTEX_VULKAN
+    VKSetComputeDescriptorTableOffset(desc_ext,
+                                      cmd_list,
+                                      root,
+                                      root_table_index,
+                                      *_desc_buffer,
+                                      _info.offset_bytes);
+#endif // VORTEX_DX12
 }

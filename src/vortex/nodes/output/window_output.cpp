@@ -4,7 +4,7 @@
 vortex::WindowOutput::WindowOutput(const vortex::Graphics& gfx, SerializedProperties props)
     : ImplClass(props)
     , _window(name.data(), int(window_size.x), int(window_size.y), false)
-    , _desc_buffer(gfx, 64, 8)
+    , _desc_buffer(gfx, 256, 32)
     , _texture_pool(gfx,
                     {
                             .format = format,
@@ -130,7 +130,9 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, int64_t pts)
     // Pass to the sink nodes for post-order processing
     RenderPassForwardDesc desc{
         .current_rt_view = _render_targets[_frame_index],
-        .output_size = { window_size.x, window_size.y }
+        .output_size = { window_size.x, window_size.y },
+        .rt_generation = invalid_generation,
+        .depth = 1, // send +1
     };
     vortex::RenderProbe probe{
         .descriptor_buffer = _desc_buffer.DescBufferView(_frame_index),

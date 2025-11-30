@@ -39,7 +39,7 @@ class App
 
 public:
     App(const MainArgs& args)
-        : _gfx(true)
+        : _gfx(wis::debug_mode)
         , _exit(AppExitControl::GetInstance())
         , _ui_app(CreateUIApp(args.headless))
     {

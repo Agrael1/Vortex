@@ -1,6 +1,7 @@
 #pragma once
 #include <vortex/util/interprocess_lock.h>
 #include <vector>
+#include <filesystem>
 
 #ifdef _WIN32
 #include <vortex/util/term/impl.win32.h>
@@ -15,11 +16,17 @@ class TerminalInput
 {
     static constexpr size_t max_history = 1000;
     static constexpr std::string_view prompt = "> ";
+    static constexpr std::string_view history_filename = ".vortex_history";
 
 public:
     TerminalInput(std::error_code& ec) noexcept
         : impl(ec, [](TermKey key, char32_t ch, void* p) { static_cast<TerminalInput*>(p)->HandleKeyEvent(key, ch); }, this)
     {
+        LoadHistory();
+    }
+    ~TerminalInput()
+    {
+        SaveHistory();
     }
 
 public:
@@ -49,6 +56,11 @@ private:
     void HistoryUp();
     void HistoryDown();
     void AbortHistoryBrowseOnEdit();
+
+    // Persistent history
+    void LoadHistory();
+    void SaveHistory();
+    std::filesystem::path GetHistoryFilePath() const;
 
 private:
     detail::TerminalInputImpl impl;

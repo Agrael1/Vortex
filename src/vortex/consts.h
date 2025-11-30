@@ -3,11 +3,12 @@
 
 // clang-format off
 namespace vortex {
-inline constexpr uint32_t max_frames_in_flight = 2u; // Maximum number of frames in flight for all output channels
-inline constexpr uint32_t descriptor_batch_size = 1024u; // Maximum number of descriptors in a single batch for all output channels
-inline constexpr uint32_t sampler_batch_size = 64u; // Maximum number of samplers in a single batch for all output channels
-inline constexpr int64_t invalid_pts = 0x8000000000000000ull; // Invalid PTS value
-inline constexpr uint32_t invalid_property_index = static_cast<uint32_t>(-1); // Invalid property index
+inline static constexpr uint32_t max_frames_in_flight = 2u; // Maximum number of frames in flight for all output channels
+inline static constexpr uint32_t descriptor_batch_size = 1024u; // Maximum number of descriptors in a single batch for all output channels
+inline static constexpr uint32_t sampler_batch_size = 64u; // Maximum number of samplers in a single batch for all output channels
+inline static constexpr int64_t invalid_pts = 0x8000000000000000ull; // Invalid PTS value
+inline static constexpr uint32_t invalid_property_index = static_cast<uint32_t>(-1); // Invalid property index
+inline static constexpr uint32_t invalid_generation = std::numeric_limits<uint32_t>::max();
 }
 // clang-format on
 

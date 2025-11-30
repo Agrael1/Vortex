@@ -335,4 +335,9 @@ static std::string serialize(const T& obj) noexcept
     return reflection_traits<T>::serialize(obj);
 }
 
+struct HandleBinding {
+    uintptr_t app = 0; ///< App container
+    uintptr_t node = 0; ///< Node ID
+    uintptr_t destroy_callback = 0; ///< Callback for destruction
+};
 } // namespace vortex

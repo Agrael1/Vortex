@@ -155,7 +155,7 @@ target_link_libraries(VortexLib
     $<$<BOOL:${VORTEX_LINUX}>:${X11_LIBRARIES}>
 )
 #target_compile_definitions(VortexLib PUBLIC WISDOM_FORCE_VULKAN=1)
-target_precompile_headers(VortexLib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
+#target_precompile_headers(VortexLib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
 
 
 add_executable(${PROJECT_NAME})

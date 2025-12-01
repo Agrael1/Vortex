@@ -388,3 +388,6 @@ cmake-build-*/
 
 # CEF cache
 /cef_cache_*/
+
+# Local helper scripts
+scripts/build_engine_release.bat

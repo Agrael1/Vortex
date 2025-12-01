@@ -24,9 +24,11 @@
 #include <chrono>
 #include <cctype>
 #include <ctime>
+#include <random>
 #include <algorithm>
 #include <iterator>
 #include <unordered_map>
+#include <unordered_set>
 #include <limits>
 #include <cmath>
 #include <exception>
@@ -83,19 +85,7 @@ public:
             return UIMessageHandler(std::move(args));
         });
 
-        _model.SetEdgeEventCallbacks(
-                [this](uintptr_t sourcePtr,
-                       int32_t sourceSlot,
-                       uintptr_t targetPtr,
-                       int32_t targetSlot) {
-                    EmitEdgeConnected(sourcePtr, sourceSlot, targetPtr, targetSlot);
-                },
-                [this](uintptr_t sourcePtr,
-                       int32_t sourceSlot,
-                       uintptr_t targetPtr,
-                       int32_t targetSlot) {
-                    EmitEdgeDisconnected(sourcePtr, sourceSlot, targetPtr, targetSlot);
-                });
+        BindGraphModelCallbacks();
 
         // constexpr std::pair<std::string_view, std::string_view> output_values2[]{
         //     std::pair{        "name", "Vortex Mega Output" },
@@ -404,6 +394,32 @@ private:
                               target_slot);
     }
 
+    void BindGraphModelCallbacks()
+    {
+        _model.SetEdgeEventCallbacks(
+                [this](uintptr_t sourcePtr,
+                       int32_t sourceSlot,
+                       uintptr_t targetPtr,
+                       int32_t targetSlot) {
+                    EmitEdgeConnected(sourcePtr, sourceSlot, targetPtr, targetSlot);
+                },
+                [this](uintptr_t sourcePtr,
+                       int32_t sourceSlot,
+                       uintptr_t targetPtr,
+                       int32_t targetSlot) {
+                    EmitEdgeDisconnected(sourcePtr, sourceSlot, targetPtr, targetSlot);
+                });
+    }
+
+    void ResetGraphModel()
+    {
+        _model.Stop();
+        _model = vortex::graph::GraphModel{};
+        BindGraphModelCallbacks();
+        _node_uid_by_ptr.clear();
+        _node_ptr_by_uid.clear();
+    }
+
     void EmitGraphNodeCreatedEvent(const json& node,
                                    std::string_view client_id,
                                    uintptr_t node_ptr)
@@ -421,6 +437,9 @@ private:
         const std::string node_label = node.contains("label") && node["label"].is_string()
                 ? TrimCopy(node["label"].get<std::string>())
                 : std::string();
+        const std::string node_uid = node.contains("uid") && node["uid"].is_string()
+            ? TrimCopy(node["uid"].get<std::string>())
+            : LookupNodeUID(node_ptr);
 
         double x = 0.0;
         double y = 0.0;
@@ -447,7 +466,8 @@ private:
                               x,
                               y,
                               std::string(client_id),
-                              props_json);
+                  props_json,
+                  node_uid);
     }
 
     void EmitTransportStateSnapshot(TransportState state,
@@ -606,6 +626,7 @@ private:
     void RemoveNode(uintptr_t node_ptr)
     {
         _model.RemoveNode(node_ptr); // Delete the node with the specified ID
+        ReleaseNodeUID(node_ptr);
     }
     bool ConnectNodes(uintptr_t node_ptr_left,
                       int32_t output_index,
@@ -655,6 +676,18 @@ private:
     {
         _model.Stop();
         SetTransportState(TransportState::Paused, "Playback paused");
+    }
+    void MinimizeWindow()
+    {
+        _ui_app.MinimizeWindow();
+    }
+    void ToggleMaximizeWindow()
+    {
+        _ui_app.ToggleMaximizeWindow();
+    }
+    void RequestExit()
+    {
+        AppExitControl::Exit();
     }
     void ShowOpenProjectDialog()
     {
@@ -822,7 +855,7 @@ private:
         }
 
         std::filesystem::path target_path(path);
-        SetActiveProject(target_path, std::move(*snapshot), true);
+        SetActiveProject(target_path, std::move(*snapshot), true, true);
         return true;
     }
 
@@ -929,8 +962,9 @@ private:
             return nullptr;
         }
 
-        auto dto = SnapshotToProjectDTO(*snapshot, project_path.string());
-        SetActiveProject(project_path, std::move(*snapshot), false);
+        SetActiveProject(project_path, std::move(*snapshot), false, true);
+        const json dto = _active_project ? SnapshotToProjectDTO(_active_project->snapshot, project_path.string())
+                                         : json::object();
         return JsonToDictionary(dto);
     }
 
@@ -1245,10 +1279,12 @@ public:
         if (id.empty()) {
             id = std::format("node-{}", index);
         }
+        std::string uid = node.contains("uid") && node["uid"].is_string() ? node["uid"].get<std::string>() : std::string();
         std::string type = node.contains("type") && node["type"].is_string() ? node["type"].get<std::string>() : std::string("Node");
 
         json dto = {
             { "id", id },
+            { "uid", uid },
             { "type", type.empty() ? "Node" : type },
             { "params", params },
             { "pos", pos }
@@ -1370,6 +1406,231 @@ public:
             graph["edges"] = json::array();
         }
         return graph;
+    }
+
+    static std::string GenerateRandomToken(std::size_t length)
+    {
+        static constexpr std::string_view alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
+        thread_local std::mt19937_64 rng(std::random_device{}());
+        std::uniform_int_distribution<std::size_t> dist(0, alphabet.size() - 1);
+        std::string token;
+        token.reserve(length);
+        for (std::size_t i = 0; i < length; ++i) {
+            token.push_back(alphabet[dist(rng)]);
+        }
+        return token;
+    }
+
+    std::string MakeNodeUID()
+    {
+        for (int attempt = 0; attempt < 8; ++attempt) {
+            std::string candidate = std::format("uid-{}", GenerateRandomToken(12));
+            if (_node_ptr_by_uid.find(candidate) == _node_ptr_by_uid.end()) {
+                return candidate;
+            }
+        }
+        return std::format("uid-fallback-{}", ++_node_uid_counter);
+    }
+
+    void RegisterNodeUID(uintptr_t node_ptr, std::string_view uid)
+    {
+        if (node_ptr == 0 || uid.empty()) {
+            return;
+        }
+        const std::string normalized(uid);
+        if (auto existing = _node_uid_by_ptr.find(node_ptr); existing != _node_uid_by_ptr.end()) {
+            _node_ptr_by_uid.erase(existing->second);
+        }
+        _node_uid_by_ptr[node_ptr] = normalized;
+        _node_ptr_by_uid[normalized] = node_ptr;
+    }
+
+    void ReleaseNodeUID(uintptr_t node_ptr, std::string_view fallback_uid = {})
+    {
+        if (node_ptr != 0) {
+            auto by_ptr = _node_uid_by_ptr.find(node_ptr);
+            if (by_ptr != _node_uid_by_ptr.end()) {
+                _node_ptr_by_uid.erase(by_ptr->second);
+                _node_uid_by_ptr.erase(by_ptr);
+                return;
+            }
+        }
+
+        if (!fallback_uid.empty()) {
+            auto by_uid = _node_ptr_by_uid.find(std::string(fallback_uid));
+            if (by_uid != _node_ptr_by_uid.end()) {
+                _node_uid_by_ptr.erase(by_uid->second);
+                _node_ptr_by_uid.erase(by_uid);
+            }
+        }
+    }
+
+    std::string LookupNodeUID(uintptr_t node_ptr) const
+    {
+        auto it = _node_uid_by_ptr.find(node_ptr);
+        if (it != _node_uid_by_ptr.end()) {
+            return it->second;
+        }
+        return {};
+    }
+
+    bool HydrateGraphFromSnapshot(json& snapshot)
+    {
+        ResetGraphModel();
+
+        json& graph = EnsureGraphObject(snapshot);
+        auto& nodes = graph["nodes"];
+        auto& edges = graph["edges"];
+
+        if (!nodes.is_array()) {
+            nodes = json::array();
+        }
+        if (!edges.is_array()) {
+            edges = json::array();
+        }
+
+        bool mutated = false;
+        std::unordered_map<std::string, uintptr_t> id_to_ptr;
+        id_to_ptr.reserve(nodes.size());
+        std::unordered_set<std::string> seen_uids;
+        seen_uids.reserve(nodes.size());
+
+        for (std::size_t index = 0; index < nodes.size(); ++index) {
+            auto& node = nodes[index];
+            if (!node.is_object()) {
+                continue;
+            }
+
+            std::string node_type = node.contains("type") && node["type"].is_string()
+                    ? TrimCopy(node["type"].get<std::string>())
+                    : std::string();
+            if (node_type.empty()) {
+                vortex::warn("Hydration skipped node {} due to missing type", index);
+                continue;
+            }
+
+            std::string node_id = node.contains("id") && node["id"].is_string()
+                    ? TrimCopy(node["id"].get<std::string>())
+                    : std::string();
+            if (node_id.empty()) {
+                node_id = std::format("node-{}", index);
+            }
+            if (!node.contains("id") || !node["id"].is_string() || node["id"].get<std::string>() != node_id) {
+                node["id"] = node_id;
+                mutated = true;
+            }
+
+            std::string node_uid = node.contains("uid") && node["uid"].is_string()
+                    ? TrimCopy(node["uid"].get<std::string>())
+                    : std::string();
+            if (node_uid.empty() || seen_uids.find(node_uid) != seen_uids.end()) {
+                node_uid = MakeNodeUID();
+                mutated = true;
+            }
+            node["uid"] = node_uid;
+            seen_uids.insert(node_uid);
+
+            uintptr_t node_ptr = _model.CreateNode(_gfx, node_type, _node_update_observer);
+            if (node_ptr == 0) {
+                vortex::error("Hydration failed to create node {} ({})", node_id, node_type);
+                continue;
+            }
+
+            id_to_ptr.emplace(node_id, node_ptr);
+            RegisterNodeUID(node_ptr, node_uid);
+
+            const double serialized_ptr = static_cast<double>(node_ptr);
+            if (!node.contains("ptr") || !node["ptr"].is_number() || node["ptr"].get<double>() != serialized_ptr) {
+                mutated = true;
+            }
+            node["ptr"] = serialized_ptr;
+
+            if (node.contains("label") && node["label"].is_string()) {
+                _model.SetNodeInfo(node_ptr, node["label"].get<std::string>());
+            }
+
+            if (node.contains("props") && node["props"].is_object()) {
+                for (const auto& [key, value] : node["props"].items()) {
+                    if (key.empty()) {
+                        continue;
+                    }
+                    try {
+                        _model.SetNodePropertyByName(node_ptr,
+                                                     key,
+                                                     SerializePropertyPatchValue(value),
+                                                     false);
+                    } catch (const std::exception& ex) {
+                        vortex::warn("Hydration failed for property {} on node {}: {}",
+                                     key,
+                                     node_id,
+                                     ex.what());
+                    }
+                }
+            }
+
+            EmitGraphNodeCreatedEvent(node, std::string_view{}, node_ptr);
+        }
+
+        for (const auto& edge : edges) {
+            if (!edge.is_object()) {
+                continue;
+            }
+
+            std::string source_id;
+            if (edge.contains("source") && edge["source"].is_string()) {
+                source_id = TrimCopy(edge["source"].get<std::string>());
+            } else if (edge.contains("from") && edge["from"].is_string()) {
+                source_id = TrimCopy(edge["from"].get<std::string>());
+            }
+
+            std::string target_id;
+            if (edge.contains("target") && edge["target"].is_string()) {
+                target_id = TrimCopy(edge["target"].get<std::string>());
+            } else if (edge.contains("to") && edge["to"].is_string()) {
+                target_id = TrimCopy(edge["to"].get<std::string>());
+            }
+
+            if (source_id.empty() || target_id.empty()) {
+                continue;
+            }
+
+            const auto source_it = id_to_ptr.find(source_id);
+            const auto target_it = id_to_ptr.find(target_id);
+            if (source_it == id_to_ptr.end() || target_it == id_to_ptr.end()) {
+                continue;
+            }
+
+            const int32_t source_slot = edge.contains("sourceSlot") && edge["sourceSlot"].is_number()
+                    ? static_cast<int32_t>(edge["sourceSlot"].get<double>())
+                    : 0;
+            const int32_t target_slot = edge.contains("targetSlot") && edge["targetSlot"].is_number()
+                    ? static_cast<int32_t>(edge["targetSlot"].get<double>())
+                    : 0;
+
+            if (!_model.ConnectNodes(source_it->second, source_slot, target_it->second, target_slot)) {
+                vortex::warn("Hydration failed to connect {}:{} -> {}:{}",
+                             source_id,
+                             source_slot,
+                             target_id,
+                             target_slot);
+            }
+        }
+
+        return mutated;
+    }
+
+    void HydrateActiveProjectGraph()
+    {
+        if (!_active_project) {
+            ResetGraphModel();
+            return;
+        }
+
+        const bool mutated = HydrateGraphFromSnapshot(_active_project->snapshot);
+        if (mutated) {
+            const std::string compact = SerializeSnapshotCompact(_active_project->snapshot);
+            _active_project->last_hash = HashSerializedSnapshot(compact);
+        }
     }
 
     static std::optional<uintptr_t> ExtractPointer(const json& handle)
@@ -1567,9 +1828,11 @@ public:
         }
 
         std::string node_id = !client_id.empty() ? client_id : std::format("{}-{}", type, ptr);
+        const std::string node_uid = MakeNodeUID();
         json& graph = EnsureGraphObject(snapshot);
         json node = json::object({
                 { "id", node_id },
+            { "uid", node_uid },
                 { "type", type },
                 { "label", label },
                 { "position", json{ { "x", x }, { "y", y } } },
@@ -1578,6 +1841,7 @@ public:
         });
         EmitGraphNodeCreatedEvent(node, client_id, ptr);
         graph["nodes"].push_back(std::move(node));
+        RegisterNodeUID(ptr, node_uid);
         return true;
     }
 
@@ -1596,6 +1860,14 @@ public:
 
         if (resolved->ptr != 0) {
             _model.RemoveNode(resolved->ptr);
+        }
+
+        std::string removed_uid;
+        if (resolved->node && resolved->node->contains("uid") && (*resolved->node)["uid"].is_string()) {
+            removed_uid = TrimCopy((*resolved->node)["uid"].get<std::string>());
+        }
+        if (resolved->ptr != 0 || !removed_uid.empty()) {
+            ReleaseNodeUID(resolved->ptr, removed_uid);
         }
 
         json& graph = EnsureGraphObject(snapshot);
@@ -1981,7 +2253,7 @@ private:
         std::string last_hash;
     };
 
-    void SetActiveProject(std::filesystem::path path, json snapshot, bool dirty)
+    void SetActiveProject(std::filesystem::path path, json snapshot, bool dirty, bool hydrate_graph = false)
     {
         if (!snapshot.contains("path") || !snapshot["path"].is_string()) {
             snapshot["path"] = path.string();
@@ -2001,6 +2273,9 @@ private:
                                                                     : Clock::time_point{};
         _active_project = std::move(document);
         SetTransportState(TransportState::Ready);
+        if (hydrate_graph) {
+            HydrateActiveProjectGraph();
+        }
     }
 
     void MarkProjectDirty()
@@ -2027,7 +2302,7 @@ private:
             return false;
         }
 
-        SetActiveProject(desired_path, std::move(*snapshot), false);
+        SetActiveProject(desired_path, std::move(*snapshot), false, true);
         return true;
     }
 
@@ -2307,6 +2582,9 @@ private:
     vortex::LazyToken _lazy_token; ///< Lazy token for removing lazy data before graphics shutdown
     vortex::graph::GraphModel _model; ///< Model containing nodes and outputs
     vortex::UpdateNotifier::External _node_update_observer{};
+    std::unordered_map<uintptr_t, std::string> _node_uid_by_ptr;
+    std::unordered_map<std::string, uintptr_t> _node_ptr_by_uid;
+    uint64_t _node_uid_counter{ 0 };
 
     // Message handlers map - this should be a simple map lookup as these are
     // used in hot code, so it should be fast
@@ -2337,6 +2615,9 @@ private:
         {            u"AddKeyframe",           ui::MessageDispatch<&App::AddKeyframe>::Dispatch },
         {                   u"Play",                  ui::MessageDispatch<&App::Play>::Dispatch },
         {                   u"Stop",                  ui::MessageDispatch<&App::Stop>::Dispatch },
+        {         u"MinimizeWindow",    ui::MessageDispatch<&App::MinimizeWindow>::Dispatch },
+        {    u"ToggleMaximizeWindow", ui::MessageDispatch<&App::ToggleMaximizeWindow>::Dispatch },
+        {             u"RequestExit",          ui::MessageDispatch<&App::RequestExit>::Dispatch },
         { u"ShowOpenProjectDialogAsync", ui::MessageDispatch<&App::ShowOpenProjectDialog>::Dispatch },
         { u"ShowSelectFolderDialogAsync", ui::MessageDispatch<&App::ShowSelectFolderDialog>::Dispatch },
         { u"ShowOpenFileDialogAsync", ui::MessageDispatch<&App::ShowOpenFileDialog>::Dispatch },

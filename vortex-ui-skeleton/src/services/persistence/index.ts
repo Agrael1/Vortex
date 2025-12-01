@@ -52,6 +52,7 @@ export const coerceGraphSnapshot = (graph: ProjectDTO['graph'] | GraphSnapshot |
     return {
       nodes: asGraphSnapshot.nodes.map((node) => ({
         id: node.id,
+        uid: node.uid ?? null,
         type: node.type,
         label: node.label,
         position: node.position,
@@ -82,6 +83,7 @@ export const coerceGraphSnapshot = (graph: ProjectDTO['graph'] | GraphSnapshot |
             : undefined;
         return {
           id: typeof node.id === 'string' && node.id.length ? node.id : `node-${index}`,
+          uid: typeof dtoNode.uid === 'string' && dtoNode.uid.length ? dtoNode.uid : null,
           type: node.type ?? 'Node',
           label: (node.params as Record<string, unknown>)?.label as string | undefined,
           position: { x, y },

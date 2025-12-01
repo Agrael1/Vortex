@@ -8,6 +8,8 @@ import {
   readAutoDelayPreference,
   readFallbackDelayPreference,
   resolveFallbackDelayForContext,
+  readSplashStickyPreference,
+  writeSplashStickyPreference,
 } from '@/app/constants/preferences';
 
 export function Splash() {
@@ -18,12 +20,17 @@ export function Splash() {
   const [hint, setHint] = useState<string | null>(() => lastProject?.path ?? null);
   const [error, setError] = useState<string | null>(null);
   const [isContinuing, setIsContinuing] = useState(false);
+  const [introReady, setIntroReady] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return Boolean((window as unknown as { __VortexIntroDone?: boolean }).__VortexIntroDone);
+  });
   const [autoContinue, setAutoContinue] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem(SPLASH_AUTO_CONTINUE_KEY) === 'true';
   });
   const [autoDelay] = useState(() => readAutoDelayPreference());
   const [fallbackDelay] = useState(() => readFallbackDelayPreference());
+  const [stickySplash, setStickySplash] = useState(() => readSplashStickyPreference());
   const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
   const fallbackTimerRef = useRef<number | null>(null);
   const autoTimerRef = useRef<number | null>(null);
@@ -62,19 +69,46 @@ export function Splash() {
   );
 
   useEffect(() => {
+    if (introReady) {
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      setIntroReady(true);
+      return;
+    }
+
+    const handleIntroDone = () => setIntroReady(true);
+    window.addEventListener('vortex:intro:done', handleIntroDone);
+    return () => {
+      window.removeEventListener('vortex:intro:done', handleIntroDone);
+    };
+  }, [introReady]);
+
+  useEffect(() => {
+    if (!introReady) {
+      return;
+    }
     const nextStatus = lastProject ? `Welcome back, ${lastProject.name}` : 'Opening Hub…';
     setStatus(nextStatus);
     setHint(lastProject?.path ?? null);
     const computedFallback = resolveFallbackDelayForContext(fallbackDelay, Boolean(lastProject));
-    scheduleHubRedirect(computedFallback);
+    if (!stickySplash) {
+      scheduleHubRedirect(computedFallback);
+    } else {
+      clearFallback();
+    }
 
     return () => {
       clearFallback();
       clearAutoTimer();
     };
-  }, [clearAutoTimer, clearFallback, fallbackDelay, lastProject, scheduleHubRedirect]);
+  }, [clearAutoTimer, clearFallback, fallbackDelay, introReady, lastProject, scheduleHubRedirect, stickySplash]);
 
   const handleContinueLast = useCallback(async () => {
+    if (!introReady) {
+      return;
+    }
     if (!lastProject?.path || isContinuing) {
       goToHub();
       return;
@@ -96,7 +130,7 @@ export function Splash() {
     } finally {
       setIsContinuing(false);
     }
-  }, [clearAutoTimer, clearFallback, goToHub, lastProject, loadProject, nav, scheduleHubRedirect, isContinuing]);
+  }, [clearAutoTimer, clearFallback, goToHub, introReady, lastProject, loadProject, nav, scheduleHubRedirect, isContinuing]);
 
   const handleForgetLast = useCallback(() => {
     engine.clearLastProject();
@@ -113,7 +147,14 @@ export function Splash() {
   }, [autoContinue]);
 
   useEffect(() => {
-    if (!autoContinue || !lastProject?.path || isContinuing) {
+    writeSplashStickyPreference(stickySplash);
+    if (stickySplash) {
+      clearFallback();
+    }
+  }, [stickySplash, clearFallback]);
+
+  useEffect(() => {
+    if (!introReady || !autoContinue || !lastProject?.path || isContinuing) {
       clearAutoTimer();
       return;
     }
@@ -133,7 +174,7 @@ export function Splash() {
     return () => {
       clearAutoTimer();
     };
-  }, [autoContinue, autoDelay, clearAutoTimer, handleContinueLast, isContinuing, lastProject]);
+  }, [autoContinue, autoDelay, clearAutoTimer, handleContinueLast, introReady, isContinuing, lastProject]);
 
   return (
     <div className="w-screen h-screen grid place-items-center bg-ui-bg">
@@ -189,6 +230,15 @@ export function Splash() {
             Auto-continue next time
           </label>
         )}
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          <input
+            type="checkbox"
+            checked={stickySplash}
+            onChange={(event) => setStickySplash(event.target.checked)}
+            className="h-3.5 w-3.5 rounded border border-ui-border bg-black/40 text-ui-accent focus:ring-ui-accent"
+          />
+          Keep this screen open
+        </label>
         {lastProject?.path && autoContinue && autoCountdown != null && !isContinuing && (
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <span>Auto-continue in {autoCountdown}s</span>

@@ -36,7 +36,8 @@
       "inherits": "x64-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CEF_ROOT": "${sourceDir}/third_party/cef"
+        "CEF_ROOT": "${sourceDir}/third_party/cef",
+        "VORTEX_WITH_NDI": "ON"
       }
     },
     {
@@ -97,6 +98,16 @@
         "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
           "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
         }
+      }
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "x64-release",
+      "displayName": "x64 Release Tests",
+      "configurePreset": "x64-release",
+      "execution": {
+        "noTestsAction": "error"
       }
     }
   ]

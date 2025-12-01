@@ -133,6 +133,13 @@ const FALLBACK_DELAY_OPTIONS = FALLBACK_DELAY_PRESETS.map((ms) => ({
   label: formatDelayLabel(ms),
 }));
 
+const BUTTON_BASE =
+  'inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 focus-visible:ring-offset-0';
+const ACCENT_BUTTON = `${BUTTON_BASE} bg-gradient-to-r from-sky-500/80 to-indigo-500/80 text-white border-transparent shadow-lg shadow-sky-900/40 hover:from-sky-400/80 hover:to-indigo-400/80`;
+const SECONDARY_BUTTON = `${BUTTON_BASE} border-ui-border bg-black/40 text-gray-100 hover:border-sky-500/60 hover:text-sky-200`;
+const GHOST_BUTTON = `${BUTTON_BASE} border-transparent bg-white/5 text-gray-200 hover:bg-white/10`;
+const SUBTLE_BUTTON = `${BUTTON_BASE} border-transparent text-gray-400 hover:text-gray-100 px-0`;
+
 export function Hub() {
   const nav = useNavigate();
   const location = useLocation();
@@ -616,7 +623,7 @@ export function Hub() {
                 type="button"
                 onClick={() => openProjectByPath(lastProject.path)}
                 disabled={busyPath === lastProject.path}
-                className="inline-flex items-center gap-2 rounded-lg border border-transparent bg-white/10 px-4 py-2 text-sm font-medium text-gray-200 transition hover:border-blue-500/60 hover:text-blue-200 disabled:opacity-60"
+                className={`${ACCENT_BUTTON} min-w-[200px] justify-center disabled:opacity-60`}
                 title={lastProject.path}
               >
                 <span>←</span>
@@ -626,7 +633,7 @@ export function Hub() {
             <button
               type="button"
               onClick={() => openCreateModal()}
-              className="inline-flex items-center gap-2 rounded-lg border border-ui-border bg-ui-panel px-4 py-2 text-sm font-medium transition hover:border-blue-500/60 hover:text-blue-300"
+              className={SECONDARY_BUTTON}
             >
               <span>＋</span>
               <span>New project</span>
@@ -634,7 +641,7 @@ export function Hub() {
             <button
               type="button"
               onClick={handleOpenFromDisk}
-              className="inline-flex items-center gap-2 rounded-lg border border-ui-border bg-black/30 px-4 py-2 text-sm font-medium transition hover:border-blue-500/60 hover:text-blue-300"
+              className={SECONDARY_BUTTON}
             >
               <span>📂</span>
               <span>Open…</span>
@@ -642,7 +649,7 @@ export function Hub() {
             <button
               type="button"
               onClick={fetchRecents}
-              className="inline-flex items-center gap-2 rounded-lg border border-transparent bg-white/5 px-4 py-2 text-sm font-medium text-gray-300 transition hover:bg-white/10"
+              className={GHOST_BUTTON}
             >
               <span>⟳</span>
               <span>Refresh</span>
@@ -651,84 +658,94 @@ export function Hub() {
         </header>
 
         {lastProject && (
-          <section className="rounded-2xl border border-ui-border bg-black/20 px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1 max-w-2xl">
-              <div className="text-xs uppercase tracking-[0.3em] text-gray-500">Continue last project</div>
-              <div className="text-2xl font-semibold text-white flex items-center gap-3">
-                <span>🎬</span>
-                <span className="truncate" title={lastProject.name}>{lastProject.name}</span>
+          <section className="rounded-2xl border border-ui-border bg-gradient-to-r from-[#0a101b] via-[#0d141f] to-[#080c13] p-5 shadow-xl shadow-black/30">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-sky-500/40 to-indigo-500/40 text-2xl flex items-center justify-center">
+                  🎬
+                </div>
+                <div className="min-w-0 space-y-2">
+                  <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200/70">Continue last project</p>
+                  <div className="text-xl font-semibold text-white truncate" title={lastProject.name}>
+                    {lastProject.name}
+                  </div>
+                  <div className="text-xs text-gray-400 flex flex-wrap items-center gap-2" title={lastProject.path}>
+                    <span className="truncate max-w-full">{lastProject.path}</span>
+                    {lastProject.template && <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-gray-200">{lastProject.template}</span>}
+                    {lastProject.width && lastProject.height && (
+                      <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-gray-200">
+                        {lastProject.width}×{lastProject.height}
+                      </span>
+                    )}
+                  </div>
+                  {lastProject.lastOpened && (
+                    <div className="text-xs text-sky-200/80">
+                      Opened {formatLastUsed(lastProject.lastOpened)}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="text-sm text-gray-400 break-all" title={lastProject.path}>
-                {lastProject.path}
-              </div>
-              <div className="text-xs text-gray-500 flex flex-wrap gap-3">
-                {lastProject.template && <span className="rounded-full bg-white/5 px-2 py-0.5">{lastProject.template}</span>}
-                {lastProject.lastOpened && <span>Last opened {formatLastUsed(lastProject.lastOpened)}</span>}
-              </div>
-            </div>
-            <div className="flex flex-col gap-3 sm:items-end">
-              <button
-                type="button"
-                onClick={() => openProjectByPath(lastProject.path)}
-                disabled={busyPath === lastProject.path}
-                className="inline-flex items-center gap-2 rounded-lg border border-ui-border bg-ui-panel px-4 py-2 text-sm font-medium text-gray-100 transition hover:border-blue-500/60 hover:text-blue-200 disabled:opacity-60"
-              >
-                {busyPath === lastProject.path ? 'Opening…' : 'Continue'}
-              </button>
-              <button
-                type="button"
-                onClick={handleForgetLastProject}
-                className="text-xs text-gray-500 hover:text-gray-200"
-              >
-                Forget this project
-              </button>
-              <button
-                type="button"
-                onClick={handleToggleLastProjectPin}
-                className="text-xs text-gray-500 hover:text-gray-200"
-                aria-pressed={lastProjectPinned}
-              >
-                {lastProjectPinned ? 'Unpin from recents' : 'Pin in recents'}
-              </button>
-              <div className="flex flex-col gap-2 text-xs text-gray-400 sm:items-end">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={autoContinue}
-                    onChange={(event) => setAutoContinue(event.target.checked)}
-                    className="h-3.5 w-3.5 rounded border border-ui-border bg-black/40 text-ui-accent focus:ring-ui-accent"
-                  />
-                  Auto-continue on launch
-                </label>
-                <label className="flex flex-col gap-1 sm:items-end">
-                  <span>Auto-continue delay</span>
-                  <select
-                    value={autoDelay}
-                    onChange={handleDelayChange}
-                    className="rounded border border-ui-border bg-black/30 px-2 py-1 text-gray-100 focus:border-blue-500/60 focus:outline-none"
+              <div className="flex flex-col gap-3 lg:items-end">
+                <div className="flex flex-wrap gap-3 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => openProjectByPath(lastProject.path)}
+                    disabled={busyPath === lastProject.path}
+                    className={`${ACCENT_BUTTON} min-w-[140px] justify-center disabled:opacity-60`}
                   >
-                    {delayOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1 sm:items-end">
-                  <span>Splash fallback delay</span>
-                  <select
-                    value={fallbackDelay}
-                    onChange={handleFallbackDelayChange}
-                    className="rounded border border-ui-border bg-black/30 px-2 py-1 text-gray-100 focus:border-blue-500/60 focus:outline-none"
+                    {busyPath === lastProject.path ? 'Opening…' : 'Continue'}
+                  </button>
+                  <button type="button" onClick={handleForgetLastProject} className={`${SUBTLE_BUTTON} text-xs`}>
+                    Forget
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleLastProjectPin}
+                    className={`${SUBTLE_BUTTON} text-xs`}
+                    aria-pressed={lastProjectPinned}
                   >
-                    {fallbackOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-[10px] text-gray-500">Controls automatic redirect to Hub</span>
-                </label>
+                    {lastProjectPinned ? 'Unpin' : 'Pin'}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-4 text-xs text-gray-400 lg:justify-end">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={autoContinue}
+                      onChange={(event) => setAutoContinue(event.target.checked)}
+                      className="h-3.5 w-3.5 rounded border border-ui-border bg-black/40 text-sky-400 focus:ring-sky-400"
+                    />
+                    Auto-continue
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span>Delay</span>
+                    <select
+                      value={autoDelay}
+                      onChange={handleDelayChange}
+                      className="rounded border border-ui-border bg-black/40 px-2 py-1 text-gray-100 focus:border-sky-500/60 focus:outline-none"
+                    >
+                      {delayOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <span>Splash fallback</span>
+                    <select
+                      value={fallbackDelay}
+                      onChange={handleFallbackDelayChange}
+                      className="rounded border border-ui-border bg-black/40 px-2 py-1 text-gray-100 focus:border-sky-500/60 focus:outline-none"
+                    >
+                      {fallbackOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
             </div>
           </section>
@@ -796,7 +813,7 @@ export function Hub() {
               onKeyDown={handleListKeyDown}
               role="listbox"
               aria-label="Recent projects"
-              className="overflow-hidden rounded-2xl border border-ui-border bg-ui-panel focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              className="rounded-2xl border border-ui-border bg-ui-panel focus:outline-none focus:ring-2 focus:ring-blue-500/40"
             >
               {isLoading ? (
                 <div className="divide-y divide-ui-border/70">
@@ -833,32 +850,36 @@ export function Hub() {
                   </div>
                 </div>
               ) : (
-                <div className="divide-y divide-ui-border/70">
+                <div className="grid gap-3 p-4 sm:grid-cols-2">
                   {sortedRecents.map((project, index) => {
-                    const isMenuOpen = activeMenuPath === project.path;
-                    const details = [];
-                    if (project.template) details.push(project.template);
-                    if (project.width && project.height) details.push(`${project.width}×${project.height}`);
-                    if (project.fps) details.push(`${project.fps} fps`);
-                    if (project.colorSpace) details.push(project.colorSpace);
+                    const detailChips: string[] = [];
+                    if (project.template) detailChips.push(project.template);
+                    if (project.width && project.height) detailChips.push(`${project.width}×${project.height}`);
+                    if (project.fps) detailChips.push(`${project.fps} fps`);
+                    if (project.colorSpace) detailChips.push(project.colorSpace);
                     const isFocused = index === focusedIndex;
+                    const isMenuOpen = activeMenuPath === project.path;
 
                     return (
-                      <div key={project.path} className="relative" role="option" aria-selected={isFocused}>
-                        <div
-                          role="button"
-                          tabIndex={-1}
-                          onClick={() => openProjectByPath(project.path)}
-                          onMouseEnter={() => setFocusedIndex(index)}
-                          onFocus={() => setFocusedIndex(index)}
-                          className={`flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-white/5 cursor-pointer ${isFocused ? 'bg-white/5 ring-1 ring-blue-500/40' : ''}`}
-                        >
-                          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/5 text-lg">
+                      <article
+                        key={project.path}
+                        role="option"
+                        aria-selected={isFocused}
+                        tabIndex={-1}
+                        onClick={() => openProjectByPath(project.path)}
+                        onMouseEnter={() => setFocusedIndex(index)}
+                        onFocus={() => setFocusedIndex(index)}
+                        className={`group relative rounded-2xl border bg-black/20 p-4 transition cursor-pointer hover:border-sky-400/60 hover:bg-white/5 ${
+                          isFocused ? 'border-sky-500/70 ring-2 ring-sky-400/40' : 'border-ui-border/70'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-lg">
                             {project.template ? <span>{project.template.slice(0, 1)}</span> : <span>🎬</span>}
                           </div>
-                          <div className="flex-1 min-w-0">
+                          <div className="min-w-0 flex-1 space-y-1">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-100 truncate" title={project.name}>
+                              <span className="font-medium text-gray-100 truncate" title={project.name ?? deriveNameFromPath(project.path)}>
                                 {renderHighlight(project.name ?? deriveNameFromPath(project.path))}
                               </span>
                               {project.pinned && (
@@ -868,107 +889,111 @@ export function Hub() {
                               )}
                               {project.error && (
                                 <span className="rounded bg-red-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-200" title={project.error}>
-                                  {project.error.length > 18 ? `Issue` : project.error}
+                                  {project.error.length > 18 ? 'Issue' : project.error}
                                 </span>
                               )}
                             </div>
-                            <div className="mt-1 text-xs text-gray-500 break-all" title={project.path}>
+                            <div className="text-xs text-gray-400 truncate" title={project.path}>
                               {renderHighlight(project.path)}
                             </div>
-                            {details.length > 0 && (
-                              <div className="mt-1 text-xs text-gray-400 flex flex-wrap gap-2">
-                                {details.map((pill) => (
-                                  <span key={pill} className="rounded-full bg-white/5 px-2 py-0.5">
-                                    {pill}
+                            {detailChips.length > 0 && (
+                              <div className="text-xs text-gray-400 flex flex-wrap gap-2">
+                                {detailChips.map((chip) => (
+                                  <span key={chip} className="rounded-full bg-white/5 px-2 py-0.5">
+                                    {chip}
                                   </span>
                                 ))}
                               </div>
                             )}
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleTogglePin(project.path);
-                                }}
-                                className="rounded border border-transparent px-2 py-1 transition hover:border-amber-300/60 hover:text-amber-200"
-                                aria-label={project.pinned ? 'Unpin project' : 'Pin project'}
-                              >
-                                {project.pinned ? 'Unpin' : 'Pin'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleOpenRename(project);
-                                }}
-                                className="rounded border border-transparent px-2 py-1 transition hover:border-blue-400/60 hover:text-blue-200"
-                                aria-label="Rename project"
-                              >
-                                Rename
-                              </button>
-                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500">{formatLastUsed(project.last)}</span>
+                          <div className="flex flex-col items-end gap-2">
                             <button
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 setActiveMenuPath((current) => (current === project.path ? null : project.path));
                               }}
-                              className="rounded border border-transparent px-2 py-1 text-xs text-gray-400 hover:border-ui-border hover:text-gray-200"
+                              className="rounded-full border border-transparent px-2 py-1 text-xs text-gray-400 hover:border-ui-border hover:text-gray-100"
+                              aria-haspopup="menu"
+                              aria-expanded={isMenuOpen}
                             >
                               ⋮
                             </button>
                             {busyPath === project.path ? (
                               <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-400/70 border-t-transparent" />
                             ) : (
-                              <span className="text-gray-500">↗</span>
+                              <span className="text-gray-500 text-xs">↗</span>
                             )}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-400">
+                          <span>Last opened {formatLastUsed(project.last)}</span>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleTogglePin(project.path);
+                              }}
+                              className="rounded border border-transparent px-2 py-1 transition hover:border-amber-300/60 hover:text-amber-200"
+                              aria-label={project.pinned ? 'Unpin project' : 'Pin project'}
+                            >
+                              {project.pinned ? 'Unpin' : 'Pin'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleOpenRename(project);
+                              }}
+                              className="rounded border border-transparent px-2 py-1 transition hover:border-blue-400/60 hover:text-blue-200"
+                              aria-label="Rename project"
+                            >
+                              Rename
+                            </button>
                           </div>
                         </div>
 
                         {isMenuOpen && (
-                          <div className="absolute right-6 top-12 z-20 w-48 rounded-lg border border-ui-border bg-ui-panel shadow-lg">
+                          <div className="absolute right-4 top-12 z-20 w-48 rounded-xl border border-ui-border bg-ui-panel shadow-lg">
                             <button
                               type="button"
                               onClick={() => openProjectByPath(project.path)}
-                              className="block w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-white/5"
+                              className="block w-full px-4 py-2 text-left text-sm text-gray-200 transition hover:bg-white/5"
                             >
                               Open
                             </button>
                             <button
                               type="button"
                               onClick={() => handleTogglePin(project.path)}
-                              className="block w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-white/5"
+                              className="block w-full px-4 py-2 text-left text-sm text-gray-200 transition hover:bg-white/5"
                             >
                               {project.pinned ? 'Unpin' : 'Pin to top'}
                             </button>
                             <button
                               type="button"
                               onClick={() => handleOpenRename(project)}
-                              className="block w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-white/5"
+                              className="block w-full px-4 py-2 text-left text-sm text-gray-200 transition hover:bg-white/5"
                             >
                               Rename…
                             </button>
                             <button
                               type="button"
                               onClick={() => handleCopyPath(project.path)}
-                              className="block w-full px-4 py-2 text-left text-sm text-gray-200 hover:bg-white/5"
+                              className="block w-full px-4 py-2 text-left text-sm text-gray-200 transition hover:bg-white/5"
                             >
                               Copy path
                             </button>
                             <button
                               type="button"
                               onClick={() => handleRemoveRecent(project.path)}
-                              className="block w-full px-4 py-2 text-left text-sm text-red-300 hover:bg-red-500/20"
+                              className="block w-full px-4 py-2 text-left text-sm text-red-300 transition hover:bg-red-500/20"
                             >
                               Remove from list
                             </button>
                           </div>
                         )}
-                      </div>
+                      </article>
                     );
                   })}
                 </div>

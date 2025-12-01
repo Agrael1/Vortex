@@ -6,6 +6,7 @@ export interface CustomNodeData extends Record<string, unknown> {
   ptr: number;
   type?: string;
   props?: Record<string, unknown>;
+  uid?: string | null;
 }
 
 interface CustomNodeProps {

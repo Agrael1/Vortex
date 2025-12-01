@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 
 const INTRO_DURATION = 7800;
 const LETTER_STEP = 420;
@@ -154,6 +154,14 @@ export function IntroOverlay() {
   const logoRef = useRef<HTMLDivElement | null>(null);
   const [isDone, setIsDone] = useState(false);
 
+  const markIntroComplete = useCallback(() => {
+    setIsDone(true);
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __VortexIntroDone?: boolean }).__VortexIntroDone = true;
+      window.dispatchEvent(new CustomEvent('vortex:intro:done'));
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof document === 'undefined') {
       return;
@@ -186,7 +194,7 @@ export function IntroOverlay() {
 
     const isJsDom = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent ?? '');
     if (isJsDom) {
-      setIsDone(true);
+      markIntroComplete();
       return;
     }
 
@@ -202,7 +210,7 @@ export function IntroOverlay() {
       console.warn('[IntroOverlay] Unable to acquire 2d context', error);
     }
     if (!ctx) {
-      setIsDone(true);
+      markIntroComplete();
       return;
     }
 
@@ -382,7 +390,7 @@ export function IntroOverlay() {
     });
 
     const finishTimer = window.setTimeout(() => {
-      setIsDone(true);
+      markIntroComplete();
     }, INTRO_DURATION);
     timers.push(finishTimer);
 
@@ -394,7 +402,7 @@ export function IntroOverlay() {
       letterTimers.forEach((id) => window.clearTimeout(id));
       timers.forEach((id) => window.clearTimeout(id));
     };
-  }, [isDone]);
+  }, [isDone, markIntroComplete]);
 
   if (isDone) {
     return null;

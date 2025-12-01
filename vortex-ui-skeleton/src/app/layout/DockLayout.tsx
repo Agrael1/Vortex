@@ -22,22 +22,22 @@ const DEFAULT_TREE: MosaicNode<PanelId> = {
   direction: 'row',
   first: 'library',
   second: {
-    direction: 'column',
-    first: 'graph',
-    second: {
-      direction: 'row',
-      first: 'console',
-      second: 'inspector',
-      splitPercentage: 60,
+    direction: 'row',
+    first: {
+      direction: 'column',
+      first: 'graph',
+      second: 'console',
+      splitPercentage: 78,
     },
-    splitPercentage: 70,
+    second: 'inspector',
+    splitPercentage: 76,
   },
-  splitPercentage: 20,
+  splitPercentage: 18,
 };
 
 const createDefaultTree = (): MosaicNode<PanelId> => JSON.parse(JSON.stringify(DEFAULT_TREE)) as MosaicNode<PanelId>;
 
-const LAYOUT_STORAGE_PREFIX = 'vortex.editor.layout';
+const LAYOUT_STORAGE_PREFIX = 'vortex.editor.layout.v2';
 
 const getLayoutStorageKey = (projectPath: string | null | undefined) =>
   `${LAYOUT_STORAGE_PREFIX}:${projectPath && projectPath.length ? projectPath : 'default'}`;

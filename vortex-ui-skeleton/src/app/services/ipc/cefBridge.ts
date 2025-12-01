@@ -14,6 +14,7 @@ export type ProjectDTO = {
 
 export type NodeDTO = {
   id: string;
+  uid?: string;
   type: string;
   params: Record<string, unknown>;
   pos: [number, number];
@@ -41,6 +42,10 @@ export type LastProject = {
   path: string;
   lastOpened: string;
   template?: string | null;
+  width?: number;
+  height?: number;
+  fps?: number;
+  colorSpace?: string;
 };
 
 export type EngineLogEntry = {
@@ -93,6 +98,12 @@ type NativeLike = {
   stop?: () => Promise<void | boolean> | void | boolean;
   Play?: () => Promise<void | boolean> | void | boolean;
   Stop?: () => Promise<void | boolean> | void | boolean;
+  minimizeWindow?: () => Promise<void | boolean> | void | boolean;
+  MinimizeWindow?: () => Promise<void | boolean> | void | boolean;
+  toggleMaximizeWindow?: () => Promise<void | boolean> | void | boolean;
+  ToggleMaximizeWindow?: () => Promise<void | boolean> | void | boolean;
+  requestExit?: () => Promise<void | boolean> | void | boolean;
+  RequestExit?: () => Promise<void | boolean> | void | boolean;
 };
 
 const RECENTS_STORAGE_KEY = 'vortex.hub.recents';
@@ -139,6 +150,7 @@ type NodeUpdatePayload = {
 export type NodeCreatedPayload = {
   ptr: number;
   id: string;
+  uid?: string | null;
   type: string;
   label: string;
   position: { x: number; y: number };
@@ -309,7 +321,11 @@ const readLastProject = (): LastProject | null => {
     const lastOpened = typeof (parsed as any).lastOpened === 'string' ? (parsed as any).lastOpened : null;
     if (!name || !path || !lastOpened) return null;
     const template = typeof (parsed as any).template === 'string' ? (parsed as any).template : null;
-    return { name, path, lastOpened, template };
+    const width = Number.isFinite((parsed as any).width) ? Number((parsed as any).width) : undefined;
+    const height = Number.isFinite((parsed as any).height) ? Number((parsed as any).height) : undefined;
+    const fps = Number.isFinite((parsed as any).fps) ? Number((parsed as any).fps) : undefined;
+    const colorSpace = typeof (parsed as any).colorSpace === 'string' ? (parsed as any).colorSpace : undefined;
+    return { name, path, lastOpened, template, width, height, fps, colorSpace };
   } catch {
     return null;
   }
@@ -330,6 +346,10 @@ const writeLastProject = (entry: Recent | null) => {
     path: entry.path,
     lastOpened: entry.last ?? new Date().toISOString(),
     template: entry.template ?? null,
+    width: Number.isFinite(entry.width) ? entry.width : undefined,
+    height: Number.isFinite(entry.height) ? entry.height : undefined,
+    fps: Number.isFinite(entry.fps) ? entry.fps : undefined,
+    colorSpace: typeof entry.colorSpace === 'string' ? entry.colorSpace : undefined,
   };
 
   try {
@@ -390,6 +410,7 @@ class EngineBridge {
   private native: NativeLike | null;
   private static readonly NATIVE_TIMEOUT = 4000;
   private static readonly HEAVY_NATIVE_TIMEOUT = 20000;
+  private static readonly FILE_DIALOG_TIMEOUT = 120_000;
   private nodeTypesCache: { list: string[]; timestamp: number } | null = null;
   private static readonly NODE_TYPES_TTL_MS = 60_000;
 
@@ -461,6 +482,12 @@ class EngineBridge {
         ConfigureAutosaveAsync: (enabled: boolean, delayMs?: number) => call('ConfigureAutosaveAsync', enabled, normalizeAutosaveDelay(delayMs)),
         play: () => fireAndForget('Play'),
         stop: () => fireAndForget('Stop'),
+        minimizeWindow: () => fireAndForget('MinimizeWindow'),
+        MinimizeWindow: () => fireAndForget('MinimizeWindow'),
+        toggleMaximizeWindow: () => fireAndForget('ToggleMaximizeWindow'),
+        ToggleMaximizeWindow: () => fireAndForget('ToggleMaximizeWindow'),
+        requestExit: () => fireAndForget('RequestExit'),
+        RequestExit: () => fireAndForget('RequestExit'),
       };
     }
 
@@ -687,6 +714,47 @@ class EngineBridge {
     throw new Error('Stop is not available in the current environment');
   }
 
+  async minimizeWindow(): Promise<void> {
+    if (await this.callNativeVoid('minimizeWindow')) {
+      return;
+    }
+
+    if (await this.callNativeVoid('MinimizeWindow')) {
+      return;
+    }
+
+    throw new Error('Window minimization is not available in the current environment');
+  }
+
+  async toggleMaximizeWindow(): Promise<void> {
+    if (await this.callNativeVoid('toggleMaximizeWindow')) {
+      return;
+    }
+
+    if (await this.callNativeVoid('ToggleMaximizeWindow')) {
+      return;
+    }
+
+    throw new Error('Window maximize toggle is not available in the current environment');
+  }
+
+  async requestExit(): Promise<void> {
+    if (await this.callNativeVoid('requestExit')) {
+      return;
+    }
+
+    if (await this.callNativeVoid('RequestExit')) {
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.close();
+      return;
+    }
+
+    throw new Error('Exit is not available in the current environment');
+  }
+
   async listNodeTypes(forceRefresh = false): Promise<string[]> {
     const cache = this.nodeTypesCache;
     const now = Date.now();
@@ -705,7 +773,12 @@ class EngineBridge {
 
   async browseForProject(): Promise<string | null> {
     if (this.native?.ShowOpenProjectDialogAsync) {
-      return this.normalizeSelectedPath(await this.native.ShowOpenProjectDialogAsync());
+      const selected = await this.tryNativeCall(
+        'ShowOpenProjectDialogAsync',
+        () => this.native?.ShowOpenProjectDialogAsync?.(),
+        EngineBridge.FILE_DIALOG_TIMEOUT,
+      );
+      return this.normalizeSelectedPath(selected);
     }
 
     if (typeof window !== 'undefined') {
@@ -721,7 +794,12 @@ class EngineBridge {
 
   async browseForFolder(): Promise<string | null> {
     if (this.native?.ShowSelectFolderDialogAsync) {
-      return this.normalizeSelectedPath(await this.native.ShowSelectFolderDialogAsync());
+      const selected = await this.tryNativeCall(
+        'ShowSelectFolderDialogAsync',
+        () => this.native?.ShowSelectFolderDialogAsync?.(),
+        EngineBridge.FILE_DIALOG_TIMEOUT,
+      );
+      return this.normalizeSelectedPath(selected);
     }
 
     if (typeof window !== 'undefined') {
@@ -744,11 +822,12 @@ class EngineBridge {
     const payload = payloadNeeded ? JSON.stringify({ filters: normalizedFilters, title: dialogTitle || undefined }) : '{}';
 
     if (this.native?.ShowOpenFileDialogAsync) {
-      const selected = await this.tryNativeCall('ShowOpenFileDialogAsync', () => this.native?.ShowOpenFileDialogAsync?.(payload));
-      const normalized = this.normalizeSelectedPath(selected);
-      if (normalized) {
-        return normalized;
-      }
+      const selected = await this.tryNativeCall(
+        'ShowOpenFileDialogAsync',
+        () => this.native?.ShowOpenFileDialogAsync?.(payload),
+        EngineBridge.FILE_DIALOG_TIMEOUT,
+      );
+      return this.normalizeSelectedPath(selected);
     }
 
     if (typeof window !== 'undefined') {
@@ -1512,6 +1591,7 @@ class EngineBridge {
         const y = Number(args[5]);
         const clientNodeIdCandidate = typeof args[6] === 'string' ? args[6].trim() : '';
         const propsJson = typeof args[7] === 'string' ? args[7] : null;
+        const uidCandidate = typeof args[8] === 'string' ? args[8].trim() : '';
 
         let props: Record<string, unknown> | undefined;
         if (propsJson && propsJson.trim().length) {
@@ -1532,6 +1612,7 @@ class EngineBridge {
             y: Number.isFinite(y) ? y : 0,
           },
           clientNodeId: clientNodeIdCandidate || null,
+          uid: uidCandidate || null,
           props,
         });
         return;

@@ -13,6 +13,7 @@ export type PersistenceStatus = {
   lastPersistReason: string | null;
   hasExternalChange: boolean;
   lastExternalChangeAt: string | null;
+  lastMutationAt: number | null;
 };
 
 export const persistenceStatusAtom = atom<PersistenceStatus>({
@@ -29,5 +30,6 @@ export const persistenceStatusAtom = atom<PersistenceStatus>({
     lastPersistReason: null,
     hasExternalChange: false,
     lastExternalChangeAt: null,
+    lastMutationAt: null,
   },
 });

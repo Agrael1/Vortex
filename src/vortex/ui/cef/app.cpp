@@ -1,19 +1,114 @@
 #include <vortex/ui/cef/app.h>
 #include <include/cef_parser.h>
 
+#include <array>
+#include <system_error>
+
+#if defined(_WIN32)
+#  include <Windows.h>
+#elif defined(__linux__)
+#  include <unistd.h>
+#  include <limits.h>
+#endif
+
+namespace {
+
+std::filesystem::path DetermineExecutableDirectory()
+{
+#if defined(_WIN32)
+    std::wstring buffer(MAX_PATH, L'\0');
+    DWORD length = 0;
+    while (true) {
+        length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (length == 0) {
+            return {};
+        }
+        if (length < buffer.size()) {
+            buffer.resize(length);
+            break;
+        }
+        buffer.resize(buffer.size() * 2);
+    }
+    return std::filesystem::path(buffer).parent_path();
+#elif defined(__linux__)
+    std::array<char, PATH_MAX> buffer{};
+    const auto length = readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
+    if (length <= 0) {
+        return {};
+    }
+    buffer[static_cast<size_t>(length)] = '\0';
+    return std::filesystem::path(buffer.data()).parent_path();
+#else
+    return {};
+#endif
+}
+
+const std::filesystem::path& RuntimeRoot()
+{
+    static const std::filesystem::path root = [] {
+        auto exe_dir = DetermineExecutableDirectory();
+        if (exe_dir.empty()) {
+            vortex::warn("VortexResourceHandler: Unable to determine executable directory, falling back to current_path()");
+            exe_dir = std::filesystem::current_path();
+        }
+        return exe_dir;
+    }();
+    return root;
+}
+
+bool IsUnderRoot(const std::filesystem::path& root, const std::filesystem::path& candidate)
+{
+    auto root_str = root.lexically_normal().generic_string();
+    auto candidate_str = candidate.lexically_normal().generic_string();
+    if (root_str.empty()) {
+        return true;
+    }
+    if (!root_str.empty() && root_str.back() != '/') {
+        root_str.push_back('/');
+    }
+    if (candidate_str.size() < root_str.size()) {
+        return false;
+    }
+    return candidate_str.rfind(root_str, 0) == 0;
+}
+
+std::filesystem::path DefaultUiEntry()
+{
+    return std::filesystem::path("ui") / "index.html";
+}
+
+} // namespace
+
 bool vortex::ui::VortexResourceHandler::Open(CefRefPtr<CefRequest> request, bool& handle_request, CefRefPtr<CefCallback> callback)
 {
     handle_request = true; // Indicate that this handler will handle the request
 
     CefURLParts parts;
     CefParseURL(request->GetURL(), parts);
-    auto path = std::filesystem::path{ std::u16string_view(parts.path.str) }.relative_path();
-    if (path.empty() || !std::filesystem::exists(path)) {
-        vortex::error("VortexResourceHandler::Open: Resource not found: {}", path.string());
+    std::u16string_view raw_path(parts.path.str ? parts.path.str : u"", parts.path.length);
+    std::filesystem::path relative_path;
+    if (!raw_path.empty()) {
+        relative_path = std::filesystem::path(std::u16string(raw_path)).relative_path();
+    }
+    if (relative_path.empty() || relative_path == ".") {
+        relative_path = DefaultUiEntry();
+    }
+    auto resolved_path = (RuntimeRoot() / relative_path).lexically_normal();
+    if (!IsUnderRoot(RuntimeRoot(), resolved_path)) {
+        vortex::error("VortexResourceHandler::Open: Attempt to access resource outside runtime root: {}", resolved_path.string());
+        return false;
+    }
+    if (!std::filesystem::exists(resolved_path)) {
+        vortex::error("VortexResourceHandler::Open: Resource not found: {}", resolved_path.string());
         return false; // Resource not found
     }
-    _file_size = std::filesystem::file_size(path);
-    auto ext = path.extension().string();
+    std::error_code size_error;
+    _file_size = std::filesystem::file_size(resolved_path, size_error);
+    if (size_error) {
+        vortex::error("VortexResourceHandler::Open: Failed to read size of {}: {}", resolved_path.string(), size_error.message());
+        return false;
+    }
+    auto ext = resolved_path.extension().string();
     // Remove leading dot from extension
     if (!ext.empty() && ext.front() == '.') {
         ext.erase(ext.begin());
@@ -42,9 +137,9 @@ bool vortex::ui::VortexResourceHandler::Open(CefRefPtr<CefRequest> request, bool
             _mime_type = "application/octet-stream";
         }
     }
-    _file_stream.open(path, std::ios::binary);
+    _file_stream.open(resolved_path, std::ios::binary);
     if (!_file_stream.is_open()) {
-        vortex::error("VortexResourceHandler::Open: Failed to open resource file: {}", path.string());
+        vortex::error("VortexResourceHandler::Open: Failed to open resource file: {}", resolved_path.string());
         return false; // Failed to open the resource file
     }
     return true; // Successfully opened the resource

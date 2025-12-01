@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRecoilValue } from 'recoil';
-import { PropertyEditor, PropertySpec } from '@/app/components/PropertyEditor';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
+import { PropertyEditor } from '@/app/components/PropertyEditor';
+import type { PropertySpec } from '@/types/properties';
 import { graphSnapshotAtom } from '@state/atoms/project';
-import { selectedNodePtrAtom } from '@state/atoms/editor';
+import { nodePropertyCacheAtom, nodePtrByIdAtom, nodePtrByUidAtom, selectedNodeIdentityAtom, selectedNodePtrAtom } from '@state/atoms/editor';
 import { engine } from '@/app/services/ipc/cefBridge';
 import { useGraphCommands } from '@state/hooks/useGraphCommands';
 
@@ -99,8 +100,34 @@ const coercePropertySchema = (payload: unknown): PropertySpec[] | null => {
 };
 
 export function InspectorPanel() {
-  const selectedPtr = useRecoilValue(selectedNodePtrAtom);
   const graphSnapshot = useRecoilValue(graphSnapshotAtom);
+  const setSelectedPtr = useSetRecoilState(selectedNodePtrAtom);
+  const selectedIdentity = useRecoilValue(selectedNodeIdentityAtom);
+  const ptrById = useRecoilValue(nodePtrByIdAtom);
+  const ptrByUid = useRecoilValue(nodePtrByUidAtom);
+  const legacySelectedPtr = useRecoilValue(selectedNodePtrAtom);
+  const selectedPtr = useMemo(() => {
+    if (selectedIdentity.uid) {
+      const canonical = ptrByUid[selectedIdentity.uid];
+      if (typeof canonical === 'number') {
+        return canonical;
+      }
+    }
+    if (selectedIdentity.id) {
+      const canonical = ptrById[selectedIdentity.id];
+      if (typeof canonical === 'number') {
+        return canonical;
+      }
+    }
+    if (typeof selectedIdentity.ptr === 'number') {
+      return selectedIdentity.ptr;
+    }
+    return typeof legacySelectedPtr === 'number' ? legacySelectedPtr : null;
+  }, [legacySelectedPtr, ptrById, ptrByUid, selectedIdentity]);
+  const [propertyCache, setPropertyCache] = useRecoilState(nodePropertyCacheAtom);
+  const missingNodePtrRef = useRef<number | null>(null);
+  const [lastKnownNodeId, setLastKnownNodeId] = useState<string | null>(null);
+  const [lastKnownNodeUid, setLastKnownNodeUid] = useState<string | null>(null);
   const [properties, setProperties] = useState<PropertySpec[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -108,9 +135,41 @@ export function InspectorPanel() {
   const { updateNodeLabel } = useGraphCommands();
 
   const selectedNode = useMemo(() => {
-    if (!selectedPtr) return null;
-    return graphSnapshot.nodes.find((node) => node.ptr === selectedPtr || node.id === String(selectedPtr)) ?? null;
-  }, [graphSnapshot.nodes, selectedPtr]);
+    if (selectedIdentity.uid) {
+      const match = graphSnapshot.nodes.find((node) => node.uid && node.uid === selectedIdentity.uid);
+      if (match) {
+        return match;
+      }
+    }
+    if (selectedPtr != null) {
+      const match = graphSnapshot.nodes.find((node) => node.ptr === selectedPtr || node.id === String(selectedPtr));
+      if (match) {
+        return match;
+      }
+    }
+    if (selectedIdentity.id) {
+      return graphSnapshot.nodes.find((node) => node.id === selectedIdentity.id) ?? null;
+    }
+    return null;
+  }, [graphSnapshot.nodes, selectedIdentity.id, selectedIdentity.uid, selectedPtr]);
+  const cacheKey = useMemo(() => {
+    if (selectedIdentity.uid) {
+      return `uid:${selectedIdentity.uid}`;
+    }
+    if (lastKnownNodeUid) {
+      return `uid:${lastKnownNodeUid}`;
+    }
+    if (selectedIdentity.id) {
+      return `id:${selectedIdentity.id}`;
+    }
+    if (lastKnownNodeId) {
+      return `id:${lastKnownNodeId}`;
+    }
+    if (selectedPtr != null) {
+      return `ptr:${selectedPtr}`;
+    }
+    return null;
+  }, [lastKnownNodeId, lastKnownNodeUid, selectedIdentity.id, selectedIdentity.uid, selectedPtr]);
   const liveProps = selectedNode?.props ?? null;
   const livePropPairs = useMemo(() => {
     if (!liveProps) return [];
@@ -118,6 +177,32 @@ export function InspectorPanel() {
       .filter(([_, value]) => ['string', 'number', 'boolean'].includes(typeof value))
       .slice(0, 6);
   }, [liveProps]);
+
+  useEffect(() => {
+    if (selectedNode?.id) {
+      setLastKnownNodeId((current) => (current === selectedNode.id ? current : selectedNode.id));
+    }
+    if (selectedNode && typeof selectedNode.uid === 'string' && selectedNode.uid.length) {
+      const nextUid = selectedNode.uid;
+      setLastKnownNodeUid((current) => (current === nextUid ? current : nextUid));
+    }
+  }, [selectedNode]);
+
+  useEffect(() => {
+    setProperties((current) => {
+      if (!cacheKey) {
+        return current.length ? [] : current;
+      }
+      const cached = propertyCache[cacheKey];
+      if (cached && current !== cached) {
+        return cached;
+      }
+      if (!cached && current.length) {
+        return [];
+      }
+      return current;
+    });
+  }, [cacheKey, propertyCache]);
 
   useEffect(() => {
     if (!selectedNode) {
@@ -143,11 +228,67 @@ export function InspectorPanel() {
   );
 
   useEffect(() => {
+    if (selectedPtr == null && !selectedIdentity.id && !selectedIdentity.uid) {
+      missingNodePtrRef.current = null;
+      return;
+    }
+
+    const stillExists = graphSnapshot.nodes.some((node) => {
+      if (!node) return false;
+      if (selectedPtr != null && (node.ptr === selectedPtr || node.id === String(selectedPtr))) {
+        return true;
+      }
+      if (selectedIdentity.uid && node.uid === selectedIdentity.uid) {
+        return true;
+      }
+      if (selectedIdentity.id && node.id === selectedIdentity.id) {
+        return true;
+      }
+      return false;
+    });
+
+    if (!stillExists && selectedPtr != null) {
+      missingNodePtrRef.current = selectedPtr;
+      setSelectedPtr((current) => (current === selectedPtr ? null : current));
+    } else if (stillExists) {
+      missingNodePtrRef.current = null;
+    }
+  }, [graphSnapshot.nodes, selectedIdentity.id, selectedIdentity.uid, selectedPtr, setSelectedPtr]);
+
+  const canonicalPtr = useMemo(() => {
+    if (selectedNode && typeof selectedNode.ptr === 'number' && Number.isFinite(selectedNode.ptr)) {
+      return selectedNode.ptr;
+    }
+    return null;
+  }, [selectedNode]);
+
+  useEffect(() => {
     let cancelled = false;
 
-    if (!selectedPtr) {
+    const effectivePtr = canonicalPtr ?? selectedPtr;
+
+    if (canonicalPtr != null && selectedPtr !== canonicalPtr) {
+      setSelectedPtr(canonicalPtr);
+      setLoading(false);
+      setError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (effectivePtr == null) {
+      if (!selectedIdentity.id && !selectedIdentity.uid) {
+        setProperties([]);
+        setError(null);
+      }
+      setLoading(false);
+      return;
+    }
+
+    if (missingNodePtrRef.current === effectivePtr) {
       setProperties([]);
       setError(null);
+      setLoading(false);
       return;
     }
 
@@ -156,24 +297,34 @@ export function InspectorPanel() {
 
     (async () => {
       try {
-        const schema = await engine.getNodeProperties(selectedPtr);
+        const schema = await engine.getNodeProperties(effectivePtr);
 
         if (cancelled) return;
 
         const parsedProps = coercePropertySchema(schema ?? {}) ?? [];
 
-        if (parsedProps.length === 0) {
-          setProperties([]);
-          setError(null);
-          return;
-        }
-
         setProperties(parsedProps);
         setError(null);
+
+        if (cacheKey) {
+          setPropertyCache((previous) => {
+            const existing = previous[cacheKey];
+            if (existing === parsedProps) {
+              return previous;
+            }
+            return { ...previous, [cacheKey]: parsedProps };
+          });
+        }
       } catch (e: any) {
         if (!cancelled) {
-          setError(`Failed to load properties: ${e?.message ?? e}`);
+          const message = e?.message ?? e;
+          setError(`Failed to load properties: ${message}`);
           setProperties([]);
+          const normalized = typeof message === 'string' ? message : String(message);
+          if (normalized?.toLowerCase().includes('node not found')) {
+            missingNodePtrRef.current = effectivePtr;
+            setSelectedPtr((current) => (current === effectivePtr ? null : current));
+          }
         }
       } finally {
         if (!cancelled) {
@@ -185,9 +336,11 @@ export function InspectorPanel() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPtr]);
+  }, [cacheKey, canonicalPtr, selectedIdentity.id, selectedIdentity.uid, selectedPtr, setPropertyCache, setSelectedPtr]);
 
-  if (!selectedPtr) {
+  const showLoadingState = loading && properties.length === 0;
+
+  if (selectedPtr == null && !selectedIdentity.id && !selectedIdentity.uid) {
     return (
       <div className="h-full flex items-center justify-center text-gray-500">
         <div className="text-center">
@@ -198,7 +351,18 @@ export function InspectorPanel() {
     );
   }
 
-  if (loading) {
+  if (selectedPtr == null) {
+    return (
+      <div className="h-full flex items-center justify-center text-gray-500">
+        <div className="text-center">
+          <div className="text-4xl mb-2">⌛</div>
+          <div>Waiting for node handle…</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showLoadingState) {
     return (
       <div className="h-full flex items-center justify-center text-gray-500">
         <div className="text-center">
@@ -209,7 +373,7 @@ export function InspectorPanel() {
     );
   }
 
-  if (error) {
+  if (error && properties.length === 0) {
     return (
       <div className="p-4">
         <div className="text-red-400 text-sm mb-3">
@@ -225,6 +389,11 @@ export function InspectorPanel() {
 
   return (
     <div className="h-full overflow-auto">
+      {error && properties.length > 0 && (
+        <div className="px-4 py-2 text-xs text-red-300 bg-red-500/10 border-b border-red-500/20">
+          Failed to refresh properties: {error}
+        </div>
+      )}
       {selectedNode && (
         <div className="p-4 border-b border-ui-border/50 text-xs text-gray-400 space-y-2">
           <div>

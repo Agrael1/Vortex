@@ -253,27 +253,66 @@ export function useGraphCommands() {
 
         const graph = await snapshot.getPromise(graphSnapshotAtom);
         const node = resolveNodeReference(graph, reference);
-        if (!node) {
+        const handle = node ? ensureHandle(node) : handleFromReference(reference);
+        if (!handle) {
+          console.warn('[GraphCommands] Unable to resolve node for property update', reference);
           return;
         }
 
         const patch = Object.fromEntries(entries);
         const commands: ProjectCommand[] = [
-          { kind: 'graph.node.props', payload: { target: ensureHandle(node), props: patch } },
+          { kind: 'graph.node.props', payload: { target: handle, props: patch } },
         ];
 
         await dispatchCommands(commands, { reload: false });
 
-        set(graphSnapshotAtom, (prev) => ({
-          ...prev,
-          nodes: (prev.nodes ?? []).map((candidate) => {
-            if (candidate.id !== node.id && (node.ptr == null || candidate.ptr !== node.ptr)) {
+        if (node) {
+          set(graphSnapshotAtom, (prev) => ({
+            ...prev,
+            nodes: (prev.nodes ?? []).map((candidate) => {
+              if (candidate.id !== node.id && (node.ptr == null || candidate.ptr !== node.ptr)) {
+                return candidate;
+              }
+              const nextProps = { ...(candidate.props ?? {}), ...patch };
+              return { ...candidate, props: nextProps };
+            }),
+          }));
+          return;
+        }
+
+        const handlePtr = typeof handle.ptr === 'number' ? handle.ptr : undefined;
+        const handleId = typeof handle.id === 'string' && handle.id.trim().length ? handle.id.trim() : undefined;
+        if (!handlePtr && !handleId) {
+          return;
+        }
+
+        set(graphSnapshotAtom, (prev) => {
+          const nodes = prev.nodes ?? [];
+          let updated = false;
+          const nextNodes = nodes.map((candidate) => {
+            if (!candidate) {
               return candidate;
             }
+            const matchesPtr = typeof handlePtr === 'number' && candidate.ptr === handlePtr;
+            const matchesId = typeof handleId === 'string' && candidate.id === handleId;
+            if (!matchesPtr && !matchesId) {
+              return candidate;
+            }
+            updated = true;
             const nextProps = { ...(candidate.props ?? {}), ...patch };
-            return { ...candidate, props: nextProps };
-          }),
-        }));
+            return {
+              ...candidate,
+              props: nextProps,
+              ptr: matchesPtr ? candidate.ptr : candidate.ptr ?? handlePtr,
+            };
+          });
+
+          if (!updated) {
+            return prev;
+          }
+
+          return { ...prev, nodes: nextNodes };
+        });
       },
     [dispatchCommands],
   );

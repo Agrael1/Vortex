@@ -57,6 +57,18 @@ public:
 
         return 0;
     }
+    void MinimizeWindow()
+    {
+        if (_window) {
+            _window->Minimize();
+        }
+    }
+    void ToggleMaximizeWindow()
+    {
+        if (_window) {
+            _window->ToggleMaximize();
+        }
+    }
     void BindMessageHandler(Client::MessageHandler callback)
     {
         _cef_client->BindMessageHandler(std::move(callback));

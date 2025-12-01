@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import type { SetterOrUpdater } from 'recoil';
 import { graphSnapshotAtom } from '@state/atoms/project';
+import { nodePtrByIdAtom, nodePtrByUidAtom } from '@state/atoms/editor';
 import type { GraphNodeSnapshot, GraphSnapshot } from '@state/types';
-import { engine } from '@/app/services/ipc/cefBridge';
+import { engine, type NodeCreatedPayload } from '@/app/services/ipc/cefBridge';
 
 type PropertySchema = {
   properties?: {
@@ -18,16 +19,6 @@ type NodeUpdatePayload = {
   nodePtr: number;
   propIndex: number;
   value: unknown;
-};
-
-type NodeCreatedPayload = {
-  ptr: number;
-  id: string;
-  type?: string;
-  label?: string;
-  position?: Position;
-  clientNodeId?: string | null;
-  props?: Record<string, unknown> | null;
 };
 
 type PropertyCacheEntry = {
@@ -207,25 +198,29 @@ const upsertNodeFromCreation = (
   payload: NodeCreatedPayload,
   setGraphSnapshot: SetterOrUpdater<GraphSnapshot>,
 ) => {
-  const { ptr, id, type, label, position, clientNodeId, props } = payload;
-  if (!Number.isFinite(ptr) || !id) {
+  const { ptr, id, uid, type, label, position, clientNodeId, props } = payload;
+  if (!Number.isFinite(ptr) || (!id && !uid)) {
     return;
   }
+
+  const normalizedId = id?.length ? id : clientNodeId ?? (uid || `node-${ptr}`);
 
   setGraphSnapshot((prev) => {
     const nodes = prev.nodes ?? [];
     const matchIndex = nodes.findIndex((node) => {
       if (!node) return false;
+      if (uid && node.uid && node.uid === uid) return true;
       if (typeof node.ptr === 'number' && node.ptr === ptr) return true;
-      if (node.id === id) return true;
+      if (node.id === normalizedId) return true;
       if (clientNodeId && node.id === clientNodeId) return true;
       return false;
     });
 
     const base: GraphNodeSnapshot = {
-      id,
+      id: normalizedId,
+      uid: uid ?? null,
       type: type || 'Node',
-      label: label || id,
+      label: label || normalizedId,
       position: position ?? { x: 0, y: 0 },
       ptr,
       props: props ? { ...props } : undefined,
@@ -237,6 +232,7 @@ const upsertNodeFromCreation = (
       nextNodes[matchIndex] = {
         ...existing,
         ...base,
+        uid: base.uid ?? existing?.uid ?? null,
         position: base.position ?? existing?.position,
         props: { ...(existing?.props ?? {}), ...(base.props ?? {}) },
       };
@@ -319,6 +315,8 @@ export function useEngineNodeUpdates() {
   const setGraphSnapshot = useSetRecoilState(graphSnapshotAtom);
   const graphSnapshot = useRecoilValue(graphSnapshotAtom);
   const knownPtrsRef = useRef<Set<number>>(new Set());
+  const setNodePtrById = useSetRecoilState(nodePtrByIdAtom);
+  const setNodePtrByUid = useSetRecoilState(nodePtrByUidAtom);
 
   useEffect(() => {
     const unsubscribe = engine.on<NodeUpdatePayload>('node:update', async (payload) => {
@@ -341,12 +339,29 @@ export function useEngineNodeUpdates() {
         return;
       }
       upsertNodeFromCreation(payload, setGraphSnapshot);
+      if (payload.id && Number.isFinite(payload.ptr)) {
+        setNodePtrById((current) => {
+          if (current[payload.id!] === payload.ptr) {
+            return current;
+          }
+          return { ...current, [payload.id!]: payload.ptr as number };
+        });
+      }
+
+      if (payload.uid && Number.isFinite(payload.ptr)) {
+        setNodePtrByUid((current) => {
+          if (current[payload.uid!] === payload.ptr) {
+            return current;
+          }
+          return { ...current, [payload.uid!]: payload.ptr as number };
+        });
+      }
     });
 
     return () => {
       unsubscribe?.();
     };
-  }, [setGraphSnapshot]);
+  }, [setGraphSnapshot, setNodePtrById, setNodePtrByUid]);
 
   useEffect(() => {
     const nextPtrs = new Set<number>();

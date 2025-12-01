@@ -2,19 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { engine } from '@/app/services/ipc/cefBridge';
 import { useGraphCommands } from '@state/hooks/useGraphCommands';
-
-export interface PropertySpec {
-  name: string;
-  label?: string;
-  type: 'int' | 'float' | 'bool' | 'string' | 'enum' | 'color' | 'vec2' | 'vec3' | 'vec4';
-  index: number;
-  default?: any;
-  min?: number;
-  max?: number;
-  step?: number;
-  enum?: { label: string; value: any }[] | null;
-  value?: any;
-}
+import type { PropertySpec } from '@/types/properties';
 
 type PropertyInputType = PropertySpec['type'] | 'path';
 

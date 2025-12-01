@@ -16,6 +16,7 @@ export type ProjectSettings = {
 
 export type GraphNodeSnapshot = {
   id: string;
+  uid?: string | null;
   type: string;
   label?: string;
   position: { x: number; y: number };

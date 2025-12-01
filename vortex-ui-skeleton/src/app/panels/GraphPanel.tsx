@@ -20,7 +20,7 @@ import type { NodeChange } from '@xyflow/react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { CustomNode, CustomNodeData } from '@/app/components/CustomNode';
 import { graphSnapshotAtom } from '@state/atoms/project';
-import { selectedNodePtrAtom } from '@state/atoms/editor';
+import { nodePtrByIdAtom, nodePtrByUidAtom, selectedNodeIdentityAtom, selectedNodePtrAtom } from '@state/atoms/editor';
 import { useGraphCommands } from '@state/hooks/useGraphCommands';
 import type { GraphEdgeSnapshot, GraphNodeSnapshot, GraphSnapshot } from '@state/types';
 
@@ -50,6 +50,7 @@ const toRFNode = (node: GraphNodeSnapshot): RFNode => ({
     ptr: node.ptr ?? Number(node.id),
     type: node.type,
     props: node.props,
+    uid: node.uid ?? null,
   },
   sourcePosition: Position.Right,
   targetPosition: Position.Left,
@@ -68,6 +69,7 @@ const toRFEdge = (edge: GraphEdgeSnapshot): RFEdge => ({
 
 const toSnapshotNode = (node: RFNode): GraphNodeSnapshot => ({
   id: node.id,
+  uid: typeof node.data?.uid === 'string' && node.data.uid.length ? node.data.uid : null,
   type: node.data.type ?? node.data.label ?? 'Node',
   label: node.data.label,
   position: node.position ?? { x: 120, y: 120 },
@@ -84,12 +86,21 @@ const toSnapshotEdge = (edge: RFEdge): GraphEdgeSnapshot => ({
   targetSlot: typeof edge.data?.targetSlot === 'number' ? edge.data.targetSlot : undefined,
 });
 
-const snapshotToReactFlow = (snapshot: GraphSnapshot, selectedPtr?: number | null): { nodes: RFNode[]; edges: RFEdge[] } => {
-  const selectedId = selectedPtr != null ? String(selectedPtr) : null;
+const snapshotToReactFlow = (
+  snapshot: GraphSnapshot,
+  selection?: { ptr?: number | null; uid?: string | null; id?: string | null },
+): { nodes: RFNode[]; edges: RFEdge[] } => {
+  const selectedPtr = selection?.ptr ?? null;
+  const selectedUid = selection?.uid ?? null;
+  const selectedId = selection?.id ?? (selectedPtr != null ? String(selectedPtr) : null);
   const nodes =
     snapshot.nodes?.map((node) => {
       const rfNode = toRFNode(node);
-      const isSelected = selectedPtr != null && (node.ptr === selectedPtr || node.id === selectedId);
+      const isSelected = Boolean(
+        (selectedPtr != null && (node.ptr === selectedPtr || node.id === String(selectedPtr))) ||
+          (selectedUid && node.uid && node.uid === selectedUid) ||
+          (selectedId && node.id === selectedId),
+      );
       if (isSelected) {
         rfNode.selected = true;
       }
@@ -112,6 +123,12 @@ function GraphInner() {
   const setGraphSnapshot = useSetRecoilState(graphSnapshotAtom);
   const setSelectedPtr = useSetRecoilState(selectedNodePtrAtom);
   const selectedPtr = useRecoilValue(selectedNodePtrAtom);
+  const setSelectedIdentity = useSetRecoilState(selectedNodeIdentityAtom);
+  const selectedIdentity = useRecoilValue(selectedNodeIdentityAtom);
+  const setNodePtrById = useSetRecoilState(nodePtrByIdAtom);
+  const setNodePtrByUid = useSetRecoilState(nodePtrByUidAtom);
+  const ptrById = useRecoilValue(nodePtrByIdAtom);
+  const ptrByUid = useRecoilValue(nodePtrByUidAtom);
   const { createNode, removeNode, removeEdges, connectNodes, updateNodePosition } = useGraphCommands();
   const initialGraph = useRef(snapshotToReactFlow(graphSnapshot));
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>(initialGraph.current.nodes);
@@ -120,8 +137,32 @@ function GraphInner() {
   const lastHydratedRef = useRef<string>(JSON.stringify(graphSnapshot));
   const selectedEdgesRef = useRef<RFEdge[]>([]);
   const previousSelectionRef = useRef<number | null>(null);
+  const graphSnapshotRef = useRef<GraphSnapshot>(graphSnapshot);
   const debugSelection = typeof window !== 'undefined' ? window.__VortexDebugSelection !== false : false;
   const skipSelectionSync = typeof window !== 'undefined' ? window.__VortexSkipSelectionSync === true : false;
+
+  graphSnapshotRef.current = graphSnapshot;
+
+  const nodeExistsInSnapshot = useCallback(
+    (identity: { ptr?: number | null; id?: string | null; uid?: string | null }) => {
+      const snapshot = graphSnapshotRef.current;
+      const nodes = snapshot.nodes ?? [];
+      return nodes.some((node) => {
+        if (!node) return false;
+        if (identity.ptr != null && (node.ptr === identity.ptr || node.id === String(identity.ptr))) {
+          return true;
+        }
+        if (identity.uid && node.uid === identity.uid) {
+          return true;
+        }
+        if (identity.id && node.id === identity.id) {
+          return true;
+        }
+        return false;
+      });
+    },
+    [],
+  );
 
   const logSelection = useCallback(
     (...args: unknown[]) => {
@@ -180,17 +221,28 @@ function GraphInner() {
       const first = params.nodes[0];
       const rawPtr = first?.data?.ptr;
       const nextPtr = typeof rawPtr === 'number' && Number.isFinite(rawPtr) ? rawPtr : null;
+      const nextUid = typeof first?.data?.uid === 'string' && first.data.uid.trim().length ? first.data.uid.trim() : null;
       logSelection('selection event', {
         previous: previousSelectionRef.current,
         rawPtr,
         normalizedPtr: nextPtr,
         nodeId: first?.id ?? null,
-        nodes: params.nodes.map((node) => ({ id: node.id, ptr: node.data.ptr })),
+        nodes: params.nodes.map((node) => ({ id: node.id, ptr: node.data.ptr, uid: node.data.uid })),
       });
       selectedEdgesRef.current = params.edges ?? [];
 
       if (skipSelectionSync) {
         logSelection('skipSelectionSync flag is true, aborting selection sync');
+        return;
+      }
+
+      const snapshotHasNode = nodeExistsInSnapshot({ ptr: nextPtr, id: first?.id ?? null, uid: nextUid });
+      if (!snapshotHasNode) {
+        logSelection('ignoring selection for node missing from current snapshot', {
+          ptr: nextPtr,
+          id: first?.id ?? null,
+          uid: nextUid,
+        });
         return;
       }
 
@@ -214,8 +266,22 @@ function GraphInner() {
         previousSelectionRef.current = normalized;
         return normalized;
       });
+
+      setSelectedIdentity((prev) => {
+        if (!first || nextPtr == null) {
+          if (prev.id === null && prev.uid === null && prev.ptr === null) {
+            return prev;
+          }
+          return { id: null, uid: null, ptr: null };
+        }
+        const nextId = first.id ?? (nextPtr != null ? String(nextPtr) : null);
+        if (prev.id === nextId && prev.uid === nextUid && prev.ptr === nextPtr) {
+          return prev;
+        }
+        return { id: nextId ?? null, uid: nextUid, ptr: nextPtr };
+      });
     },
-    [logSelection, setSelectedPtr, skipSelectionSync],
+    [logSelection, nodeExistsInSnapshot, setSelectedIdentity, setSelectedPtr, skipSelectionSync],
   );
 
   const onDrop = useCallback(
@@ -283,19 +349,147 @@ function GraphInner() {
       return;
     }
 
-    const nextGraph = snapshotToReactFlow(graphSnapshot, selectedPtr);
+    const nextGraph = snapshotToReactFlow(graphSnapshot, {
+      ptr: selectedPtr,
+      uid: selectedIdentity.uid,
+      id: selectedIdentity.id,
+    });
     setNodes(nextGraph.nodes);
     setEdges(nextGraph.edges);
 
-    const selectionStillExists =
-      selectedPtr != null && graphSnapshot.nodes?.some((node) => node.ptr === selectedPtr || node.id === String(selectedPtr));
+    const snapshotNodes = graphSnapshot.nodes ?? [];
+    let canonicalNode: GraphNodeSnapshot | null = null;
+    if (selectedPtr != null) {
+      canonicalNode =
+        snapshotNodes.find((node) => node.ptr === selectedPtr || (!!node.id && node.id === String(selectedPtr))) ?? null;
+    }
+    if (!canonicalNode && selectedIdentity.uid) {
+      canonicalNode = snapshotNodes.find((node) => node.uid && node.uid === selectedIdentity.uid) ?? null;
+    }
+    if (!canonicalNode && selectedIdentity.id) {
+      canonicalNode = snapshotNodes.find((node) => node.id === selectedIdentity.id) ?? null;
+    }
 
-    if (!selectionStillExists) {
-      setSelectedPtr(null);
+    if (!canonicalNode) {
+      if (selectedPtr != null || selectedIdentity.id || selectedIdentity.uid) {
+        setSelectedPtr(null);
+        setSelectedIdentity({ id: null, uid: null, ptr: null });
+      }
+    } else {
+      const ptrFromNode = typeof canonicalNode.ptr === 'number' && Number.isFinite(canonicalNode.ptr)
+        ? canonicalNode.ptr
+        : null;
+      const numericId = Number(canonicalNode.id);
+      const canonicalPtr = ptrFromNode ?? (Number.isFinite(numericId) ? numericId : null);
+
+      if (canonicalPtr != null) {
+        setSelectedPtr((current) => (current === canonicalPtr ? current : canonicalPtr));
+      }
+
+      setSelectedIdentity((prev) => {
+        const nextId = canonicalNode.id ?? prev.id ?? null;
+        const nextUid = canonicalNode.uid ?? prev.uid ?? null;
+        const nextPtr = canonicalPtr ?? prev.ptr ?? null;
+        if (prev.id === nextId && prev.uid === nextUid && prev.ptr === nextPtr) {
+          return prev;
+        }
+        return { id: nextId, uid: nextUid, ptr: nextPtr };
+      });
     }
 
     lastHydratedRef.current = serialized;
-  }, [graphSnapshot, selectedPtr, setEdges, setNodes, setSelectedPtr]);
+  }, [graphSnapshot, selectedIdentity.id, selectedIdentity.uid, selectedPtr, setEdges, setNodes, setSelectedIdentity, setSelectedPtr]);
+
+  useEffect(() => {
+    const buildIndex = (selector: (node: GraphNodeSnapshot) => string | null): Record<string, number> => {
+      const next: Record<string, number> = {};
+      for (const node of graphSnapshot.nodes ?? []) {
+        if (!node) continue;
+        const key = selector(node);
+        if (!key) continue;
+        if (typeof node.ptr === 'number' && Number.isFinite(node.ptr)) {
+          next[key] = node.ptr;
+        }
+      }
+      return next;
+    };
+
+    const nextById = buildIndex((node) => (node.id && node.id.length ? node.id : null));
+    const nextByUid = buildIndex((node) => (node.uid && node.uid.length ? node.uid : null));
+
+    setNodePtrById((current) => {
+      const currentKeys = Object.keys(current);
+      const nextKeys = Object.keys(nextById);
+      if (currentKeys.length === nextKeys.length && nextKeys.every((key) => current[key] === nextById[key])) {
+        return current;
+      }
+      return nextById;
+    });
+
+    setNodePtrByUid((current) => {
+      const currentKeys = Object.keys(current);
+      const nextKeys = Object.keys(nextByUid);
+      if (currentKeys.length === nextKeys.length && nextKeys.every((key) => current[key] === nextByUid[key])) {
+        return current;
+      }
+      return nextByUid;
+    });
+  }, [graphSnapshot.nodes, setNodePtrById, setNodePtrByUid]);
+
+  useEffect(() => {
+    if (selectedPtr == null) {
+      return;
+    }
+
+    const node = graphSnapshot.nodes.find((entry) => {
+      if (!entry) {
+        return false;
+      }
+      if (entry.ptr === selectedPtr) {
+        return true;
+      }
+      if (entry.id && entry.id === String(selectedPtr)) {
+        return true;
+      }
+      return false;
+    });
+
+    if (!node) {
+      return;
+    }
+
+    setSelectedIdentity((prev) => {
+      const nextId = node.id ?? prev.id ?? String(node.ptr ?? selectedPtr);
+      const nextUid = node.uid ?? prev.uid ?? null;
+      if (prev.id === nextId && prev.uid === nextUid && prev.ptr === selectedPtr) {
+        return prev;
+      }
+      return { id: nextId, uid: nextUid, ptr: selectedPtr };
+    });
+  }, [graphSnapshot.nodes, selectedPtr, setSelectedIdentity]);
+
+  useEffect(() => {
+    if (!selectedIdentity.id && !selectedIdentity.uid) {
+      return;
+    }
+
+    const canonicalPtrFromUid = selectedIdentity.uid ? ptrByUid[selectedIdentity.uid] : undefined;
+    const canonicalPtrFromId = selectedIdentity.id ? ptrById[selectedIdentity.id] : undefined;
+    const canonicalPtr = canonicalPtrFromUid ?? canonicalPtrFromId;
+
+    if (!canonicalPtr || canonicalPtr === selectedIdentity.ptr) {
+      return;
+    }
+
+    setSelectedIdentity((prev) => {
+      if (prev.id !== selectedIdentity.id || prev.uid !== selectedIdentity.uid) {
+        return prev;
+      }
+      return { ...prev, ptr: canonicalPtr };
+    });
+
+    setSelectedPtr((current) => (current === canonicalPtr ? current : canonicalPtr));
+  }, [ptrById, ptrByUid, selectedIdentity.id, selectedIdentity.uid, selectedIdentity.ptr, setSelectedIdentity, setSelectedPtr]);
 
   useEffect(() => {
     const snapshot = reactFlowToSnapshot(nodes, edges);

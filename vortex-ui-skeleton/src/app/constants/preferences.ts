@@ -7,6 +7,7 @@ export const SPLASH_FALLBACK_DELAY_KEY = 'vortex.splash.fallbackDelay';
 export const SPLASH_FALLBACK_DELAY_DEFAULT = 3000;
 export const SPLASH_FALLBACK_DELAY_MIN = 500;
 export const SPLASH_FALLBACK_DELAY_MAX = 10000;
+export const SPLASH_STICKY_KEY = 'vortex.splash.sticky';
 
 export const clampAutoDelay = (value: number) => {
 	if (!Number.isFinite(value)) return SPLASH_AUTO_DELAY_DEFAULT;
@@ -50,6 +51,20 @@ export const writeFallbackDelayPreference = (value: number) => {
 	if (typeof window === 'undefined') return;
 	const normalized = clampFallbackDelay(value);
 	window.localStorage.setItem(SPLASH_FALLBACK_DELAY_KEY, String(normalized));
+};
+
+export const readSplashStickyPreference = () => {
+	if (typeof window === 'undefined') return true;
+	const raw = window.localStorage.getItem(SPLASH_STICKY_KEY);
+	if (raw == null) {
+		return true;
+	}
+	return raw === 'true';
+};
+
+export const writeSplashStickyPreference = (value: boolean) => {
+	if (typeof window === 'undefined') return;
+	window.localStorage.setItem(SPLASH_STICKY_KEY, value ? 'true' : 'false');
 };
 
 export const resolveFallbackDelayForContext = (baseDelay: number, hasLastProject: boolean) => {

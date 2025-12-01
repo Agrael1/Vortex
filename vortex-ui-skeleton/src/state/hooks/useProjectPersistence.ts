@@ -11,6 +11,7 @@ import { engine, DEFAULT_AUTOSAVE_DELAY_MS } from '@/app/services/ipc/cefBridge'
 import type { LoadSource } from '@services/persistence';
 
 const MIN_NATIVE_REFRESH_INTERVAL_MS = 4000;
+const FOCUS_MUTATION_SUPPRESSION_MS = 1500;
 
 export function useProjectPersistence() {
   const snapshot = useRecoilValue(projectSnapshotSelector);
@@ -20,7 +21,7 @@ export function useProjectPersistence() {
   const setSettings = useSetRecoilState(projectSettingsAtom);
   const setGraph = useSetRecoilState(graphSnapshotAtom);
   const setPersistenceStatus = useSetRecoilState(persistenceStatusAtom);
-  const { lastSavedHash } = useRecoilValue(persistenceStatusAtom);
+  const { lastSavedHash, lastMutationAt } = useRecoilValue(persistenceStatusAtom);
   const autosaveEnabled = useRecoilValue(autosavePreferenceAtom);
 
   const hydratedRef = useRef(false);
@@ -28,12 +29,17 @@ export function useProjectPersistence() {
   const lastNativeSyncRef = useRef(0);
   const currentSnapshotHashRef = useRef<string | null>(null);
   const lastLoadedPathRef = useRef<string | null>(null);
+  const lastMutationRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (lastSavedHash) {
       lastSavedHashRef.current = lastSavedHash;
     }
   }, [lastSavedHash]);
+
+  useEffect(() => {
+    lastMutationRef.current = typeof lastMutationAt === 'number' ? lastMutationAt : null;
+  }, [lastMutationAt]);
 
   useEffect(() => {
     if (projectPath) return;
@@ -114,6 +120,12 @@ export function useProjectPersistence() {
     const syncFromNative = (reason: 'initial' | 'focus') => {
       if (!projectPath || cancelled) {
         return Promise.resolve();
+      }
+      if (reason === 'focus') {
+        const lastMutation = lastMutationRef.current;
+        if (lastMutation && Date.now() - lastMutation < FOCUS_MUTATION_SUPPRESSION_MS) {
+          return Promise.resolve();
+        }
       }
       if (refreshInFlight) {
         return refreshInFlight;

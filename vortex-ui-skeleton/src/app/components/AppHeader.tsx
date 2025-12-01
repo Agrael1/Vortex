@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { PlaybackControls } from '@/app/components/PlaybackControls';
+import { ExitConfirmModal } from '@/app/components/ExitConfirmModal';
 import { engine, type Recent } from '@/app/services/ipc/cefBridge';
 import { useProjectCommands } from '@state/hooks/useProjectCommands';
 import { useGraphCommands } from '@state/hooks/useGraphCommands';
+import { usePersistenceActions } from '@state/hooks/usePersistenceActions';
 import { persistenceStatusAtom } from '@state/atoms/persistence';
 
 type MenuKey = 'file' | 'edit' | 'view' | 'window' | 'help';
@@ -40,9 +42,13 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
   const [recents, setRecents] = useState<Recent[]>([]);
   const [isPerformingAction, setIsPerformingAction] = useState(false);
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false);
+  const [isExitProcessing, setIsExitProcessing] = useState(false);
+  const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const { saveProject, openProject, createProject } = useProjectCommands();
   const persistenceStatus = useRecoilValue(persistenceStatusAtom);
   const { createNode, connectNodes } = useGraphCommands();
+  const { saveNow } = usePersistenceActions();
 
   const closeMenus = useCallback(() => {
     setActiveMenu(null);
@@ -55,6 +61,52 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
   const handleMenuHover = useCallback((key: MenuKey) => {
     setActiveMenu((current) => (current ? key : current));
   }, []);
+
+  const handleToggleMaximize = useCallback(() => {
+    engine
+      .toggleMaximizeWindow()
+      .then(() => {
+        setIsWindowMaximized((value) => !value);
+      })
+      .catch((error) => console.error('[AppHeader] Failed to toggle maximize', error));
+  }, []);
+
+  const handleRequestExit = useCallback(() => {
+    closeMenus();
+    setIsExitModalOpen(true);
+  }, [closeMenus]);
+
+  const handleDismissExitModal = useCallback(() => {
+    if (!isExitProcessing) {
+      setIsExitModalOpen(false);
+    }
+  }, [isExitProcessing]);
+
+  const executeExit = useCallback(
+    async (saveFirst: boolean) => {
+      setIsExitProcessing(true);
+      try {
+        if (saveFirst) {
+          await saveNow();
+        }
+        await engine.requestExit();
+        setIsExitModalOpen(false);
+      } catch (error) {
+        console.error('[AppHeader] Unable to exit application', error);
+      } finally {
+        setIsExitProcessing(false);
+      }
+    },
+    [saveNow],
+  );
+
+  const handleExitWithoutSaving = useCallback(() => {
+    void executeExit(false);
+  }, [executeExit]);
+
+  const handleSaveAndExit = useCallback(() => {
+    void executeExit(true);
+  }, [executeExit]);
 
   useEffect(() => {
     if (!activeMenu) return;
@@ -255,6 +307,9 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
       items.push({ type: 'action', label: 'No recent projects', disabled: true });
     }
 
+    items.push({ type: 'separator' });
+    items.push({ type: 'action', label: 'Exit Vortex', shortcut: 'Alt+F4', onSelect: handleRequestExit });
+
     return items;
   }, [
     handleNavigateHub,
@@ -262,6 +317,7 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
     handleOpenProjectPicker,
     handleOpenRecent,
     handleSaveProject,
+    handleRequestExit,
     isPerformingAction,
     persistenceStatus.isSaving,
     recents,
@@ -458,7 +514,26 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
           )}
           <span>v1.0.0-alpha</span>
         </div>
+
+        <button
+          type="button"
+          aria-label={isWindowMaximized ? 'Restore window size' : 'Maximize window'}
+          title={isWindowMaximized ? 'Restore window' : 'Maximize window'}
+          onClick={handleToggleMaximize}
+          className="ml-4 h-8 w-12 rounded-md border border-ui-border/60 text-base text-gray-300 transition hover:bg-white/10"
+        >
+          {isWindowMaximized ? '🗗' : '🗖'}
+        </button>
       </div>
+
+      <ExitConfirmModal
+        isOpen={isExitModalOpen}
+        hasUnsavedChanges={persistenceStatus.isDirty}
+        isProcessing={isExitProcessing}
+        onCancel={handleDismissExitModal}
+        onConfirmExit={handleExitWithoutSaving}
+        onSaveAndExit={handleSaveAndExit}
+      />
     </header>
   );
 }

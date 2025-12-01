@@ -67,6 +67,25 @@ public:
     {
         SDL_SetWindowSize(window, width, height);
     }
+    void Minimize() noexcept
+    {
+        if (window) {
+            SDL_MinimizeWindow(window);
+        }
+    }
+    void ToggleMaximize() noexcept
+    {
+        if (!window) {
+            return;
+        }
+
+        const auto flags = SDL_GetWindowFlags(window);
+        if ((flags & SDL_WINDOW_MAXIMIZED) != 0) {
+            SDL_RestoreWindow(window);
+        } else {
+            SDL_MaximizeWindow(window);
+        }
+    }
 
 private:
     SDL_Window* window;

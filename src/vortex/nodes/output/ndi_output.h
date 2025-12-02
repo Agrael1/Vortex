@@ -48,7 +48,7 @@ public:
             std::size_t samples_per_frame = (framerate.denominator == 0 || framerate.numerator == 0)
                     ? 0
                     : (48000 * framerate.denominator) / framerate.numerator;
-            _audio_samples.resize(samples_per_frame * 3); // Reserve space for stereo float samples
+            _audio_samples.resize(samples_per_frame * 2); // Reserve space for stereo float samples
         }
     }
 

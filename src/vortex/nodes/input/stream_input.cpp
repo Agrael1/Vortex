@@ -105,8 +105,8 @@ void vortex::StreamInput::InitializeStream()
     av_dict_set(options.address_of(), "analyzeduration", "10000000", 0); // 0.5 second timeout
 
     // Make bigger RTP buffer
-    av_dict_set(options.address_of(), "buffer_size", "1048576", 0); // 1MB buffer
-    av_dict_set(options.address_of(), "rtbufsize", "1048576", 0); // 1MB buffer
+    av_dict_set(options.address_of(), "buffer_size", "5000000", 0); // 1MB buffer
+    av_dict_set(options.address_of(), "rtbufsize", "5000000", 0); // 1MB buffer
     av_dict_set(options.address_of(), "max_delay", "500000", 0); // 0.5 second max delay
 
     auto context_result = codec::CodecFFmpeg::ConnectToStream(stream_url, std::move(options));
@@ -147,7 +147,7 @@ void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
         _video_frames.erase(_video_frames.begin());
     }
     // Remove old audio frames (keep only the latest 16 frames)
-    while (_audio_frames.size() > 16) {
+    while (_audio_frames.size() > 64) {
         _audio_frames.erase(_audio_frames.begin());
     }
 }
@@ -174,7 +174,7 @@ bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx,
     uint64_t current_video_pts = _first_video_pts +
             TimeToPts(_stream_collection.video_channels[0]->time_base, elapsed_ms);
     // adjust for some latency
-    current_video_pts = std::max<int64_t>(_first_video_pts, current_video_pts - 2000);
+    current_video_pts = std::max<int64_t>(_first_video_pts, current_video_pts);
     auto it = _video_frames.lower_bound(current_video_pts);
     if (it == _video_frames.end()) {
         return false; // No frames ready to be played
@@ -309,8 +309,8 @@ void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
     }
 
     std::size_t frames = std::distance(it, _audio_frames.end());
-    if (frames > 3) {
-        frames = 3; // Limit to 3 frames to avoid excessive latency
+    if (frames > 4) {
+        frames = 4; // Limit to 3 frames to avoid excessive latency
     }
 
     AVFrame* frame = it->second.get();
@@ -338,7 +338,7 @@ void vortex::StreamInput::EvaluateAudio(vortex::AudioProbe& probe)
         it = std::next(it);
     }
 
-    // probe.last_audio_pts = it->first + frame->duration;
+    //probe.last_audio_pts = it->first + frame->duration;
 }
 
 void vortex::StreamInput::DecodeVideoFrames(vortex::ffmpeg::ChannelStorage& video_channel)

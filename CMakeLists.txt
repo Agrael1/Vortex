@@ -201,6 +201,7 @@ PRIVATE
   "src/vortex/ui/value.h"
   "src/vortex/ui/call_handler.h"
   "src/vortex/app.h"
+  "rc/app_icon.rc"
 )
 target_compile_options(${PROJECT_NAME} PRIVATE
   $<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
@@ -232,6 +233,16 @@ if(VORTEX_UI_SRC)
 else()
   add_custom_command(TARGET vortex_ui_copy POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "[vortex] UI not found at rc/ or rc/ui. Build it with: cd vortex-ui-skeleton && npm run build -- --mode rc"
+  )
+endif()
+
+set(VORTEX_FAVICON_SRC "${CMAKE_CURRENT_SOURCE_DIR}/rc/favicon.ico")
+if(EXISTS "${VORTEX_FAVICON_SRC}")
+  add_custom_command(TARGET vortex_ui_copy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VORTEX_FAVICON_SRC}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/favicon.ico"
+    COMMENT "Copying favicon.ico to runtime root"
   )
 endif()
 

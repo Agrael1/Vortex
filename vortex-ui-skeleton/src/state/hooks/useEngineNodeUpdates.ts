@@ -2,9 +2,9 @@ import { useEffect, useRef } from 'react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import type { SetterOrUpdater } from 'recoil';
 import { graphSnapshotAtom } from '@state/atoms/project';
-import { nodePtrByIdAtom, nodePtrByUidAtom } from '@state/atoms/editor';
+import { nodePtrByIdAtom, nodePtrByUidAtom, selectedNodePtrAtom } from '@state/atoms/editor';
 import type { GraphNodeSnapshot, GraphSnapshot } from '@state/types';
-import { engine, type NodeCreatedPayload } from '@/app/services/ipc/cefBridge';
+import { engine, type NodeCreatedPayload, type NodeRemovedPayload } from '@/app/services/ipc/cefBridge';
 
 type PropertySchema = {
   properties?: {
@@ -32,6 +32,15 @@ const PROPERTY_CACHE_TTL_MS = 60_000;
 
 const propertyNameCache = new Map<number, PropertyCacheEntry>();
 const pendingFetches = new Map<number, Promise<Map<number, string>>>();
+
+const invalidatePropertyCache = (nodePtr: number | null | undefined) => {
+  const normalized = typeof nodePtr === 'number' ? nodePtr : Number(nodePtr);
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    return;
+  }
+  propertyNameCache.delete(normalized);
+  pendingFetches.delete(normalized);
+};
 
 const parseSchema = (raw: unknown): PropertySchema => {
   if (!raw) return {};
@@ -229,6 +238,11 @@ const upsertNodeFromCreation = (
     if (matchIndex >= 0) {
       const nextNodes = [...nodes];
       const existing = nextNodes[matchIndex];
+      const typeChanged = (existing?.type ?? null) !== (base.type ?? null);
+      const uidChanged = (existing?.uid ?? null) !== (base.uid ?? null);
+      if ((typeChanged || uidChanged) && Number.isFinite(ptr)) {
+        invalidatePropertyCache(ptr);
+      }
       nextNodes[matchIndex] = {
         ...existing,
         ...base,
@@ -311,12 +325,131 @@ const handleNodeUpdate = async (
   }
 };
 
+const applyNodeRemovalFromEngine = (
+  payload: NodeRemovedPayload,
+  setGraphSnapshot: SetterOrUpdater<GraphSnapshot>,
+  setSelectedNodePtr: SetterOrUpdater<number | null>,
+  setNodePtrById: SetterOrUpdater<Record<string, number>>,
+  setNodePtrByUid: SetterOrUpdater<Record<string, number>>,
+) => {
+  if (!payload) {
+    return;
+  }
+
+  const ptrCandidate = typeof payload.ptr === 'number' && Number.isFinite(payload.ptr) && payload.ptr > 0 ? payload.ptr : null;
+  const idCandidate = typeof payload.id === 'string' ? payload.id.trim() : '';
+  const uidCandidate = typeof payload.uid === 'string' ? payload.uid.trim() : '';
+
+  if (ptrCandidate == null && idCandidate.length === 0 && uidCandidate.length === 0) {
+    return;
+  }
+
+  const removedIds = new Set<string>();
+  const removedPtrs = new Set<number>();
+  const removedUids = new Set<string>();
+
+  if (ptrCandidate != null) {
+    removedPtrs.add(ptrCandidate);
+  }
+  if (idCandidate.length > 0) {
+    removedIds.add(idCandidate);
+  }
+  if (uidCandidate.length > 0) {
+    removedUids.add(uidCandidate);
+  }
+
+  let graphMutated = false;
+  setGraphSnapshot((prev) => {
+    const nodes = prev.nodes ?? [];
+    if (!nodes.length) {
+      return prev;
+    }
+
+    const nextNodes: GraphNodeSnapshot[] = [];
+    for (const node of nodes) {
+      if (!node) {
+        continue;
+      }
+      const matchesPtr = ptrCandidate != null && node.ptr === ptrCandidate;
+      const matchesId = idCandidate.length > 0 && node.id === idCandidate;
+      const matchesUid = uidCandidate.length > 0 && typeof node.uid === 'string' && node.uid === uidCandidate;
+      if (matchesPtr || matchesId || matchesUid) {
+        graphMutated = true;
+        if (node.id) {
+          removedIds.add(node.id);
+        }
+        if (typeof node.ptr === 'number' && Number.isFinite(node.ptr)) {
+          removedPtrs.add(node.ptr);
+        }
+        if (typeof node.uid === 'string' && node.uid.length > 0) {
+          removedUids.add(node.uid);
+        }
+        continue;
+      }
+      nextNodes.push(node);
+    }
+
+    if (!graphMutated) {
+      return prev;
+    }
+
+    const nextEdges = (prev.edges ?? []).filter((edge) => !removedIds.has(edge.source) && !removedIds.has(edge.target));
+    return { ...prev, nodes: nextNodes, edges: nextEdges };
+  });
+
+  removedPtrs.forEach((ptr) => invalidatePropertyCache(ptr));
+
+  if (removedPtrs.size) {
+    setSelectedNodePtr((current) => {
+      if (current == null) {
+        return current;
+      }
+      return removedPtrs.has(current) ? null : current;
+    });
+  }
+
+  if (removedIds.size) {
+    setNodePtrById((current) => {
+      let mutated = false;
+      const next = { ...current };
+      removedIds.forEach((id) => {
+        if (id.length === 0) {
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(next, id)) {
+          delete next[id];
+          mutated = true;
+        }
+      });
+      return mutated ? next : current;
+    });
+  }
+
+  if (removedUids.size) {
+    setNodePtrByUid((current) => {
+      let mutated = false;
+      const next = { ...current };
+      removedUids.forEach((uid) => {
+        if (uid.length === 0) {
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(next, uid)) {
+          delete next[uid];
+          mutated = true;
+        }
+      });
+      return mutated ? next : current;
+    });
+  }
+};
+
 export function useEngineNodeUpdates() {
   const setGraphSnapshot = useSetRecoilState(graphSnapshotAtom);
   const graphSnapshot = useRecoilValue(graphSnapshotAtom);
   const knownPtrsRef = useRef<Set<number>>(new Set());
   const setNodePtrById = useSetRecoilState(nodePtrByIdAtom);
   const setNodePtrByUid = useSetRecoilState(nodePtrByUidAtom);
+  const setSelectedNodePtr = useSetRecoilState(selectedNodePtrAtom);
 
   useEffect(() => {
     const unsubscribe = engine.on<NodeUpdatePayload>('node:update', async (payload) => {
@@ -364,6 +497,16 @@ export function useEngineNodeUpdates() {
   }, [setGraphSnapshot, setNodePtrById, setNodePtrByUid]);
 
   useEffect(() => {
+    const unsubscribe = engine.on<NodeRemovedPayload>('node:removed', (payload) => {
+      applyNodeRemovalFromEngine(payload, setGraphSnapshot, setSelectedNodePtr, setNodePtrById, setNodePtrByUid);
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [setGraphSnapshot, setSelectedNodePtr, setNodePtrById, setNodePtrByUid]);
+
+  useEffect(() => {
     const nextPtrs = new Set<number>();
     for (const node of graphSnapshot.nodes ?? []) {
       if (!node) continue;
@@ -377,8 +520,7 @@ export function useEngineNodeUpdates() {
     if (prev.size) {
       prev.forEach((ptr) => {
         if (!nextPtrs.has(ptr)) {
-          propertyNameCache.delete(ptr);
-          pendingFetches.delete(ptr);
+          invalidatePropertyCache(ptr);
         }
       });
     }

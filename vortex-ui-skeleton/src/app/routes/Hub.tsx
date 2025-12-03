@@ -6,6 +6,9 @@ import { useProjectCommands } from '@state/hooks/useProjectCommands';
 import { useNotificationCenter } from '@state/hooks/useNotificationCenter';
 import {
   SPLASH_AUTO_CONTINUE_KEY,
+  SPLASH_AUTO_DELAY_PRESETS,
+  SPLASH_FALLBACK_DELAY_PRESETS,
+  buildDelayOptions,
   clampAutoDelay,
   clampFallbackDelay,
   readAutoDelayPreference,
@@ -114,24 +117,6 @@ const DEFAULT_FORM: CreateFormState = {
   colorSpace: 'Rec.709',
 };
 
-const AUTO_DELAY_PRESETS = [500, 800, 1200, 2000, 3000, 5000];
-const FALLBACK_DELAY_PRESETS = [800, 1200, 2000, 3000, 5000, 8000];
-
-const formatDelayLabel = (ms: number) => {
-  const seconds = ms / 1000;
-  const display = Number.isInteger(seconds) ? seconds.toString() : seconds.toFixed(1).replace(/\.0$/, '');
-  return `${display}s`;
-};
-
-const AUTO_DELAY_OPTIONS = AUTO_DELAY_PRESETS.map((ms) => ({
-  value: ms,
-  label: formatDelayLabel(ms),
-}));
-
-const FALLBACK_DELAY_OPTIONS = FALLBACK_DELAY_PRESETS.map((ms) => ({
-  value: ms,
-  label: formatDelayLabel(ms),
-}));
 
 const BUTTON_BASE =
   'inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 focus-visible:ring-offset-0';
@@ -190,19 +175,15 @@ export function Hub() {
     return filtered.sort(compareRecents);
   }, [recents, searchTerm]);
 
-  const delayOptions = useMemo(() => {
-    const hasMatch = AUTO_DELAY_OPTIONS.some((option) => option.value === autoDelay);
-    if (hasMatch) return AUTO_DELAY_OPTIONS;
-    return [...AUTO_DELAY_OPTIONS, { value: autoDelay, label: `${formatDelayLabel(autoDelay)} (custom)` }];
-  }, [autoDelay]);
+  const delayOptions = useMemo(
+    () => buildDelayOptions(SPLASH_AUTO_DELAY_PRESETS, autoDelay),
+    [autoDelay],
+  );
 
-  const fallbackOptions = useMemo(() => {
-    const hasMatch = FALLBACK_DELAY_OPTIONS.some((option) => option.value === fallbackDelay);
-    if (hasMatch) {
-      return FALLBACK_DELAY_OPTIONS;
-    }
-    return [...FALLBACK_DELAY_OPTIONS, { value: fallbackDelay, label: `${formatDelayLabel(fallbackDelay)} (custom)` }];
-  }, [fallbackDelay]);
+  const fallbackOptions = useMemo(
+    () => buildDelayOptions(SPLASH_FALLBACK_DELAY_PRESETS, fallbackDelay),
+    [fallbackDelay],
+  );
 
   useEffect(() => {
     if (!sortedRecents.length) {
@@ -695,8 +676,13 @@ export function Hub() {
                   >
                     {busyPath === lastProject.path ? 'Opening…' : 'Continue'}
                   </button>
-                  <button type="button" onClick={handleForgetLastProject} className={`${SUBTLE_BUTTON} text-xs`}>
-                    Forget
+                  <button
+                    type="button"
+                    onClick={handleForgetLastProject}
+                    className={`${SUBTLE_BUTTON} text-xs`}
+                    aria-label="Forget this project"
+                  >
+                    Forget this project
                   </button>
                   <button
                     type="button"
@@ -704,7 +690,7 @@ export function Hub() {
                     className={`${SUBTLE_BUTTON} text-xs`}
                     aria-pressed={lastProjectPinned}
                   >
-                    {lastProjectPinned ? 'Unpin' : 'Pin'}
+                    {lastProjectPinned ? 'Unpin from recents' : 'Pin in recents'}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-4 text-xs text-gray-400 lg:justify-end">
@@ -715,10 +701,10 @@ export function Hub() {
                       onChange={(event) => setAutoContinue(event.target.checked)}
                       className="h-3.5 w-3.5 rounded border border-ui-border bg-black/40 text-sky-400 focus:ring-sky-400"
                     />
-                    Auto-continue
+                    Auto-continue on launch
                   </label>
                   <label className="flex items-center gap-2">
-                    <span>Delay</span>
+                    <span>Auto-continue delay</span>
                     <select
                       value={autoDelay}
                       onChange={handleDelayChange}
@@ -732,7 +718,7 @@ export function Hub() {
                     </select>
                   </label>
                   <label className="flex items-center gap-2">
-                    <span>Splash fallback</span>
+                    <span>Splash fallback delay</span>
                     <select
                       value={fallbackDelay}
                       onChange={handleFallbackDelayChange}

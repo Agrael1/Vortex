@@ -187,18 +187,45 @@ if (NOT TARGET FFmpeg::FFmpeg)
 endif ()
 
 
-# TODO: how to copy dll on win32?
+# Discover FFmpeg runtime DLLs for Windows builds so we can stage them next to
+# the consuming targets and package them via `cmake --install`.
 if (WIN32)
-    file(GLOB FFMPEG_WIN32_DLLS "${FFmpeg_INSTALL_PATH}/bin/*.dll" )
-endif (WIN32)
+    set(_ffmpeg_bin_dir "${FFmpeg_INSTALL_PATH}/bin")
+    if (EXISTS "${_ffmpeg_bin_dir}")
+        file(GLOB FFMPEG_WIN32_DLLS "${_ffmpeg_bin_dir}/*.dll")
+        list(LENGTH FFMPEG_WIN32_DLLS _ffmpeg_dll_count)
+        if (_ffmpeg_dll_count EQUAL 0)
+            message(WARNING
+                "FFmpeg bin directory (${_ffmpeg_bin_dir}) does not contain any DLLs."
+            )
+        endif()
+    else()
+        set(FFMPEG_WIN32_DLLS "")
+        message(WARNING
+            "FFmpeg bin directory not found: ${_ffmpeg_bin_dir}. Set FFmpeg_INSTALL_PATH to a valid build."
+        )
+    endif()
+    set(FFMPEG_DLLS_INSTALL_RULE_DEFINED FALSE)
+endif ()
 
-macro (FFMPEG_COPY_DLL projectName)
+macro(FFMPEG_COPY_DLL projectName)
     if (WIN32)
-        foreach(THEDLL ${FFMPEG_WIN32_DLLS})
-            message(STATUS "  |> Copy DLL: ${THEDLL}")
+        if (FFMPEG_WIN32_DLLS)
             add_custom_command(TARGET ${projectName} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${THEDLL} $<TARGET_FILE_DIR:${projectName}>) # source  # target
-        endforeach(THEDLL ${SNOW_WIN32_DLLS})
-    endif  (WIN32)
+                        ${FFMPEG_WIN32_DLLS}
+                        $<TARGET_FILE_DIR:${projectName}>
+                COMMAND_EXPAND_LISTS
+                COMMENT "Copying FFmpeg runtime DLLs for ${projectName}"
+            )
+            if (NOT FFMPEG_DLLS_INSTALL_RULE_DEFINED)
+                install(FILES ${FFMPEG_WIN32_DLLS} DESTINATION bin)
+                set(FFMPEG_DLLS_INSTALL_RULE_DEFINED TRUE)
+            endif()
+        else()
+            message(WARNING
+                "Skipping FFmpeg DLL copy for target ${projectName}; DLL list is empty."
+            )
+        endif()
+    endif ()
 endmacro()

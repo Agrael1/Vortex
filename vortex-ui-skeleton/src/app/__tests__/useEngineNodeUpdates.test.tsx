@@ -6,30 +6,34 @@ import { useEngineNodeUpdates } from '@state/hooks/useEngineNodeUpdates';
 import { graphSnapshotAtom } from '@state/atoms/project';
 import type { GraphSnapshot } from '@state/types';
 import type { SetterOrUpdater } from 'recoil';
+import type { NodeCreatedPayload } from '@/app/services/ipc/cefBridge';
 
 vi.mock('@/app/services/ipc/cefBridge', () => {
-  const listeners: Array<(payload: { nodePtr: number; propIndex: number; value: unknown }) => void> = [];
+  const listeners = new Map<string, Set<(payload: unknown) => void>>();
+  const addListener = (event: string, handler: (payload: unknown) => void) => {
+    const bucket = listeners.get(event) ?? new Set<(payload: unknown) => void>();
+    bucket.add(handler);
+    listeners.set(event, bucket);
+    return () => {
+      bucket.delete(handler);
+      if (!bucket.size) {
+        listeners.delete(event);
+      }
+    };
+  };
+  const emit = (event: string, payload: unknown) => {
+    listeners.get(event)?.forEach((handler) => handler(payload));
+  };
   const getNodeProperties = vi.fn();
   return {
     engine: {
-      on: (event: string, handler: (payload: { nodePtr: number; propIndex: number; value: unknown }) => void) => {
-        if (event === 'node:update') {
-          listeners.push(handler);
-          return () => {
-            const idx = listeners.indexOf(handler);
-            if (idx >= 0) {
-              listeners.splice(idx, 1);
-            }
-          };
-        }
-        return () => undefined;
-      },
+      on: addListener,
       getNodeProperties,
-      __emitNodeUpdate: (payload: { nodePtr: number; propIndex: number; value: unknown }) => {
-        listeners.forEach((listener) => listener(payload));
-      },
+      __emit: emit,
+      __emitNodeUpdate: (payload: { nodePtr: number; propIndex: number; value: unknown }) => emit('node:update', payload),
+      __emitNodeCreated: (payload: NodeCreatedPayload) => emit('node:created', payload),
       __reset: () => {
-        listeners.length = 0;
+        listeners.clear();
       },
     },
   };
@@ -41,13 +45,22 @@ const mockGetNodeProperties = vi.mocked(engine.getNodeProperties);
 
 type EngineMock = typeof engine & {
   __emitNodeUpdate?: (payload: { nodePtr: number; propIndex: number; value: unknown }) => void;
+  __emitNodeCreated?: (payload: NodeCreatedPayload) => void;
   __reset?: () => void;
 };
 
 const getMockedEngine = () => engine as EngineMock;
 
 const emitNodeUpdate = (ptr: number, index: number, value: unknown) => {
-  getMockedEngine().__emitNodeUpdate?.({ nodePtr: ptr, propIndex: index, value });
+  act(() => {
+    getMockedEngine().__emitNodeUpdate?.({ nodePtr: ptr, propIndex: index, value });
+  });
+};
+
+const emitNodeCreated = (payload: NodeCreatedPayload) => {
+  act(() => {
+    getMockedEngine().__emitNodeCreated?.(payload);
+  });
 };
 
 const resetNodeListeners = () => {
@@ -167,6 +180,55 @@ describe('useEngineNodeUpdates', () => {
     } finally {
       dateSpy.mockRestore();
     }
+  });
+
+  it('invalidates cached schemas when node type changes', async () => {
+    render(
+      <RecoilRoot>
+        <GraphObserver />
+      </RecoilRoot>,
+    );
+
+    emitNodeCreated({
+      ptr: 200,
+      id: 'node-200',
+      type: 'Camera',
+      label: 'Camera',
+      position: { x: 0, y: 0 },
+    });
+
+    emitNodeUpdate(200, 3, 'armed');
+
+    await waitFor(() => {
+      const graph = readGraph();
+      expect(graph.nodes).toHaveLength(1);
+      expect(graph.nodes[0].props.status).toBe('armed');
+    });
+
+    mockGetNodeProperties.mockImplementationOnce(async () => ({
+      properties: [
+        { index: 1, name: 'position' },
+        { index: 2, name: 'label' },
+        { index: 4, name: 'gain' },
+      ],
+    }));
+
+    emitNodeCreated({
+      ptr: 200,
+      id: 'node-200',
+      type: 'Mixer',
+      label: 'Mixer',
+      position: { x: 0, y: 0 },
+    });
+
+    emitNodeUpdate(200, 4, 0.75);
+
+    await waitFor(() => {
+      const graph = readGraph();
+      expect(graph.nodes[0].props.gain).toBe(0.75);
+    });
+
+    expect(mockGetNodeProperties).toHaveBeenCalledTimes(2);
   });
 
   it('drops property cache entries once nodes are removed', async () => {

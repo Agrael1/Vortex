@@ -418,6 +418,8 @@ private:
         BindGraphModelCallbacks();
         _node_uid_by_ptr.clear();
         _node_ptr_by_uid.clear();
+        _node_id_by_ptr.clear();
+        _node_ptr_by_id.clear();
     }
 
     void EmitGraphNodeCreatedEvent(const json& node,
@@ -468,6 +470,35 @@ private:
                               std::string(client_id),
                   props_json,
                   node_uid);
+    }
+
+    void EmitGraphNodeRemovedEvent(uintptr_t node_ptr,
+                                   std::string_view node_id = {},
+                                   std::string_view node_uid = {})
+    {
+        if (node_ptr == 0 && node_id.empty() && node_uid.empty()) {
+            return;
+        }
+
+        std::string id_value;
+        if (!node_id.empty()) {
+            id_value = std::string(node_id);
+        } else {
+            id_value = LookupNodeId(node_ptr);
+        }
+
+        std::string uid_value;
+        if (!node_uid.empty()) {
+            uid_value = std::string(node_uid);
+        } else {
+            uid_value = LookupNodeUID(node_ptr);
+        }
+
+        const double ptr_value = static_cast<double>(node_ptr);
+        _ui_app.SendUIMessage(u"graph_node_removed",
+                              ptr_value,
+                              id_value,
+                              uid_value);
     }
 
     void EmitTransportStateSnapshot(TransportState state,
@@ -625,8 +656,15 @@ private:
     }
     void RemoveNode(uintptr_t node_ptr)
     {
+        if (node_ptr == 0) {
+            return;
+        }
+
+        const std::string node_id = LookupNodeId(node_ptr);
+        const std::string node_uid = LookupNodeUID(node_ptr);
         _model.RemoveNode(node_ptr); // Delete the node with the specified ID
-        ReleaseNodeUID(node_ptr);
+        EmitGraphNodeRemovedEvent(node_ptr, node_id, node_uid);
+        ReleaseNodeIdentity(node_ptr, node_uid, node_id);
     }
     bool ConnectNodes(uintptr_t node_ptr_left,
                       int32_t output_index,
@@ -1432,35 +1470,70 @@ public:
         return std::format("uid-fallback-{}", ++_node_uid_counter);
     }
 
-    void RegisterNodeUID(uintptr_t node_ptr, std::string_view uid)
+    void RegisterNodeIdentity(uintptr_t node_ptr,
+                               std::string_view uid,
+                               std::string_view node_id)
     {
-        if (node_ptr == 0 || uid.empty()) {
+        if (node_ptr == 0) {
             return;
         }
-        const std::string normalized(uid);
-        if (auto existing = _node_uid_by_ptr.find(node_ptr); existing != _node_uid_by_ptr.end()) {
-            _node_ptr_by_uid.erase(existing->second);
+
+        if (!uid.empty()) {
+            const std::string normalized(uid);
+            if (auto existing = _node_uid_by_ptr.find(node_ptr); existing != _node_uid_by_ptr.end()) {
+                _node_ptr_by_uid.erase(existing->second);
+            }
+            _node_uid_by_ptr[node_ptr] = normalized;
+            _node_ptr_by_uid[normalized] = node_ptr;
         }
-        _node_uid_by_ptr[node_ptr] = normalized;
-        _node_ptr_by_uid[normalized] = node_ptr;
+
+        if (!node_id.empty()) {
+            const std::string id_string(node_id);
+            if (auto existing = _node_id_by_ptr.find(node_ptr); existing != _node_id_by_ptr.end()) {
+                _node_ptr_by_id.erase(existing->second);
+            }
+            _node_id_by_ptr[node_ptr] = id_string;
+            _node_ptr_by_id[id_string] = node_ptr;
+        }
     }
 
-    void ReleaseNodeUID(uintptr_t node_ptr, std::string_view fallback_uid = {})
+    void ReleaseNodeIdentity(uintptr_t node_ptr,
+                              std::string_view fallback_uid = {},
+                              std::string_view fallback_id = {})
     {
+        bool released = false;
         if (node_ptr != 0) {
-            auto by_ptr = _node_uid_by_ptr.find(node_ptr);
-            if (by_ptr != _node_uid_by_ptr.end()) {
+            if (auto by_ptr = _node_uid_by_ptr.find(node_ptr); by_ptr != _node_uid_by_ptr.end()) {
                 _node_ptr_by_uid.erase(by_ptr->second);
                 _node_uid_by_ptr.erase(by_ptr);
+                released = true;
+            }
+
+            if (auto by_id = _node_id_by_ptr.find(node_ptr); by_id != _node_id_by_ptr.end()) {
+                _node_ptr_by_id.erase(by_id->second);
+                _node_id_by_ptr.erase(by_id);
+                released = true;
+            }
+
+            if (released) {
                 return;
             }
         }
 
         if (!fallback_uid.empty()) {
-            auto by_uid = _node_ptr_by_uid.find(std::string(fallback_uid));
-            if (by_uid != _node_ptr_by_uid.end()) {
+            const std::string uid_value(fallback_uid);
+            if (auto by_uid = _node_ptr_by_uid.find(uid_value); by_uid != _node_ptr_by_uid.end()) {
                 _node_uid_by_ptr.erase(by_uid->second);
                 _node_ptr_by_uid.erase(by_uid);
+                released = true;
+            }
+        }
+
+        if (!fallback_id.empty()) {
+            const std::string id_value(fallback_id);
+            if (auto by_id = _node_ptr_by_id.find(id_value); by_id != _node_ptr_by_id.end()) {
+                _node_id_by_ptr.erase(by_id->second);
+                _node_ptr_by_id.erase(by_id);
             }
         }
     }
@@ -1469,6 +1542,15 @@ public:
     {
         auto it = _node_uid_by_ptr.find(node_ptr);
         if (it != _node_uid_by_ptr.end()) {
+            return it->second;
+        }
+        return {};
+    }
+
+    std::string LookupNodeId(uintptr_t node_ptr) const
+    {
+        auto it = _node_id_by_ptr.find(node_ptr);
+        if (it != _node_id_by_ptr.end()) {
             return it->second;
         }
         return {};
@@ -1537,7 +1619,7 @@ public:
             }
 
             id_to_ptr.emplace(node_id, node_ptr);
-            RegisterNodeUID(node_ptr, node_uid);
+            RegisterNodeIdentity(node_ptr, node_uid, node_id);
 
             const double serialized_ptr = static_cast<double>(node_ptr);
             if (!node.contains("ptr") || !node["ptr"].is_number() || node["ptr"].get<double>() != serialized_ptr) {
@@ -1841,7 +1923,7 @@ public:
         });
         EmitGraphNodeCreatedEvent(node, client_id, ptr);
         graph["nodes"].push_back(std::move(node));
-        RegisterNodeUID(ptr, node_uid);
+        RegisterNodeIdentity(ptr, node_uid, node_id);
         return true;
     }
 
@@ -1858,16 +1940,21 @@ public:
             return false;
         }
 
+        bool removed_in_native = false;
         if (resolved->ptr != 0) {
-            _model.RemoveNode(resolved->ptr);
+            RemoveNode(resolved->ptr);
+            removed_in_native = true;
         }
 
         std::string removed_uid;
         if (resolved->node && resolved->node->contains("uid") && (*resolved->node)["uid"].is_string()) {
             removed_uid = TrimCopy((*resolved->node)["uid"].get<std::string>());
         }
-        if (resolved->ptr != 0 || !removed_uid.empty()) {
-            ReleaseNodeUID(resolved->ptr, removed_uid);
+        if (!removed_in_native) {
+            EmitGraphNodeRemovedEvent(resolved->ptr, resolved->id, removed_uid);
+            if (resolved->ptr != 0 || !removed_uid.empty() || !resolved->id.empty()) {
+                ReleaseNodeIdentity(resolved->ptr, removed_uid, resolved->id);
+            }
         }
 
         json& graph = EnsureGraphObject(snapshot);
@@ -2584,6 +2671,8 @@ private:
     vortex::UpdateNotifier::External _node_update_observer{};
     std::unordered_map<uintptr_t, std::string> _node_uid_by_ptr;
     std::unordered_map<std::string, uintptr_t> _node_ptr_by_uid;
+    std::unordered_map<uintptr_t, std::string> _node_id_by_ptr;
+    std::unordered_map<std::string, uintptr_t> _node_ptr_by_id;
     uint64_t _node_uid_counter{ 0 };
 
     // Message handlers map - this should be a simple map lookup as these are

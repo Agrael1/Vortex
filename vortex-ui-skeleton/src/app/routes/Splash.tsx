@@ -1,14 +1,22 @@
 import { motion } from 'framer-motion';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { engine, type LastProject } from '@/app/services/ipc/cefBridge';
 import { useProjectCommands } from '@state/hooks/useProjectCommands';
 import {
   SPLASH_AUTO_CONTINUE_KEY,
+  SPLASH_AUTO_DELAY_PRESETS,
+  SPLASH_FALLBACK_DELAY_PRESETS,
+  buildDelayOptions,
+  clampAutoDelay,
+  clampFallbackDelay,
+  formatDelayLabel,
   readAutoDelayPreference,
   readFallbackDelayPreference,
   resolveFallbackDelayForContext,
   readSplashStickyPreference,
+  writeAutoDelayPreference,
+  writeFallbackDelayPreference,
   writeSplashStickyPreference,
 } from '@/app/constants/preferences';
 
@@ -28,13 +36,20 @@ export function Splash() {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem(SPLASH_AUTO_CONTINUE_KEY) === 'true';
   });
-  const [autoDelay] = useState(() => readAutoDelayPreference());
-  const [fallbackDelay] = useState(() => readFallbackDelayPreference());
+  const [autoDelay, setAutoDelay] = useState(() => readAutoDelayPreference());
+  const [fallbackDelay, setFallbackDelay] = useState(() => readFallbackDelayPreference());
   const [stickySplash, setStickySplash] = useState(() => readSplashStickyPreference());
   const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
   const fallbackTimerRef = useRef<number | null>(null);
   const autoTimerRef = useRef<number | null>(null);
   const countdownIntervalRef = useRef<number | null>(null);
+  const [showTiming, setShowTiming] = useState(false);
+  const autoDelayOptions = useMemo(() => buildDelayOptions(SPLASH_AUTO_DELAY_PRESETS, autoDelay), [autoDelay]);
+  const fallbackDelayOptions = useMemo(() => buildDelayOptions(SPLASH_FALLBACK_DELAY_PRESETS, fallbackDelay), [fallbackDelay]);
+  const timingSummary = useMemo(
+    () => `Auto ${formatDelayLabel(autoDelay)} / Hub ${formatDelayLabel(fallbackDelay)}`,
+    [autoDelay, fallbackDelay],
+  );
 
   const clearFallback = useCallback(() => {
     if (fallbackTimerRef.current) {
@@ -67,6 +82,18 @@ export function Splash() {
     },
     [clearFallback, goToHub],
   );
+
+  const handleAutoDelayChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = clampAutoDelay(Number(event.target.value));
+    if (Number.isNaN(nextValue)) return;
+    setAutoDelay(nextValue);
+  }, []);
+
+  const handleFallbackDelayChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = clampFallbackDelay(Number(event.target.value));
+    if (Number.isNaN(nextValue)) return;
+    setFallbackDelay(nextValue);
+  }, []);
 
   useEffect(() => {
     if (introReady) {
@@ -145,6 +172,14 @@ export function Splash() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(SPLASH_AUTO_CONTINUE_KEY, autoContinue ? 'true' : 'false');
   }, [autoContinue]);
+
+  useEffect(() => {
+    writeAutoDelayPreference(autoDelay);
+  }, [autoDelay]);
+
+  useEffect(() => {
+    writeFallbackDelayPreference(fallbackDelay);
+  }, [fallbackDelay]);
 
   useEffect(() => {
     writeSplashStickyPreference(stickySplash);
@@ -239,6 +274,49 @@ export function Splash() {
           />
           Keep this screen open
         </label>
+        <div className="w-full px-6">
+          <button
+            type="button"
+            onClick={() => setShowTiming((prev) => !prev)}
+            className="flex w-full items-center justify-between rounded border border-ui-border/60 px-3 py-1.5 text-xs text-gray-400 transition hover:border-ui-accent/40 hover:text-gray-100"
+            aria-expanded={showTiming}
+          >
+            <span>Timing preferences</span>
+            <span className="text-[11px] text-gray-500">{timingSummary}</span>
+          </button>
+          {showTiming && (
+            <div className="mt-3 space-y-3 rounded-lg border border-ui-border/60 bg-black/30 p-3 text-xs text-gray-300">
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-wide text-gray-500">Auto-continue delay</span>
+                <select
+                  value={autoDelay}
+                  onChange={handleAutoDelayChange}
+                  className="rounded border border-ui-border bg-black/40 px-2 py-1 text-gray-100 focus:border-ui-accent focus:outline-none"
+                >
+                  {autoDelayOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] uppercase tracking-wide text-gray-500">Splash fallback delay</span>
+                <select
+                  value={fallbackDelay}
+                  onChange={handleFallbackDelayChange}
+                  className="rounded border border-ui-border bg-black/40 px-2 py-1 text-gray-100 focus:border-ui-accent focus:outline-none"
+                >
+                  {fallbackDelayOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+        </div>
         {lastProject?.path && autoContinue && autoCountdown != null && !isContinuing && (
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <span>Auto-continue in {autoCountdown}s</span>

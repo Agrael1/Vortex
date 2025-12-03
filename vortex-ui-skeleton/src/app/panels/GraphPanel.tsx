@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Background,
   Controls,
@@ -15,7 +15,7 @@ import {
   useReactFlow,
   Position,
 } from '@xyflow/react';
-import type { DragEvent } from 'react';
+import type { CSSProperties, DragEvent, MouseEvent as ReactMouseEvent } from 'react';
 import type { NodeChange } from '@xyflow/react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { CustomNode, CustomNodeData } from '@/app/components/CustomNode';
@@ -29,6 +29,72 @@ const idFromPtr = (ptr: number) => String(ptr);
 
 type RFNode = Node<CustomNodeData>;
 type RFEdge = Edge;
+
+type EdgeBubbleState = {
+  edge: RFEdge;
+  position: { x: number; y: number };
+};
+
+type NodeBubbleState = {
+  node: RFNode;
+  position: { x: number; y: number };
+};
+
+type BubblePosition = { x: number; y: number };
+
+const ACTION_BUBBLE_STYLE: CSSProperties = {
+  position: 'absolute',
+  transform: 'translate(-50%, -100%) translateY(-8px)',
+  background: 'rgba(12, 12, 20, 0.95)',
+  color: '#f5f5f5',
+  borderRadius: 8,
+  border: '1px solid rgba(255, 255, 255, 0.18)',
+  boxShadow: '0 10px 24px rgba(0, 0, 0, 0.35)',
+  padding: '6px 12px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  pointerEvents: 'auto',
+  zIndex: 10,
+  minWidth: 120,
+};
+
+const ACTION_BUBBLE_LABEL_STYLE: CSSProperties = {
+  fontSize: 12,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  opacity: 0.9,
+};
+
+const ACTION_BUBBLE_BUTTON_STYLE: CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: '50%',
+  border: '1px solid rgba(255, 255, 255, 0.25)',
+  background: 'transparent',
+  color: '#f5f5f5',
+  fontSize: 14,
+  lineHeight: 1,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+};
+
+const DeleteBubble = ({ position, onConfirm }: { position: BubblePosition; onConfirm: () => void }) => (
+  <div
+    style={{
+      ...ACTION_BUBBLE_STYLE,
+      left: position.x,
+      top: position.y,
+    }}
+  >
+    <span style={ACTION_BUBBLE_LABEL_STYLE}>Deleted</span>
+    <button type="button" onClick={onConfirm} style={ACTION_BUBBLE_BUTTON_STYLE} aria-label="Delete">
+      ✕
+    </button>
+  </div>
+);
 
 declare global {
   interface Window {
@@ -140,6 +206,9 @@ function GraphInner() {
   const graphSnapshotRef = useRef<GraphSnapshot>(graphSnapshot);
   const debugSelection = typeof window !== 'undefined' ? window.__VortexDebugSelection !== false : false;
   const skipSelectionSync = typeof window !== 'undefined' ? window.__VortexSkipSelectionSync === true : false;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [edgeBubble, setEdgeBubble] = useState<EdgeBubbleState | null>(null);
+  const [nodeBubble, setNodeBubble] = useState<NodeBubbleState | null>(null);
 
   graphSnapshotRef.current = graphSnapshot;
 
@@ -230,6 +299,14 @@ function GraphInner() {
         nodes: params.nodes.map((node) => ({ id: node.id, ptr: node.data.ptr, uid: node.data.uid })),
       });
       selectedEdgesRef.current = params.edges ?? [];
+      setEdgeBubble((current) => {
+        if (!current) {
+          return current;
+        }
+        const stillSelected = (params.edges ?? []).some((edge) => edge.id === current.edge.id);
+        return stillSelected ? current : null;
+      });
+      setNodeBubble(null);
 
       if (skipSelectionSync) {
         logSelection('skipSelectionSync flag is true, aborting selection sync');
@@ -303,6 +380,73 @@ function GraphInner() {
     ev.dataTransfer.dropEffect = 'move';
   }, []);
 
+  const handleEdgeClick = useCallback(
+    (event: ReactMouseEvent<Element, MouseEvent>, edge: RFEdge) => {
+      event.stopPropagation();
+      const rect = containerRef.current?.getBoundingClientRect();
+      const x = event.clientX - (rect?.left ?? 0);
+      const y = event.clientY - (rect?.top ?? 0);
+      setNodeBubble(null);
+      setEdgeBubble({ edge, position: { x, y } });
+    },
+    [],
+  );
+
+  const closeActionBubbles = useCallback(() => {
+    setEdgeBubble(null);
+    setNodeBubble(null);
+  }, []);
+
+  const handleEdgeDelete = useCallback(() => {
+    setNodeBubble(null);
+    setEdgeBubble((current) => {
+      if (!current) {
+        return current;
+      }
+      removeEdges([toSnapshotEdge(current.edge)])
+        .catch((error) => {
+          console.error('[GraphPanel] Failed to remove edge from bubble', error);
+        })
+        .finally(() => {
+          selectedEdgesRef.current = [];
+        });
+      return null;
+    });
+  }, [removeEdges]);
+
+  const handleNodeDoubleClick = useCallback(
+    (event: ReactMouseEvent<Element, MouseEvent>, node: RFNode) => {
+      event.stopPropagation();
+      const rect = containerRef.current?.getBoundingClientRect();
+      const x = event.clientX - (rect?.left ?? 0);
+      const y = event.clientY - (rect?.top ?? 0);
+      setEdgeBubble(null);
+      setNodeBubble({ node, position: { x, y } });
+    },
+    [],
+  );
+
+  const handleNodeDelete = useCallback(() => {
+    setNodeBubble((current) => {
+      if (!current) {
+        return current;
+      }
+      const ptr = typeof current.node.data?.ptr === 'number' && Number.isFinite(current.node.data.ptr)
+        ? current.node.data.ptr
+        : Number.isFinite(Number(current.node.id))
+          ? Number(current.node.id)
+          : null;
+      if (!ptr) {
+        console.warn('[GraphPanel] Unable to resolve node pointer for deletion bubble');
+        return null;
+      }
+      removeNode(ptr).catch((error) => {
+        console.error('[GraphPanel] Failed to remove node from bubble', error);
+      });
+      return null;
+    });
+  }, [removeNode]);
+
   useEffect(() => {
     const isInteractiveTarget = (target: EventTarget | null): boolean => {
       if (!(target instanceof HTMLElement)) return false;
@@ -313,6 +457,13 @@ function GraphInner() {
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (!isInteractiveTarget(event.target)) {
+          closeActionBubbles();
+        }
+        return;
+      }
+
       if (event.key !== 'Delete' && event.key !== 'Backspace') return;
       if (isInteractiveTarget(event.target)) return;
 
@@ -341,7 +492,7 @@ function GraphInner() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [removeEdges, removeNode, selectedPtr]);
+  }, [closeActionBubbles, removeEdges, removeNode, selectedPtr]);
 
   useEffect(() => {
     const serialized = JSON.stringify(graphSnapshot);
@@ -526,7 +677,12 @@ function GraphInner() {
   );
 
   return (
-    <div style={{ width: '100%', height: '100%' }} onDrop={onDrop} onDragOver={onDragOver}>
+    <div
+      ref={containerRef}
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+      onDrop={onDrop}
+      onDragOver={onDragOver}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -535,12 +691,18 @@ function GraphInner() {
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
+        onEdgeClick={handleEdgeClick}
+        onNodeDoubleClick={handleNodeDoubleClick}
+        onPaneClick={closeActionBubbles}
+        onMoveStart={closeActionBubbles}
         fitView
       >
         <MiniMap />
         <Controls />
         <Background />
       </ReactFlow>
+      {edgeBubble ? <DeleteBubble position={edgeBubble.position} onConfirm={handleEdgeDelete} /> : null}
+      {nodeBubble ? <DeleteBubble position={nodeBubble.position} onConfirm={handleNodeDelete} /> : null}
     </div>
   );
 }

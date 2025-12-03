@@ -8,6 +8,31 @@ export const SPLASH_FALLBACK_DELAY_DEFAULT = 3000;
 export const SPLASH_FALLBACK_DELAY_MIN = 500;
 export const SPLASH_FALLBACK_DELAY_MAX = 10000;
 export const SPLASH_STICKY_KEY = 'vortex.splash.sticky';
+export const SPLASH_AUTO_DELAY_PRESETS = [500, 800, 1200, 2000, 3000, 5000];
+export const SPLASH_FALLBACK_DELAY_PRESETS = [800, 1200, 2000, 3000, 5000, 8000];
+
+export type SplashDelayOption = {
+	value: number;
+	label: string;
+};
+
+export const formatDelayLabel = (ms: number) => {
+	const seconds = ms / 1000;
+	const display = Number.isInteger(seconds) ? seconds.toString() : seconds.toFixed(1).replace(/\.0$/, '');
+	return `${display}s`;
+};
+
+export const buildDelayOptions = (presets: number[], currentValue: number): SplashDelayOption[] => {
+	const base = presets.map((ms) => ({ value: ms, label: formatDelayLabel(ms) }));
+	if (!Number.isFinite(currentValue)) {
+		return base;
+	}
+	const hasMatch = presets.some((value) => value === currentValue);
+	if (hasMatch) {
+		return base;
+	}
+	return [...base, { value: currentValue, label: `${formatDelayLabel(currentValue)} (custom)` }];
+};
 
 export const clampAutoDelay = (value: number) => {
 	if (!Number.isFinite(value)) return SPLASH_AUTO_DELAY_DEFAULT;

@@ -113,6 +113,7 @@ const LAST_PROJECT_EVENT = 'vortex.lastProject';
 const LOG_EVENT = 'vortex.log';
 const NODE_UPDATE_EVENT = 'vortex.node_update';
 const NODE_CREATED_EVENT = 'vortex.node_created';
+const NODE_REMOVED_EVENT = 'vortex.node_removed';
 const EDGE_CONNECTED_EVENT = 'vortex.edge_connected';
 const EDGE_DISCONNECTED_EVENT = 'vortex.edge_disconnected';
 const PROJECT_PERSISTED_EVENT = 'vortex.project_persisted';
@@ -156,6 +157,12 @@ export type NodeCreatedPayload = {
   position: { x: number; y: number };
   clientNodeId?: string | null;
   props?: Record<string, unknown>;
+};
+
+export type NodeRemovedPayload = {
+  ptr?: number | null;
+  id?: string | null;
+  uid?: string | null;
 };
 
 type NodePropertySpec = {
@@ -379,6 +386,11 @@ const emitNodeUpdate = (payload: NodeUpdatePayload) => {
 const emitNodeCreated = (payload: NodeCreatedPayload) => {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
   window.dispatchEvent(new CustomEvent(NODE_CREATED_EVENT, { detail: payload }));
+};
+
+const emitNodeRemoved = (payload: NodeRemovedPayload) => {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  window.dispatchEvent(new CustomEvent(NODE_REMOVED_EVENT, { detail: payload }));
 };
 
 const emitEdgeConnected = (payload: EdgeConnectionPayload) => {
@@ -1127,6 +1139,14 @@ class EngineBridge {
       return () => window.removeEventListener(NODE_CREATED_EVENT, listener as EventListener);
     }
 
+    if (event === 'node:removed' && typeof window !== 'undefined') {
+      const listener = (e: CustomEvent<T>) => {
+        handler(e.detail);
+      };
+      window.addEventListener(NODE_REMOVED_EVENT, listener as EventListener);
+      return () => window.removeEventListener(NODE_REMOVED_EVENT, listener as EventListener);
+    }
+
     if (event === 'edge:connected' && typeof window !== 'undefined') {
       const listener = (e: CustomEvent<T>) => {
         handler(e.detail);
@@ -1615,6 +1635,29 @@ class EngineBridge {
           uid: uidCandidate || null,
           props,
         });
+        return;
+      }
+
+      if (detail.name === 'graph_node_removed') {
+        const args = Array.isArray(detail.args) ? detail.args : [];
+        const ptrCandidate = Number(args[0]);
+        const idCandidate = typeof args[1] === 'string' ? args[1].trim() : '';
+        const uidCandidate = typeof args[2] === 'string' ? args[2].trim() : '';
+        const payload: NodeRemovedPayload = {};
+
+        if (Number.isFinite(ptrCandidate) && ptrCandidate > 0) {
+          payload.ptr = ptrCandidate;
+        }
+        if (idCandidate.length > 0) {
+          payload.id = idCandidate;
+        }
+        if (uidCandidate.length > 0) {
+          payload.uid = uidCandidate;
+        }
+
+        if (payload.ptr != null || payload.id || payload.uid) {
+          emitNodeRemoved(payload);
+        }
         return;
       }
 

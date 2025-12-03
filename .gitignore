@@ -391,3 +391,7 @@ cmake-build-*/
 
 # Local helper scripts
 scripts/build_engine_release.bat
+
+# Local notes
+chat_handoff.txt
+tech_debt.md

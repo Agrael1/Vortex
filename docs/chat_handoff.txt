@@ -1,4 +1,4 @@
-VORTEX UI HAND-OFF NOTES (updated 2025-11-22)
+VORTEX UI HAND-OFF NOTES (updated 2025-12-02)
 ============================================
 
 1. ARCHITECTURE SNAPSHOT
@@ -25,6 +25,8 @@ VORTEX UI HAND-OFF NOTES (updated 2025-11-22)
   * Added CTA buttons: Continue last project (manual), Open Hub, Forget last project.
   * Continuation triggers loadProject() and navigates to /editor if successful.
   * Added opt-in "Auto-continue next time" toggle (stored in localStorage). When enabled and a project exists, Splash auto-triggers continue after ~1.2s.
+  * Added "Timing preferences" drawer so users can tweak auto-continue delay and fallback redirect timeout directly on Splash; both values reuse the shared presets exposed in Hub and persist to localStorage immediately.
+  * Added vitest coverage (`src/app/routes/__tests__/Splash.test.tsx`) that verifies selector changes write preferences and that custom values appear in the timing summary indicator.
 
 - Project persistence (src/state/hooks/useProjectPersistence.ts)
   * Removed automatic setPath(engine.getLastProject()). Hydration now waits until user picks a project.
@@ -36,12 +38,27 @@ VORTEX UI HAND-OFF NOTES (updated 2025-11-22)
   * Header already had a smaller "Back to" button; both now coexist (CTA block is more obvious).
   * Added the same auto-continue preference checkbox so users can toggle Splash behavior without waiting for another boot.
 
+- Build/runtime packaging (cmake/FindFFMPEG.cmake)
+  * Windows builds now glob FFmpeg DLLs once (based on FFmpeg_INSTALL_PATH/bin) and `FFMPEG_COPY_DLL` copies them next to any target that links FFmpeg.
+  * The macro also registers an install rule so `cmake --install` bundles the same DLLs automatically; misconfigured paths emit cmake warnings instead of silently skipping copies.
+
 - Graph/node updates (from earlier work, but critical context)
   * New hook src/state/hooks/useEngineNodeUpdates.ts listens to engine.onNodeUpdate and populates graphSnapshotAtom with positions, labels, and arbitrary props.
   * Graph nodes now carry props bag (GraphNodeSnapshot.props). These values propagate through GraphPanel, persistence, inspector, and CustomNode renderer.
   * CustomNode (src/app/components/CustomNode.tsx) visualizes props (status/severity/progress/meta chips, message, accent color).
   * InspectorPanel passes live props into PropertyEditor so UI stays in sync without manual refresh.
   * Hook is now mounted once in DockLayout to keep state consistent across panels.
+- Node removal sync (2025-12-01)
+  * Native app now emits `graph_node_removed` (ptr/id/uid), cefBridge rebroadcasts it as `engine.on('node:removed')`, and `useEngineNodeUpdates` prunes nodes, edges, selection, and property caches automatically.
+  * Removes the previous need to reload when the engine deletes nodes outside the UI and keeps selection safe when nodes disappear mid-session.
+- Edge sync (2025-12-02)
+  * `vortex::GraphModel` now triggers edge connect/disconnect callbacks that bubble through CEF as `edge_connected` / `edge_disconnected`.
+  * `useEngineEdgeUpdates` (mounted once at DockLayout) listens for those events and reconciles `graphSnapshotAtom` so ReactFlow stays in sync even when edges move behind the scenes.
+  * Added vitest coverage (`src/app/__tests__/useEngineEdgeUpdates.test.tsx`) to lock in pointer/slot matching behavior and guard against regression.
+- Property schema cache (2025-12-02)
+  * `useEngineNodeUpdates` now invalidates per-node schema caches whenever the engine reports a new type/uid for the same pointer, so newly-added properties resolve immediately instead of waiting for TTL expiry.
+  * Centralized cache eviction helpers ensure removals, pointer swaps, and snapshot reloads tear down stale entries consistently.
+  * Extended hook tests verify TTL refresh, removal flow, and the new type-change invalidation path.
 
 3. ENGINE ↔ UI CONTRACT
 ------------------------
@@ -61,7 +78,7 @@ VORTEX UI HAND-OFF NOTES (updated 2025-11-22)
 - Client→engine updates
   * Node drag end in ReactFlow -> Vortex.setNodeProperty(ptr, "position", JSON.stringify(position)). Engine is expected to broadcast back same update.
   * Label edits from Inspector -> Vortex.setNodeProperty(ptr, 'label', value).
-  * Missing pieces: there is currently no event for node creation/removal/edge updates; UI assumes command succeeded and updates snapshot optimistically.
+  * Live sync: engine now emits creation, removal, and edge connect/disconnect events; `useEngineNodeUpdates` / `useEngineEdgeUpdates` reconcile Recoil snapshots immediately so optimistic UI updates get confirmed (or corrected) without reloads.
 
 4. ROUTING / FLOW
 -----------------
@@ -88,15 +105,13 @@ VORTEX UI HAND-OFF NOTES (updated 2025-11-22)
 6. REMAINING IDEAS / NEXT STEPS
 --------------------------------
 Already discussed but not started:
-- Sync edges/connectors (need engine events for connect/disconnect).
 - Expand CustomNode visuals (icons per prop, feed preview, error badges, inline charts for meters).
 - Enrich Hub (pin/unpin from CTA, keyboard shortcuts, quick rename, inline error badges for broken projects).
 - Autosave toggle (remember user preference; if enabled, Splash could auto-continue after timeout).
 - Unit tests (vitest) for `useEngineNodeUpdates`, `useProjectPersistence`, and hub reducers with mocked engine.
 
 Additional opportunities after reviewing code:
-- Normalize property schema caching: expire on schema mismatch or when node is removed.
-- Provide `engine.onProjectEvent` hook (for additions/removals) so UI does not rely on optimistic updates.
+- Consolidate node/edge event wiring into a shared `engine.onProjectEvent` helper so future additions (e.g., property diffs) reuse the same plumbing.
 - Introduce logging/notification center fed by `engine.onConsole` (if native side exposes logs).
 - Document JSON contract for `ProjectDTO` (src/app/services/ipc/cefBridge.ts) so future updates remain compatible.
 
@@ -139,11 +154,6 @@ Debug tips:
 
 10. KNOWN LIMITATIONS / TODOs
 -----------------------------
-- No reconciliation if engine deletes a node outside UI: we rely on node_update to infer presence. Need explicit removal events.
-- Edge list does not sync from engine; GraphPanel shows stale connections if engine modifies graph behind UI.
-- Property schema caching never expires; if node type changes dynamic props, UI might ignore new fields until reload.
-- Splash auto-redirect delay is fixed; consider making it configurable or storing last action preference.
-  * Auto-continue toggle now stored per-user (localStorage key `vortex.splash.autoContinue`) and can be changed from Hub or Splash. Still consider exposing delay/timeout controls.
 - Tests missing for new hooks; manual testing only (npm run typecheck + interactive dev session).
 
 11. ENGINE API SUMMARY

@@ -78,6 +78,14 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
   const disablePlay = transport.isPlaying || pendingAction === 'play';
   const disableStop = !transport.isPlaying || pendingAction === 'stop';
   const canFocusDropTarget = transport.hasRecentDrops && dropTargetId != null;
+  const buttonBase =
+    'relative flex items-center justify-center w-9 h-9 rounded-xl border transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8fd3ff]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#030712] shadow-[0_12px_30px_rgba(3,7,18,0.55)]';
+  const playButtonClass = disablePlay
+    ? `${buttonBase} border-cyan-400/20 text-cyan-200/60 cursor-not-allowed`
+    : `${buttonBase} border-transparent bg-gradient-to-br from-[#8FD3FF] via-[#7AA7FF] to-[#5B8CFF] text-[#04060c] hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(4,10,24,0.65)]`;
+  const stopButtonClass = disableStop
+    ? `${buttonBase} border-pink-400/20 text-pink-200/60 cursor-not-allowed`
+    : `${buttonBase} border-transparent bg-gradient-to-br from-[#F472B6] via-[#FB7185] to-[#FD8BA3] text-[#280712] hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(12,2,12,0.55)]`;
 
   const handleFocusDropTarget = useCallback(() => {
     if (dropTargetId != null && dropTargetId !== selectedPtr) {
@@ -110,10 +118,7 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
         <button
           onClick={handlePlay}
           disabled={disablePlay}
-          className={`
-            flex items-center justify-center w-8 h-8 rounded-md transition-colors
-            ${disablePlay ? 'bg-green-600/20 text-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'}
-          `}
+            className={playButtonClass}
           title="Play"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -124,10 +129,7 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
         <button
           onClick={handleStop}
           disabled={disableStop}
-          className={`
-            flex items-center justify-center w-8 h-8 rounded-md transition-colors
-            ${disableStop ? 'bg-red-600/20 text-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700 text-white'}
-          `}
+            className={stopButtonClass}
           title="Stop"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -138,7 +140,7 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
 
       {/* Status indicator */}
       <div
-        className="flex items-center gap-2 px-3 py-1 rounded-md bg-black/20 border border-gray-600"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-ui-border/60 backdrop-blur"
         title={transport.reason ?? undefined}
       >
         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getStatusColor() }} />
@@ -146,7 +148,7 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
       </div>
 
       {/* FPS Counter */}
-      <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-black/20 border border-gray-600">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-ui-border/60 backdrop-blur">
         <span className="text-sm text-gray-400">FPS:</span>
         <span
           className={`text-sm font-mono ${transport.fps < 55 ? 'text-red-400' : transport.fps < 58 ? 'text-yellow-400' : 'text-green-400'}`}
@@ -157,7 +159,7 @@ export function PlaybackControls({ className = '' }: PlaybackControlsProps) {
 
       {/* Dropped frames */}
       <div
-        className="flex items-center gap-3 px-3 py-1 rounded-md bg-black/20 border border-gray-600"
+        className="flex items-center gap-3 px-3 py-1.5 rounded-xl bg-white/5 border border-ui-border/60 backdrop-blur"
         title={transport.hasRecentDrops ? transport.reason ?? dropTarget ?? undefined : 'Нет зафиксированных дропов'}
       >
         <div className="flex items-center gap-2">

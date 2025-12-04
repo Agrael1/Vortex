@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { PlaybackControls } from '@/app/components/PlaybackControls';
 import { ExitConfirmModal } from '@/app/components/ExitConfirmModal';
+import { VortexMark } from '@/app/components/VortexMark';
 import { engine, type Recent } from '@/app/services/ipc/cefBridge';
 import { useProjectCommands } from '@state/hooks/useProjectCommands';
 import { useGraphCommands } from '@state/hooks/useGraphCommands';
@@ -440,8 +441,9 @@ export function AppHeader({ className = '', onResetLayout }: AppHeaderProps) {
     <header ref={headerRef} className={`h-12 border-b border-ui-border bg-ui-panel flex items-center justify-between px-4 ${className}`}>
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-3">
-          <strong className="text-lg">Vortex</strong>
-          <div className="w-px h-4 bg-gray-600" />
+          <VortexMark className="h-8 w-8 drop-shadow-[0_10px_25px_rgba(3,6,14,0.65)]" />
+          <strong className="text-lg tracking-wide">Vortex</strong>
+          <div className="w-px h-6 bg-gray-700/70" />
           <span className="text-sm text-gray-400">Video Compositor</span>
         </div>
 

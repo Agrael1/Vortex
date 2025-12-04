@@ -1,6 +1,6 @@
 import 'react-mosaic-component/react-mosaic-component.css';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Mosaic, MosaicWindow, MosaicNode } from 'react-mosaic-component';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Mosaic, MosaicWindow, MosaicNode, MosaicContext, MosaicWindowContext, getAndAssertNodeAtPathExists } from 'react-mosaic-component';
 import { GraphPanel } from '../panels/GraphPanel';
 import { InspectorPanel } from '../panels/InspectorPanel';
 import { NodeLibraryPanel } from '../panels/NodeLibraryPanel';
@@ -36,6 +36,145 @@ const DEFAULT_TREE: MosaicNode<PanelId> = {
 };
 
 const createDefaultTree = (): MosaicNode<PanelId> => JSON.parse(JSON.stringify(DEFAULT_TREE)) as MosaicNode<PanelId>;
+
+type ControlVariant = 'replace' | 'split' | 'expand' | 'close';
+
+const ReplaceIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M7 6h10l-3-3" />
+    <path d="M17 18H7l3 3" />
+    <path d="M7 6v4" />
+    <path d="M17 18v-4" />
+  </svg>
+);
+
+const SplitIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="4" y="5" width="6" height="14" rx="1.5" />
+    <rect x="14" y="5" width="6" height="14" rx="1.5" />
+    <path d="M12 5v14" />
+  </svg>
+);
+
+const ExpandIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M8 5H5v3" />
+    <path d="M16 5h3v3" />
+    <path d="M8 19H5v-3" />
+    <path d="M16 19h3v-3" />
+  </svg>
+);
+
+const CloseIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M7 7l10 10" />
+    <path d="M17 7L7 17" />
+  </svg>
+);
+
+const ICON_COMPONENTS: Record<ControlVariant, React.FC> = {
+  replace: ReplaceIcon,
+  split: SplitIcon,
+  expand: ExpandIcon,
+  close: CloseIcon,
+};
+
+const isPromiseLike = (value: unknown): value is PromiseLike<void> =>
+  typeof value === 'object' && value !== null && typeof (value as PromiseLike<void>).then === 'function';
+
+interface ToolbarButtonProps {
+  variant: ControlVariant;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}
+
+const MosaicToolbarButton = ({ variant, label, onClick, disabled }: ToolbarButtonProps) => {
+  const Icon = ICON_COMPONENTS[variant];
+  const isDisabled = disabled || !onClick;
+
+  return (
+    <button
+      type="button"
+      className={`mosaic-default-control mosaic-default-control-${variant}`}
+      aria-label={label}
+      onClick={
+        isDisabled
+          ? undefined
+          : (event) => {
+              event.stopPropagation();
+              onClick();
+            }
+      }
+      disabled={isDisabled}
+    >
+      <span className="vortex-mosaic-icon" aria-hidden="true">
+        <Icon />
+      </span>
+    </button>
+  );
+};
+
+const MosaicToolbarControls = ({ canCreate }: { canCreate: boolean }) => {
+  const mosaicContext = useContext(MosaicContext);
+  const windowContext = useContext(MosaicWindowContext);
+  const mosaicActions = mosaicContext?.mosaicActions;
+  const windowActions = windowContext?.mosaicWindowActions;
+  const path = windowActions?.getPath?.();
+
+  const guardAndRun = useCallback(
+    (label: string, action?: () => void | Promise<void>) => {
+      if (!mosaicActions || !action || !path) {
+        return undefined;
+      }
+
+      return () => {
+        const root = mosaicActions.getRoot();
+        try {
+          getAndAssertNodeAtPathExists(root, path);
+        } catch (error) {
+          console.warn(`[DockLayout] Skipped "${label}" because the layout path is stale.`, error);
+          return;
+        }
+
+        try {
+          const result = action();
+          if (isPromiseLike(result)) {
+            Promise.resolve(result).catch((err) => console.error(`[DockLayout] ${label} failed`, err));
+          }
+        } catch (error) {
+          console.error(`[DockLayout] ${label} failed`, error);
+        }
+      };
+    },
+    [mosaicActions, path],
+  );
+
+  const replaceAction = windowActions?.replaceWithNew ? () => windowActions.replaceWithNew() : undefined;
+  const splitAction = windowActions?.split ? () => windowActions.split() : undefined;
+  const expandAction = mosaicActions && path ? () => mosaicActions.expand(path) : undefined;
+  const closeAction = mosaicActions && path ? () => mosaicActions.remove(path) : undefined;
+
+  const handleReplace = guardAndRun('Replace panel', replaceAction);
+  const handleSplit = guardAndRun('Split panel', splitAction);
+  const handleExpand = guardAndRun('Expand panel', expandAction);
+  const handleClose = guardAndRun('Close panel', closeAction);
+
+  const buttons: ToolbarButtonProps[] = [
+    { variant: 'replace', label: 'Replace', onClick: handleReplace, disabled: !canCreate },
+    { variant: 'split', label: 'Split', onClick: handleSplit, disabled: !canCreate },
+    { variant: 'expand', label: 'Expand', onClick: handleExpand },
+    { variant: 'close', label: 'Close', onClick: handleClose },
+  ];
+
+  return (
+    <>
+      {buttons.map((button) => (
+        <MosaicToolbarButton key={button.variant} {...button} />
+      ))}
+    </>
+  );
+};
 
 const LAYOUT_STORAGE_PREFIX = 'vortex.editor.layout.v2';
 
@@ -227,8 +366,13 @@ export function DockLayout() {
       <div className="flex-1">
         <Mosaic<PanelId>
           renderTile={(id, path) => (
-            <MosaicWindow<PanelId> path={path} createNode={() => 'graph'} title={TITLE[id]}>
-              <div className="w-full h-full bg-ui-panel border border-ui-border rounded-lg overflow-hidden">{RENDER(id)}</div>
+            <MosaicWindow<PanelId>
+              path={path}
+              createNode={() => 'graph'}
+              title={TITLE[id]}
+              toolbarControls={<MosaicToolbarControls canCreate={true} />}
+            >
+              <div className="w-full h-full bg-ui-panel border border-ui-border overflow-hidden">{RENDER(id)}</div>
             </MosaicWindow>
           )}
           value={tree}

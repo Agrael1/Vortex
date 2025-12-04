@@ -253,14 +253,14 @@ export const CustomNode = memo(({ data, selected }: CustomNodeProps) => {
   return (
     <div
       className={`
-        relative px-4 py-3 rounded-xl border transition-all duration-200
-        min-w-[150px] max-w-[240px] bg-[#0d1012]
-        ${selected ? 'border-transparent ring-2 ring-blue-400 shadow-lg shadow-blue-400/20' : 'border-gray-700'}
+        relative px-4 py-3 rounded-2xl border transition-all duration-200
+        min-w-[150px] max-w-[240px] bg-[#081121]
+        ${selected ? 'border-transparent ring-2 ring-[#8FD3FF] shadow-lg shadow-[#8FD3FF]/30' : 'border-gray-700/60'}
       `}
       style={{
-        backgroundImage: 'linear-gradient(145deg, rgba(255,255,255,0.03), rgba(0,0,0,0.1))',
-        boxShadow: selected ? `0 0 20px ${accentColor}30` : '0 4px 14px rgba(0,0,0,0.35)',
-        borderColor: selected ? accentColor : 'rgba(148,163,184,0.3)',
+        background: 'linear-gradient(145deg, rgba(9,17,33,0.98), rgba(6,12,24,0.95))',
+        boxShadow: selected ? `0 0 28px ${accentColor}40` : '0 12px 30px rgba(3, 7, 18, 0.55)',
+        borderColor: selected ? accentColor : 'rgba(50,74,115,0.6)',
       }}
     >
       {previewUrl && (

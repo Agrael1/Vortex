@@ -57,9 +57,6 @@ export function NodeLibraryPanel() {
 
   return (
     <div className="p-3" style={{ height: '100%', overflow: 'auto' }}>
-      <div className="text-sm font-semibold mb-3" style={{ color: '#ddd' }}>
-        Node Library
-      </div>
 
       {loadError && (
         <div className="text-red-400 text-xs mb-3 p-2 rounded" style={{ background: '#3a1a1a' }}>
@@ -81,12 +78,13 @@ export function NodeLibraryPanel() {
         style={{
           width: '100%',
           marginBottom: 12,
-          padding: '6px 8px',
-          background: '#1a1a1a',
-          border: '1px solid #333',
-          borderRadius: 4,
-          color: '#ddd',
+          padding: '8px 10px',
+          background: 'rgba(8, 16, 32, 0.95)',
+          border: '1px solid rgba(143, 211, 255, 0.25)',
+          borderRadius: 12,
+          color: '#f3f6ff',
           fontSize: 12,
+          boxShadow: '0 10px 25px rgba(2, 6, 14, 0.6)',
         }}
       />
 
@@ -98,14 +96,20 @@ export function NodeLibraryPanel() {
             draggable
             onDragStart={(e) => onDragStart(e, t)}
             className="
-              flex items-center gap-2 p-2 rounded-md text-left transition-all duration-200
-              bg-gray-800/50 hover:bg-gray-700/70 border border-gray-600 hover:border-gray-500
-              text-gray-200 text-sm cursor-grab active:cursor-grabbing
-              hover:shadow-md
+              flex items-center gap-3 p-3 rounded-2xl text-left transition-all duration-200
+              text-sm cursor-grab active:cursor-grabbing
             "
+            style={
+              {
+                background: 'linear-gradient(135deg, rgba(8, 16, 32, 0.95), rgba(5, 10, 22, 0.95))',
+                border: '1px solid rgba(143, 211, 255, 0.18)',
+                color: '#f3f6ff',
+                boxShadow: '0 15px 40px rgba(2, 6, 14, 0.55)',
+              }
+            }
             title={`Drag to add ${t} node or click to create at default position`}
           >
-            <div className="w-6 h-6 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs">
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/15 text-cyan-300 flex items-center justify-center text-xs">
               {t.includes('Input') ? '📥' : t.includes('Output') ? '📤' : '⚙️'}
             </div>
             <span className="flex-1">{t}</span>

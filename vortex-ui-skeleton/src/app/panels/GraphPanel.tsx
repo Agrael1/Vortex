@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   ReactFlow,
@@ -684,6 +685,7 @@ function GraphInner() {
       onDragOver={onDragOver}
     >
       <ReactFlow
+        className="vortex-flow"
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -697,9 +699,27 @@ function GraphInner() {
         onMoveStart={closeActionBubbles}
         fitView
       >
-        <MiniMap />
-        <Controls />
-        <Background />
+        <MiniMap
+          className="vortex-flow-minimap"
+          maskColor="rgba(1, 3, 10, 0.82)"
+          nodeColor={(node) => (node.selected ? '#8fd3ff' : '#4a5a78')}
+          nodeStrokeColor={(node) => (node.selected ? '#8fd3ff' : '#1f2a3d')}
+          nodeBorderRadius={6}
+          pannable
+          zoomable
+          style={{
+            background: 'rgba(5, 8, 18, 0.92)',
+            borderRadius: 12,
+            boxShadow: '0 20px 45px rgba(0, 0, 0, 0.45)',
+          }}
+        />
+        <Controls className="vortex-flow-controls" />
+        <Background
+          color="rgba(143, 211, 255, 0.16)"
+          gap={28}
+          lineWidth={0.8}
+          variant={BackgroundVariant.Lines}
+        />
       </ReactFlow>
       {edgeBubble ? <DeleteBubble position={edgeBubble.position} onConfirm={handleEdgeDelete} /> : null}
       {nodeBubble ? <DeleteBubble position={nodeBubble.position} onConfirm={handleNodeDelete} /> : null}

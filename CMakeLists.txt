@@ -244,6 +244,12 @@ if(EXISTS "${VORTEX_FAVICON_SRC}")
             "$<TARGET_FILE_DIR:${PROJECT_NAME}>/favicon.ico"
     COMMENT "Copying favicon.ico to runtime root"
   )
+  add_custom_command(TARGET vortex_ui_copy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VORTEX_FAVICON_SRC}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/ui/favicon.ico"
+    COMMENT "Copying favicon.ico into runtime/ui"
+  )
 endif()
 
 # dependencies

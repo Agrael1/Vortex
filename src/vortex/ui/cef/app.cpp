@@ -99,8 +99,18 @@ bool vortex::ui::VortexResourceHandler::Open(CefRefPtr<CefRequest> request, bool
         return false;
     }
     if (!std::filesystem::exists(resolved_path)) {
-        vortex::error("VortexResourceHandler::Open: Resource not found: {}", resolved_path.string());
-        return false; // Resource not found
+        const auto requested_name = relative_path.filename();
+        if (requested_name == "favicon.ico") {
+            auto fallback = (RuntimeRoot() / "ui" / requested_name).lexically_normal();
+            if (std::filesystem::exists(fallback)) {
+                vortex::warn("VortexResourceHandler::Open: Using UI fallback for favicon at {}", fallback.string());
+                resolved_path = fallback;
+            }
+        }
+        if (!std::filesystem::exists(resolved_path)) {
+            vortex::error("VortexResourceHandler::Open: Resource not found: {}", resolved_path.string());
+            return false; // Resource not found
+        }
     }
     std::error_code size_error;
     _file_size = std::filesystem::file_size(resolved_path, size_error);

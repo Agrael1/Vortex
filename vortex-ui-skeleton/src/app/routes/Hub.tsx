@@ -175,6 +175,11 @@ export function Hub() {
     return filtered.sort(compareRecents);
   }, [recents, searchTerm]);
 
+  const projectHistory = useMemo(() => {
+    const ordered = [...recents].sort(compareRecents);
+    return ordered.filter((item) => (lastProject ? item.path !== lastProject.path : true)).slice(0, 4);
+  }, [lastProject, recents]);
+
   const delayOptions = useMemo(
     () => buildDelayOptions(SPLASH_AUTO_DELAY_PRESETS, autoDelay),
     [autoDelay],
@@ -588,33 +593,27 @@ export function Hub() {
   );
 
   return (
-    <div className="min-h-screen bg-ui-bg text-white">
-      <div className="max-w-6xl mx-auto w-full px-6 py-12 space-y-10">
-        <header className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-2">
-            <span className="text-xs uppercase tracking-[0.4em] text-gray-500">Vortex Hub</span>
-            <h1 className="text-3xl font-semibold">Welcome back</h1>
-            <p className="text-sm text-gray-400 max-w-xl">
-              Manage projects, templates, and reference material from a single control center.
+    <div className="relative min-h-screen overflow-hidden bg-[#030714] text-white">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-48 right-[-10%] h-[520px] w-[520px] rounded-full bg-sky-500/25 blur-[240px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(15,118,254,0.16),_transparent_70%)] opacity-70" />
+        <div className="absolute -bottom-56 left-[-20%] h-[520px] w-[520px] rounded-full bg-indigo-600/25 blur-[260px]" />
+      </div>
+
+      <div className="relative z-10 mx-auto w-full max-w-6xl px-6 py-12 space-y-10">
+        <header className="space-y-6">
+          <div className="space-y-4">
+            <p className="text-xs uppercase tracking-[0.55em] text-sky-200/70">Command hub</p>
+            <h1 className="text-4xl font-semibold leading-tight text-white">Manage your Vortex sessions</h1>
+            <p className="text-base text-gray-400 max-w-3xl">
+              Launch scenes, open recent layouts, and grab resources without leaving this screen.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            {lastProject && (
-              <button
-                type="button"
-                onClick={() => openProjectByPath(lastProject.path)}
-                disabled={busyPath === lastProject.path}
-                className={`${ACCENT_BUTTON} min-w-[200px] justify-center disabled:opacity-60`}
-                title={lastProject.path}
-              >
-                <span>←</span>
-                <span className="truncate max-w-[160px]">Back to {lastProject.name}</span>
-              </button>
-            )}
             <button
               type="button"
               onClick={() => openCreateModal()}
-              className={SECONDARY_BUTTON}
+              className={`${ACCENT_BUTTON} min-w-[160px] justify-center`}
             >
               <span>＋</span>
               <span>New project</span>
@@ -622,52 +621,64 @@ export function Hub() {
             <button
               type="button"
               onClick={handleOpenFromDisk}
-              className={SECONDARY_BUTTON}
+              className={`${SECONDARY_BUTTON} min-w-[150px] justify-center`}
             >
               <span>📂</span>
-              <span>Open…</span>
+              <span>Open project</span>
             </button>
             <button
               type="button"
               onClick={fetchRecents}
-              className={GHOST_BUTTON}
+              className={`${GHOST_BUTTON} min-w-[120px] justify-center`}
             >
               <span>⟳</span>
               <span>Refresh</span>
             </button>
+            {lastProject && (
+              <button
+                type="button"
+                onClick={() => openProjectByPath(lastProject.path)}
+                disabled={busyPath === lastProject.path}
+                className={`${SECONDARY_BUTTON} min-w-[180px] justify-center disabled:opacity-60`}
+                title={lastProject.path}
+              >
+                {busyPath === lastProject.path ? 'Opening…' : `Continue ${lastProject.name}`}
+              </button>
+            )}
           </div>
         </header>
 
         {lastProject && (
-          <section className="rounded-2xl border border-ui-border bg-gradient-to-r from-[#0a101b] via-[#0d141f] to-[#080c13] p-5 shadow-xl shadow-black/30">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <section className="glass-panel relative overflow-hidden rounded-3xl border border-white/10 p-6">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.18),_transparent_70%)]" />
+            <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-4">
-                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-sky-500/40 to-indigo-500/40 text-2xl flex items-center justify-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500/50 to-indigo-500/40 text-2xl">
                   🎬
                 </div>
                 <div className="min-w-0 space-y-2">
-                  <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200/70">Continue last project</p>
-                  <div className="text-xl font-semibold text-white truncate" title={lastProject.name}>
+                  <p className="text-[11px] uppercase tracking-[0.4em] text-sky-200/70">Continue last project</p>
+                  <div className="truncate text-2xl font-semibold text-white" title={lastProject.name}>
                     {lastProject.name}
                   </div>
-                  <div className="text-xs text-gray-400 flex flex-wrap items-center gap-2" title={lastProject.path}>
-                    <span className="truncate max-w-full">{lastProject.path}</span>
-                    {lastProject.template && <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-gray-200">{lastProject.template}</span>}
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-300" title={lastProject.path}>
+                    <span className="truncate max-w-full text-gray-400">{lastProject.path}</span>
+                    {lastProject.template && (
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-gray-100">{lastProject.template}</span>
+                    )}
                     {lastProject.width && lastProject.height && (
-                      <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-gray-200">
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-gray-100">
                         {lastProject.width}×{lastProject.height}
                       </span>
                     )}
                   </div>
                   {lastProject.lastOpened && (
-                    <div className="text-xs text-sky-200/80">
-                      Opened {formatLastUsed(lastProject.lastOpened)}
-                    </div>
+                    <div className="text-xs text-sky-200/90">Opened {formatLastUsed(lastProject.lastOpened)}</div>
                   )}
                 </div>
               </div>
               <div className="flex flex-col gap-3 lg:items-end">
-                <div className="flex flex-wrap gap-3 justify-end">
+                <div className="flex flex-wrap justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => openProjectByPath(lastProject.path)}
@@ -679,36 +690,36 @@ export function Hub() {
                   <button
                     type="button"
                     onClick={handleForgetLastProject}
-                    className={`${SUBTLE_BUTTON} text-xs`}
+                    className={`${SUBTLE_BUTTON} text-[11px]`}
                     aria-label="Forget this project"
                   >
-                    Forget this project
+                    Forget
                   </button>
                   <button
                     type="button"
                     onClick={handleToggleLastProjectPin}
-                    className={`${SUBTLE_BUTTON} text-xs`}
+                    className={`${SUBTLE_BUTTON} text-[11px]`}
                     aria-pressed={lastProjectPinned}
                   >
-                    {lastProjectPinned ? 'Unpin from recents' : 'Pin in recents'}
+                    {lastProjectPinned ? 'Unpin' : 'Pin to recents'}
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-4 text-xs text-gray-400 lg:justify-end">
-                  <label className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-3 text-xs text-gray-300 lg:justify-end">
+                  <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2">
                     <input
                       type="checkbox"
                       checked={autoContinue}
                       onChange={(event) => setAutoContinue(event.target.checked)}
-                      className="h-3.5 w-3.5 rounded border border-ui-border bg-black/40 text-sky-400 focus:ring-sky-400"
+                      className="h-3.5 w-3.5 rounded border-white/30 bg-black/60 text-sky-400 focus:ring-sky-400"
                     />
-                    Auto-continue on launch
+                    Auto-continue
                   </label>
-                  <label className="flex items-center gap-2">
-                    <span>Auto-continue delay</span>
+                  <label className="flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-gray-200">
+                    <span>Delay</span>
                     <select
                       value={autoDelay}
                       onChange={handleDelayChange}
-                      className="rounded border border-ui-border bg-black/40 px-2 py-1 text-gray-100 focus:border-sky-500/60 focus:outline-none"
+                      className="rounded-lg border border-white/15 bg-black/80 px-2 py-1 text-gray-100 focus:border-sky-500/60 focus:outline-none"
                     >
                       {delayOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -717,12 +728,12 @@ export function Hub() {
                       ))}
                     </select>
                   </label>
-                  <label className="flex items-center gap-2">
-                    <span>Splash fallback delay</span>
+                  <label className="flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-gray-200">
+                    <span>Fallback</span>
                     <select
                       value={fallbackDelay}
                       onChange={handleFallbackDelayChange}
-                      className="rounded border border-ui-border bg-black/40 px-2 py-1 text-gray-100 focus:border-sky-500/60 focus:outline-none"
+                      className="rounded-lg border border-white/15 bg-black/80 px-2 py-1 text-gray-100 focus:border-sky-500/60 focus:outline-none"
                     >
                       {fallbackOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -738,20 +749,20 @@ export function Hub() {
         )}
 
         {actionError && (
-          <div className="rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-3 text-sm text-red-200 space-y-3">
+          <div className="rounded-3xl border border-red-500/30 bg-red-500/10 px-6 py-4 text-sm text-red-100 shadow-[0_15px_60px_rgba(0,0,0,0.45)]">
             <p>{actionError}</p>
             <div className="flex flex-wrap gap-3 text-xs">
               <button
                 type="button"
                 onClick={handleOpenFromDisk}
-                className="rounded border border-red-500/50 px-3 py-1 text-red-100 transition hover:bg-red-500/20"
+                className="rounded-xl border border-red-500/40 px-3 py-1 text-red-100 transition hover:border-red-400"
               >
                 Choose another file
               </button>
               <button
                 type="button"
                 onClick={handleForgetLastProject}
-                className="rounded border border-red-500/30 px-3 py-1 text-red-100 transition hover:bg-red-500/20"
+                className="rounded-xl border border-red-500/30 px-3 py-1 text-red-100 transition hover:border-red-400"
               >
                 Forget last project
               </button>
@@ -760,35 +771,37 @@ export function Hub() {
         )}
 
         <div className="grid gap-8 lg:grid-cols-[2fr,1fr]">
-          <section className="space-y-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold">Recent projects</h2>
-                <p className="text-sm text-gray-500">Your latest scenes and workspaces</p>
+          <section className="space-y-5 rounded-3xl border border-white/10 bg-black/30 p-6 shadow-[0_25px_80px_rgba(2,6,23,0.75)]">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200/70">Navigator</p>
+                <h2 className="text-2xl font-semibold">Project history</h2>
+                <p className="text-sm text-gray-400">Jump back into the flows you touched most recently.</p>
               </div>
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
-                <div className="relative">
+              <div className="flex flex-col gap-2 md:items-end">
+                <div className="relative w-full md:w-64">
                   <input
                     type="search"
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Search projects…"
-                    className="w-full rounded-lg border border-ui-border bg-black/40 px-3 py-1.5 text-sm text-gray-200 placeholder:text-gray-500 focus:border-blue-500/60 focus:outline-none md:w-64"
+                    placeholder="Search projects"
+                    className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-gray-100 placeholder:text-gray-500 focus:border-sky-400/70 focus:outline-none"
                   />
                   {searchTerm && (
                     <button
                       type="button"
                       onClick={() => setSearchTerm('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-200"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 transition hover:text-gray-200"
                     >
                       ✕
                     </button>
                   )}
                 </div>
-                <div className="text-xs text-gray-500 text-right">
-                  {isLoading && <span>Loading…</span>}
+                <div className="text-xs text-gray-500">
+                  {isLoading && sortedRecents.length === 0 && <span>Loading…</span>}
+                  {isLoading && sortedRecents.length > 0 && <span>Refreshing…</span>}
                   {!isLoading && loadError && <span className="text-red-300">{loadError}</span>}
-                  {!isLoading && !loadError && <span>{sortedRecents.length} items</span>}
+                  {!isLoading && !loadError && <span>{sortedRecents.length} tracked</span>}
                 </div>
               </div>
             </div>
@@ -799,44 +812,44 @@ export function Hub() {
               onKeyDown={handleListKeyDown}
               role="listbox"
               aria-label="Recent projects"
-              className="rounded-2xl border border-ui-border bg-ui-panel focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              className="glass-panel relative rounded-3xl border border-white/10 p-2 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
             >
-              {isLoading ? (
-                <div className="divide-y divide-ui-border/70">
+              {isLoading && sortedRecents.length === 0 ? (
+                <div className="divide-y divide-white/5">
                   {Array.from({ length: 3 }).map((_, idx) => (
                     <div key={idx} className="flex items-center gap-4 px-5 py-4 animate-pulse">
-                      <div className="h-12 w-12 rounded-lg bg-slate-700/50" />
+                      <div className="h-12 w-12 rounded-2xl bg-white/5" />
                       <div className="flex-1 space-y-2">
-                        <div className="h-3 w-1/3 rounded bg-slate-700/60" />
-                        <div className="h-2.5 w-2/3 rounded bg-slate-700/40" />
+                        <div className="h-3 w-1/3 rounded bg-white/10" />
+                        <div className="h-2.5 w-2/3 rounded bg-white/5" />
                       </div>
                     </div>
                   ))}
                 </div>
               ) : sortedRecents.length === 0 ? (
-                <div className="px-8 py-12 text-center text-sm text-gray-400">
-                  <div className="text-4xl mb-4">🌀</div>
-                  <p className="text-base text-gray-200 mb-2">Your projects will appear here</p>
-                  <p className="mb-4">Create a new scene or provide a path to an existing project file.</p>
+                <div className="px-8 py-12 text-center text-sm text-gray-300">
+                  <div className="text-5xl mb-4">🌀</div>
+                  <p className="text-base text-gray-100 mb-2">Your projects will appear here</p>
+                  <p className="mb-6 text-gray-400">Create a new scene or pull an existing layout from disk.</p>
                   <div className="flex justify-center gap-3">
                     <button
                       type="button"
                       onClick={() => openCreateModal()}
-                      className="rounded-lg border border-ui-border bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:border-blue-500/60 hover:text-blue-300"
+                      className="rounded-2xl border border-white/15 bg-sky-500/10 px-4 py-2 text-sm text-sky-100 transition hover:border-sky-400/60"
                     >
                       New project
                     </button>
                     <button
                       type="button"
                       onClick={handleOpenFromDisk}
-                      className="rounded-lg border border-ui-border bg-black/30 px-4 py-2 text-sm text-gray-200 transition hover:border-blue-500/60 hover:text-blue-300"
+                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-100 transition hover:border-sky-400/60"
                     >
                       Open file…
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="grid gap-3 p-4 sm:grid-cols-2">
+                <div className="grid gap-4 p-4 sm:grid-cols-2">
                   {sortedRecents.map((project, index) => {
                     const detailChips: string[] = [];
                     if (project.template) detailChips.push(project.template);
@@ -855,11 +868,15 @@ export function Hub() {
                         onClick={() => openProjectByPath(project.path)}
                         onMouseEnter={() => setFocusedIndex(index)}
                         onFocus={() => setFocusedIndex(index)}
-                        className={`group relative rounded-2xl border bg-black/20 p-4 transition cursor-pointer hover:border-sky-400/60 hover:bg-white/5 ${
-                          isFocused ? 'border-sky-500/70 ring-2 ring-sky-400/40' : 'border-ui-border/70'
+                        className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-white/10 to-white/[0.03] p-4 transition cursor-pointer hover:border-sky-400/60 hover:shadow-[0_20px_50px_rgba(8,47,73,0.55)] ${
+                          isFocused ? 'border-sky-500/70 ring-2 ring-sky-400/40' : 'border-white/10'
                         }`}
                       >
-                        <div className="flex items-start gap-3">
+                        <div
+                          className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100"
+                          style={{ background: 'radial-gradient(circle at top, rgba(56,189,248,0.25), transparent 70%)' }}
+                        />
+                        <div className="relative flex items-start gap-3">
                           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-lg">
                             {project.template ? <span>{project.template.slice(0, 1)}</span> : <span>🎬</span>}
                           </div>
@@ -912,7 +929,7 @@ export function Hub() {
                             )}
                           </div>
                         </div>
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-400">
+                        <div className="relative mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-300">
                           <span>Last opened {formatLastUsed(project.last)}</span>
                           <div className="flex flex-wrap gap-2">
                             <button
@@ -941,7 +958,7 @@ export function Hub() {
                         </div>
 
                         {isMenuOpen && (
-                          <div className="absolute right-4 top-12 z-20 w-48 rounded-xl border border-ui-border bg-ui-panel shadow-lg">
+                          <div className="absolute right-4 top-12 z-20 w-48 rounded-2xl border border-white/10 bg-black/80 shadow-[0_20px_45px_rgba(2,6,23,0.85)]">
                             <button
                               type="button"
                               onClick={() => openProjectByPath(project.path)}
@@ -988,10 +1005,11 @@ export function Hub() {
           </section>
 
           <aside className="space-y-6">
-            <section className="space-y-4 rounded-2xl border border-ui-border bg-ui-panel p-6">
-              <div>
-                <h2 className="text-lg font-semibold">Quick start</h2>
-                <p className="text-sm text-gray-500">Pick a preset and tailor the scene in a few clicks.</p>
+            <section className="space-y-5 rounded-3xl border border-white/10 bg-black/20 p-6 shadow-[0_20px_60px_rgba(2,6,23,0.65)]">
+              <div className="space-y-1">
+                <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200/70">Presets</p>
+                <h2 className="text-xl font-semibold text-white">Quick start</h2>
+                <p className="text-sm text-gray-400">Pick a tuned template, tweak settings, and launch.</p>
               </div>
 
               <div className="space-y-3">
@@ -1000,47 +1018,51 @@ export function Hub() {
                     key={template.name}
                     type="button"
                     onClick={() => openCreateModal(template)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-transparent bg-white/5 px-4 py-3 text-left transition hover:border-blue-500/60 hover:text-blue-200"
+                    className="group flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:border-sky-400/70 hover:bg-white/10"
                   >
-                    <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${template.accent}`}>{template.icon}</span>
+                    <span className={`flex h-12 w-12 items-center justify-center rounded-2xl text-xl ${template.accent}`}>{template.icon}</span>
                     <span className="flex-1">
                       <span className="block text-sm font-medium text-gray-100">{template.name}</span>
                       <span className="block text-xs text-gray-500">{template.description}</span>
                     </span>
-                    <span className="text-xs text-blue-300">Configure</span>
+                    <span className="text-xs text-sky-300 transition group-hover:text-white">Configure</span>
                   </button>
                 ))}
               </div>
             </section>
 
-            <section className="space-y-4 rounded-2xl border border-ui-border bg-ui-panel p-6">
-              <div>
-                <h2 className="text-lg font-semibold">Resources</h2>
-                <p className="text-sm text-gray-500">Documentation and support to keep moving fast.</p>
+            <section className="space-y-5 rounded-3xl border border-white/10 bg-black/20 p-6 shadow-[0_20px_60px_rgba(2,6,23,0.65)]">
+              <div className="space-y-1">
+                <p className="text-[11px] uppercase tracking-[0.35em] text-purple-200/70">Guides</p>
+                <h2 className="text-xl font-semibold text-white">Resources</h2>
+                <p className="text-sm text-gray-400">Documentation, community, and planning tools.</p>
               </div>
-              <div className="space-y-2 text-sm">
+              <div className="space-y-3 text-sm">
                 <a
-                  className="block rounded-lg border border-transparent px-3 py-2 text-gray-300 transition hover:border-blue-500/60 hover:bg-white/5 hover:text-blue-200"
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-gray-200 transition hover:border-sky-400/70 hover:text-white"
                   href="https://github.com/RRotoko/Vortex"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  📚 Engine documentation
+                  <span>📚 Engine documentation</span>
+                  <span className="text-xs text-gray-400">↗</span>
                 </a>
                 <a
-                  className="block rounded-lg border border-transparent px-3 py-2 text-gray-300 transition hover:border-blue-500/60 hover:bg-white/5 hover:text-blue-200"
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-gray-200 transition hover:border-sky-400/70 hover:text-white"
                   href="https://discord.gg/"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  💬 Community & support
+                  <span>💬 Community & support</span>
+                  <span className="text-xs text-gray-400">↗</span>
                 </a>
                 <button
                   type="button"
                   onClick={() => window.open('https://trello.com/', '_blank')}
-                  className="block w-full rounded-lg border border-transparent px-3 py-2 text-left text-gray-300 transition hover:border-blue-500/60 hover:bg-white/5 hover:text-blue-200"
+                  className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-gray-200 transition hover:border-sky-400/70 hover:text-white"
                 >
-                  📝 Roadmap
+                  <span>📝 Roadmap</span>
+                  <span className="text-xs text-gray-400">↗</span>
                 </button>
               </div>
             </section>

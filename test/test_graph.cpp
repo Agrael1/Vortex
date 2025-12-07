@@ -1,5 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include "mock_model.h"
+#include <tuple>
+#include <vector>
+#include <string>
 
 class GraphTest
 {
@@ -100,4 +103,50 @@ TEST_CASE_METHOD(GraphTest, "Connection.DeleteNodeRemovesAllConnections", "[conn
     // Verify n1 no longer exists in the model
     auto deleted_node = model.GetNode(n1);
     REQUIRE(deleted_node == nullptr);
+}
+
+TEST_CASE_METHOD(GraphTest, "Edge callbacks fire on connect/disconnect", "[connect][events]")
+{
+    std::vector<std::tuple<uintptr_t, int32_t, uintptr_t, int32_t, std::string>> events;
+
+    model.SetEdgeEventCallbacks(
+            [&](uintptr_t source_ptr,
+                int32_t source_slot,
+                uintptr_t target_ptr,
+                int32_t target_slot) {
+                events.emplace_back(source_ptr, source_slot, target_ptr, target_slot, "connect");
+            },
+            [&](uintptr_t source_ptr,
+                int32_t source_slot,
+                uintptr_t target_ptr,
+                int32_t target_slot) {
+                events.emplace_back(source_ptr, source_slot, target_ptr, target_slot, "disconnect");
+            });
+
+    auto src = CreateNode("ImageInput");
+    auto dst = CreateNode("MockOutput");
+    REQUIRE(src != 0);
+    REQUIRE(dst != 0);
+
+    REQUIRE(model.ConnectNodes(src, 0, dst, 0));
+    REQUIRE(events.size() == 1);
+    auto [connect_src, connect_src_slot, connect_dst, connect_dst_slot, connect_kind] = events.front();
+    REQUIRE(connect_kind == "connect");
+    REQUIRE(connect_src == src);
+    REQUIRE(connect_dst == dst);
+    REQUIRE(connect_src_slot == 0);
+    REQUIRE(connect_dst_slot == 0);
+
+    REQUIRE(model.DisconnectNodes(src, 0, dst, 0));
+    REQUIRE(events.size() == 2);
+    auto [disconnect_src,
+          disconnect_src_slot,
+          disconnect_dst,
+          disconnect_dst_slot,
+          disconnect_kind] = events.back();
+    REQUIRE(disconnect_kind == "disconnect");
+    REQUIRE(disconnect_src == src);
+    REQUIRE(disconnect_dst == dst);
+    REQUIRE(disconnect_src_slot == 0);
+    REQUIRE(disconnect_dst_slot == 0);
 }

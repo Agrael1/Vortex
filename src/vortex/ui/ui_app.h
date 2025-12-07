@@ -3,6 +3,11 @@
 #include <vortex/ui/sdl.h>
 #include <vortex/ui/value.h>
 #include <optional>
+#include <functional>
+#include <filesystem>
+#include <vector>
+#include <type_traits>
+#include <vortex/ui/message_routing.h>
 
 namespace vortex::ui {
 class UIApp
@@ -52,6 +57,18 @@ public:
 
         return 0;
     }
+    void MinimizeWindow()
+    {
+        if (_window) {
+            _window->Minimize();
+        }
+    }
+    void ToggleMaximizeWindow()
+    {
+        if (_window) {
+            _window->ToggleMaximize();
+        }
+    }
     void BindMessageHandler(Client::MessageHandler callback)
     {
         _cef_client->BindMessageHandler(std::move(callback));
@@ -60,6 +77,11 @@ public:
     {
         return _cef_client;
     }
+
+    void ShowOpenFileDialog(const std::vector<std::string>& filters,
+                            std::function<void(std::vector<std::filesystem::path>)> callback,
+                            std::string title = "Select file");
+    void ShowSelectFolderDialog(std::function<void(std::vector<std::filesystem::path>)> callback);
 
     template<typename... Args>
     void SendUIMessage(std::u16string_view message_name, Args&&... args)
@@ -79,7 +101,12 @@ public:
             // Add arguments to the message
             if constexpr (size > 0) {
                 size_t i = 0;
-                (value_traits<std::remove_reference_t<std::remove_all_extents_t<Args>>>::add_value(*msg_args, i++, std::forward<Args>(args)), ...);
+                (
+                    value_traits<std::remove_const_t<std::remove_reference_t<std::remove_all_extents_t<Args>>>>::add_value(
+                        *msg_args,
+                        i++,
+                        std::forward<Args>(args)),
+                    ...);
             }
 
             // Send the message
@@ -90,6 +117,13 @@ public:
     void SendUIReturn(Args&&... args)
     {
         SendUIMessage(u"co_return", std::forward<Args>(args)...);
+    }
+
+    template<typename... Args>
+    void SendRoutedUIReturn(uint64_t request_id, Args&&... args)
+    {
+        auto routed = vortex::ui::BuildRoutedMessageName(u"co_return", request_id);
+        SendUIMessage(routed.ToString16(), std::forward<Args>(args)...);
     }
 
     void ExecuteJavaScript(std::string_view script)

@@ -43,6 +43,14 @@ public:
     {
         return id;
     }
+    bool IsMinimized() const noexcept
+    {
+        if (!window) {
+            return false;
+        }
+        const auto flags = SDL_GetWindowFlags(window);
+        return (flags & SDL_WINDOW_MINIMIZED) != 0;
+    }
 
 public:
     wis::SwapChain CreateSwapchain(const vortex::Graphics& gfx, const wis::SwapchainDesc& desc) const noexcept;
@@ -66,6 +74,31 @@ public:
     void SetSize(int width, int height) noexcept
     {
         SDL_SetWindowSize(window, width, height);
+    }
+    void Minimize() noexcept
+    {
+        if (window) {
+            SDL_MinimizeWindow(window);
+        }
+    }
+    void Restore() noexcept
+    {
+        if (window) {
+            SDL_RestoreWindow(window);
+        }
+    }
+    void ToggleMaximize() noexcept
+    {
+        if (!window) {
+            return;
+        }
+
+        const auto flags = SDL_GetWindowFlags(window);
+        if ((flags & SDL_WINDOW_MAXIMIZED) != 0) {
+            SDL_RestoreWindow(window);
+        } else {
+            SDL_MaximizeWindow(window);
+        }
     }
 
 private:

@@ -362,3 +362,36 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /vc140.idb
+
+# CEF binaries
+third_party/cef/**
+!third_party/cef/README.md
+
+# CMake build outputs
+/out/
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+cmake-build-*/
+
+# Node stuff
+/ui/node_modules/
+/ui/dist/
+
+# Generated runtime assets
+/rc/assets/
+/rc/ui/assets/
+/vortex-ui-skeleton/dist/assets/
+
+# VS Code settings
+.vscode/
+
+# CEF cache
+/cef_cache_*/
+
+# Local helper scripts
+scripts/build_engine_release.bat
+
+# Local notes
+chat_handoff.txt
+tech_debt.md

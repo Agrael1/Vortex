@@ -8,8 +8,9 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "cl.exe",
-        "CMAKE_CXX_COMPILER": "cl.exe"
+        "CMAKE_C_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
+        "CMAKE_CXX_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       },
       "condition": {
         "type": "equals",
@@ -26,7 +27,8 @@
         "strategy": "external"
       },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CEF_ROOT": "${sourceDir}/third_party/cef"
       }
     },
     {
@@ -34,7 +36,9 @@
       "displayName": "x64 Release",
       "inherits": "x64-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CEF_ROOT": "${sourceDir}/third_party/cef",
+        "VORTEX_WITH_NDI": "ON"
       }
     },
     {
@@ -78,7 +82,7 @@
       }
     },
     {
-      "name": "macos-debug",
+      "name": "macOS-debug",
       "displayName": "macOS Debug",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
@@ -95,6 +99,16 @@
         "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
           "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
         }
+      }
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "x64-release",
+      "displayName": "x64 Release Tests",
+      "configurePreset": "x64-release",
+      "execution": {
+        "noTestsAction": "error"
       }
     }
   ]

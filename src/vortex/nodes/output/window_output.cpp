@@ -1,5 +1,7 @@
 #include <vortex/nodes/output/window_output.h>
 #include <vortex/graphics.h>
+#include <algorithm>
+#include <chrono>
 
 vortex::WindowOutput::WindowOutput(const vortex::Graphics& gfx, SerializedProperties props)
     : ImplClass(props)
@@ -11,6 +13,13 @@ vortex::WindowOutput::WindowOutput(const vortex::Graphics& gfx, SerializedProper
                             .size = { window_size.x, window_size.y }
 })
 {
+    // Keep the preview window small and windowed by default; cap oversized presets.
+    const uint32_t target_width = std::min<uint32_t>(window_size.x, 960);
+    const uint32_t target_height = std::min<uint32_t>(window_size.y, 540);
+    window_size = { target_width, target_height };
+    _window.SetSize(int(target_width), int(target_height));
+    _window.Minimize(); // Do not pop a visible window until we actually render
+
     wis::Result result = wis::success;
     auto& device = gfx.GetDevice();
 
@@ -123,10 +132,6 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, int64_t pts)
 {
     auto sink = _sinks.sinks[0];
 
-    if (!sink) {
-        return false; // No source connected, nothing to render
-    }
-
     // Pass to the sink nodes for post-order processing
     RenderPassForwardDesc desc{
         .current_rt_view = _render_targets[_frame_index],
@@ -163,10 +168,37 @@ bool vortex::WindowOutput::Evaluate(const vortex::Graphics& gfx, int64_t pts)
             },
             _textures[_frame_index]);
 
+    auto render_placeholder = [&]() {
+        static auto last_log_time = std::chrono::steady_clock::now();
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_log_time > std::chrono::seconds(2)) {
+            vortex::info("WindowOutput: No content available, rendering placeholder");
+            last_log_time = now;
+        }
+
+        wis::RenderPassRenderTargetDesc target_desc{
+            .target = desc.current_rt_view,
+            .load_op = wis::LoadOperation::Clear,
+            .store_op = wis::StoreOperation::Store,
+            .clear_value = { 0.12f, 0.12f, 0.14f, 1.f }
+        };
+        wis::RenderPassDesc pass_desc{
+            .target_count = 1,
+            .targets = &target_desc,
+        };
+
+        cmd_list.BeginRenderPass(pass_desc);
+        cmd_list.EndRenderPass();
+    };
+
     // Pass to the next nodes in the graph
-    bool rendered = sink.source_node->Evaluate(gfx, probe, &desc);
-    if (!rendered) {
-        return false; // Rendering failed
+    if (_window.IsMinimized()) {
+        _window.Restore();
+    }
+
+    bool rendered = sink ? sink.source_node->Evaluate(gfx, probe, &desc) : false;
+    if (!sink || !rendered) {
+        render_placeholder();
     }
 
     // Close the render target

@@ -4,6 +4,8 @@
 #include <vortex/util/rational.h>
 #include <charconv>
 #include <DirectXMath.h>
+#include <format>
+#include <iterator>
 #include <span>
 
 namespace vortex {
@@ -64,6 +66,49 @@ struct reflection_traits<I> : reflection_traits_base<I> {
     }
 };
 
+namespace detail {
+inline std::string EscapeJsonString(std::string_view input) noexcept
+{
+    std::string result;
+    result.reserve(input.size() + 2);
+    result.push_back('"');
+    for (unsigned char ch : input) {
+        switch (ch) {
+        case '"':
+            result += "\\\"";
+            break;
+        case '\\':
+            result += "\\\\";
+            break;
+        case '\b':
+            result += "\\b";
+            break;
+        case '\f':
+            result += "\\f";
+            break;
+        case '\n':
+            result += "\\n";
+            break;
+        case '\r':
+            result += "\\r";
+            break;
+        case '\t':
+            result += "\\t";
+            break;
+        default:
+            if (ch < 0x20) {
+                std::format_to(std::back_inserter(result), "\\u{:04X}", static_cast<int>(ch));
+            } else {
+                result.push_back(static_cast<char>(ch));
+            }
+            break;
+        }
+    }
+    result.push_back('"');
+    return result;
+}
+} // namespace detail
+
 template<string_type S>
 struct reflection_traits<S> : reflection_traits_base<S> {
     static constexpr bool deserialize(S* obj, std::string_view data) noexcept
@@ -73,7 +118,14 @@ struct reflection_traits<S> : reflection_traits_base<S> {
     }
     static std::string serialize(const S& obj) noexcept
     {
-        return std::format("\"{}\"", obj); // Convert string to string
+        if constexpr (std::is_pointer_v<S>) {
+            if (obj == nullptr) {
+                return "\"\"";
+            }
+            return detail::EscapeJsonString(std::string_view(obj));
+        } else {
+            return detail::EscapeJsonString(std::string_view(obj));
+        }
     }
 };
 

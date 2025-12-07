@@ -1,5 +1,6 @@
 #include <vortex/graph/output_scheduler.h>
 #include <vortex/util/log.h>
+#include <bit>
 
 void vortex::graph::OutputScheduler::RemoveOutput(IOutput* output) noexcept
 {
@@ -92,6 +93,7 @@ vortex::graph::OutputScheduler::GetNextReadyOutput() noexcept
         next_info.AdvanceToNextFrame(next_info.output->GetOutputFPS());
         std::push_heap(_scheduler.begin(), _scheduler.end(), std::greater<>{});
         UpdateUpperBound(next_info.next_pts); // Update upper boundary
+        RecordDroppedFrame(next_info.output);
         // Report dropped frame (could log or count this event)
         vortex::warn("OutputScheduler: Dropped frame for output due to being overdue. Output: {}",
                      next_info.output->GetInfo());
@@ -102,10 +104,63 @@ vortex::graph::OutputScheduler::GetNextReadyOutput() noexcept
         auto present_pts = next_info.AdvanceToNextFrame(next_info.output->GetOutputFPS());
         UpdateUpperBound(next_info.next_pts); // Update upper boundary
         std::push_heap(_scheduler.begin(), _scheduler.end(), std::greater<>{});
+        RecordPresentedFrame();
         return { output, present_pts }; // Return the output and its presentation timestamp
     } else {
         // Case 3: Output is not due yet, push back and return null
         std::push_heap(_scheduler.begin(), _scheduler.end(), std::greater<>{});
         return { nullptr, invalid_pts };
     }
+}
+
+vortex::graph::OutputSchedulerStats vortex::graph::OutputScheduler::SampleStats() noexcept
+{
+    UpdateStatsWindow();
+
+    const auto now = StatsClock::now();
+    const auto idle_duration = now - _last_stats_publish;
+    if (idle_duration > 2 * kStatsWindow && _stats_window_presented == 0) {
+        _stats_current_fps = 0.0;
+        _stats_current_dropped = 0;
+    }
+
+    return { _stats_current_fps, _stats_current_dropped, _stats_last_drop_hint, _stats_last_drop_id };
+}
+
+void vortex::graph::OutputScheduler::RecordPresentedFrame() noexcept
+{
+    ++_stats_window_presented;
+    UpdateStatsWindow();
+}
+
+void vortex::graph::OutputScheduler::RecordDroppedFrame(const IOutput* output) noexcept
+{
+    ++_stats_window_dropped;
+    if (output) {
+        _stats_last_drop_hint = output->GetInfo();
+        _stats_last_drop_id = std::bit_cast<uintptr_t>(output);
+    }
+    UpdateStatsWindow();
+}
+
+void vortex::graph::OutputScheduler::UpdateStatsWindow(bool force) noexcept
+{
+    const auto now = StatsClock::now();
+    const auto elapsed = now - _stats_window_start;
+
+    if (!force && elapsed < kStatsWindow) {
+        return;
+    }
+
+    if (elapsed <= StatsClock::duration::zero()) {
+        return;
+    }
+
+    const double seconds = std::max(std::chrono::duration<double>(elapsed).count(), 1e-6);
+    _stats_current_fps = _stats_window_presented / seconds;
+    _stats_current_dropped = _stats_window_dropped;
+    _stats_window_presented = 0;
+    _stats_window_dropped = 0;
+    _stats_window_start = now;
+    _last_stats_publish = now;
 }

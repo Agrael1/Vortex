@@ -5,14 +5,26 @@
 #include <include/cef_values.h>
 #include <vortex/util/log.h>
 #include <include/cef_parser.h>
+#include <vortex/ui/message_routing.h>
+#include <utility>
 
 namespace vortex::ui {
+class PromiseRegistry {
+public:
+    virtual ~PromiseRegistry() = default;
+    virtual uint64_t RegisterPromise(CefRefPtr<CefV8Context> context, CefRefPtr<CefV8Value> resolver) = 0;
+};
+
 class VortexV8Handler : public CefImplements<VortexV8Handler, CefV8Handler>
 {
 public:
-    VortexV8Handler()
-        : context(CefV8Context::GetCurrentContext())
+    explicit VortexV8Handler(PromiseRegistry& owner)
+        : _owner(owner)
     {
+        auto context = CefV8Context::GetCurrentContext();
+        if (!context)
+            return;
+
         auto global = context->GetGlobal();
         global->SetValue("vortexCall",
                          CefV8Value::CreateFunction("vortexCall", this),
@@ -30,6 +42,13 @@ public:
                  CefRefPtr<CefV8Value>& retval,
                  CefString& exception) override
     {
+        auto current_context = CefV8Context::GetCurrentContext();
+        if (!current_context || !current_context->IsValid()) {
+            exception = "V8 context is not available";
+            vortex::error("vortexCall request '{}' failed: current V8 context is invalid", name.ToString());
+            return false;
+        }
+
         if (name == "vortexCall") {
             // Assume there is at least one argument with name of called function
             if (arguments.size() < 1 || !arguments[0]->IsString()) {
@@ -40,7 +59,7 @@ public:
             auto a = CefProcessMessage::Create(arguments[0]->GetStringValue());
             // The second argument shoul be a JSON string with the arguments
             if (arguments.size() < 2) {
-                CefV8Context::GetCurrentContext()->GetFrame()->SendProcessMessage(PID_BROWSER, a);
+                current_context->GetFrame()->SendProcessMessage(PID_BROWSER, a);
                 return true; // No arguments, just call the function
             }
 
@@ -70,7 +89,7 @@ public:
                 }
             }
 
-            CefV8Context::GetCurrentContext()->GetFrame()->SendProcessMessage(PID_BROWSER, a);
+            current_context->GetFrame()->SendProcessMessage(PID_BROWSER, a);
             retval = CefV8Value::CreateBool(true); // Indicate success
             return true; // Script executed successfully
         }
@@ -80,7 +99,19 @@ public:
                 exception = "Invalid arguments";
                 return false; // Invalid arguments
             }
-            auto a = CefProcessMessage::Create(arguments[0]->GetStringValue());
+            auto promise = CefV8Value::CreatePromise();
+            if (!promise) {
+                exception = "Failed to create promise";
+                vortex::error("vortexCallAsync '{}' failed: unable to allocate V8 promise", arguments[0]->GetStringValue().ToString());
+                return false;
+            }
+
+            const uint64_t request_id = RegisterPromise(current_context, promise);
+            if (request_id == 0) {
+                exception = "Failed to register promise";
+                return false;
+            }
+            auto a = CefProcessMessage::Create(BuildRoutedMessageName(arguments[0]->GetStringValue(), request_id));
             auto args = a->GetArgumentList();
             args->SetSize(arguments.size() - 1); // Set size to number of arguments excluding the function name + 1 for promise
             for (size_t i = 1; i < arguments.size(); ++i) {
@@ -107,29 +138,38 @@ public:
                 }
             }
 
-            promise = CefV8Value::CreatePromise();
-
-            CefV8Context::GetCurrentContext()->GetFrame()->SendProcessMessage(PID_BROWSER, a);
-
+            DispatchProcessMessage(current_context, std::move(a));
             retval = promise; // Indicate success
             return true; // Script executed successfully
         }
         return false; // Function not found
     }
 
-    void ResolvePromise(CefRefPtr<CefListValue> value)
+private:
+    uint64_t RegisterPromise(CefRefPtr<CefV8Context> context, CefRefPtr<CefV8Value> promise)
     {
-        if (promise->IsPromise()) {
-            context->Enter();
-            promise->ResolvePromise(bridge<v8_value_traits>(std::move(value), 0));
-            context->Exit();
-        } else {
-            vortex::error("Attempted to resolve a non-promise value");
-        }
+        return _owner.RegisterPromise(std::move(context), std::move(promise));
     }
 
-private:
-    CefRefPtr<CefV8Value> promise;
-    CefRefPtr<CefV8Context> context;
+    void DispatchProcessMessage(CefRefPtr<CefV8Context> call_context, CefRefPtr<CefProcessMessage> message)
+    {
+        if (!message) {
+            vortex::error("Attempted to dispatch an empty CEF message");
+            return;
+        }
+        if (!call_context || !call_context->IsValid()) {
+            vortex::error("V8 context is invalid while dispatching message");
+            return;
+        }
+
+        auto frame = call_context->GetFrame();
+        if (!frame) {
+            vortex::error("Failed to dispatch message: no frame available");
+            return;
+        }
+        frame->SendProcessMessage(PID_BROWSER, std::move(message));
+    }
+
+    PromiseRegistry& _owner;
 };
 } // namespace vortex::ui

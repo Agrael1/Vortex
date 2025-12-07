@@ -86,6 +86,7 @@ void vortex::StreamInput::Update(const vortex::Graphics& gfx)
 {
     // Check if the stream URL has changed
     if (url_changed && !stream_url.empty()) {
+        vortex::info("StreamInput: URL changed, reinitializing stream: {}", stream_url);
         InitializeStream();
         url_changed = false;
     }
@@ -96,8 +97,11 @@ void vortex::StreamInput::Update(const vortex::Graphics& gfx)
 void vortex::StreamInput::InitializeStream()
 {
     if (stream_url.empty()) {
+        vortex::warn("StreamInput: InitializeStream - stream_url is empty");
         return;
     }
+
+    vortex::info("StreamInput: Initializing stream with URL: {}", stream_url);
 
     // Optimized settings for low latency and reduced buffering
     ffmpeg::unique_dictionary options;
@@ -111,22 +115,28 @@ void vortex::StreamInput::InitializeStream()
 
     auto context_result = codec::CodecFFmpeg::ConnectToStream(stream_url, std::move(options));
     if (!context_result) {
+        vortex::error("StreamInput: Failed to connect to stream: {}", stream_url);
         return;
     }
 
+    vortex::info("StreamInput: Successfully connected to stream");
     auto& context = context_result.value();
 
     auto channels_result = codec::CodecFFmpeg::GetStreams(context.get());
     if (!channels_result) {
+        vortex::error("StreamInput: Failed to get streams from context");
         return;
     }
 
+    vortex::info("StreamInput: Successfully got stream channels");
     _stream_collection = std::move(channels_result.value());
     _stream_indices[0] = _stream_collection.video_channels[0]->index;
     _stream_indices[1] = _stream_collection.audio_channels[0]->index;
 
     std::array<int, 1> active_indices = { -1 };
     _stream_handle = MakeUniqueStream(std::move(context), active_indices);
+    
+    vortex::info("StreamInput: Stream initialization completed successfully");
 }
 void vortex::StreamInput::DecodeStreamFrames(const vortex::Graphics& gfx)
 {
@@ -158,7 +168,12 @@ bool vortex::StreamInput::Evaluate(const vortex::Graphics& gfx,
 {
     // Check if the texture is valid before rendering
     if (_video_frames.empty()) {
-        // vortex::info("ImageInput: Texture is not valid or has zero size.");
+        static auto last_log_time = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_log_time > std::chrono::seconds(2)) {
+            vortex::info("StreamInput: No video frames available for rendering (stream_url: '{}')", stream_url);
+            last_log_time = now;
+        }
         return false; // Skip rendering if texture is not valid
     }
 

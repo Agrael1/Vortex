@@ -27,11 +27,8 @@ public:
     ImageInput(const vortex::Graphics& gfx, SerializedProperties props)
         : ImplClass(props), _lazy_data(gfx)
     {
-        // Create a root signature for the image input node
-        if (!image_path.empty()) {
-            // Load the texture from the image path
-            path_changed = true; // Mark that the path has changed
-        }
+        // Always mark path as changed to initialize texture (either from file or test pattern)
+        path_changed = true;
     }
 
 public:

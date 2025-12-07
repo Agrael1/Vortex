@@ -7,6 +7,9 @@
 #include <algorithm>
 #include <thread>
 #include <queue>
+#include <chrono>
+#include <string>
+#include <cstdint>
 
 namespace vortex::graph {
 
@@ -62,6 +65,13 @@ public:
     }
 };
 
+struct OutputSchedulerStats {
+    double fps = 0.0;
+    uint32_t dropped_frames = 0;
+    std::string last_drop_hint;
+    uintptr_t last_drop_ptr = 0;
+};
+
 // Manages frame-rate aware scheduling of outputs
 class OutputScheduler
 {
@@ -71,6 +81,7 @@ public:
     void AddOutput(IOutput* output) noexcept;
     void Play();
     std::pair<IOutput*, int64_t> GetNextReadyOutput() noexcept;
+    OutputSchedulerStats SampleStats() noexcept;
 
 private:
     void UpdateUpperBound(uint64_t pts) noexcept
@@ -80,11 +91,26 @@ private:
         }
     }
 
+    void RecordPresentedFrame() noexcept;
+    void RecordDroppedFrame(const IOutput* output) noexcept;
+    void UpdateStatsWindow(bool force = false) noexcept;
+
 private:
+    using StatsClock = std::chrono::steady_clock;
     sync::PTSClock _master_clock;
     std::vector<OutputScheduleInfo> _scheduler; // Double-buffered priority queues for scheduling
 
     uint64_t _upper_boundary_pts = 0; // Last known presentation timestamp from the scheduler
+
+    static constexpr auto kStatsWindow = std::chrono::milliseconds(500);
+    StatsClock::time_point _stats_window_start{ StatsClock::now() };
+    StatsClock::time_point _last_stats_publish{ StatsClock::now() };
+    uint32_t _stats_window_presented = 0;
+    uint32_t _stats_window_dropped = 0;
+    double _stats_current_fps = 0.0;
+    uint32_t _stats_current_dropped = 0;
+    std::string _stats_last_drop_hint;
+    uintptr_t _stats_last_drop_id = 0;
 };
 
 } // namespace vortex::graph

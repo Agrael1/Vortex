@@ -1,0 +1,336 @@
+@layer base {
+  :root {
+    color-scheme: dark;
+    --font-base: 'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    --bg-base: #01030b;
+    --bg-panel: #081022;
+    --bg-panel-soft: #101a2d;
+    --bg-panel-glass: rgba(6, 11, 24, 0.78);
+    --bg-highlight-a: rgba(111, 139, 255, 0.25);
+    --bg-highlight-b: rgba(167, 139, 250, 0.22);
+    --accent-primary: #8fd3ff;
+    --accent-secondary: #7aa7ff;
+    --accent-tertiary: #a78bfa;
+    --accent-warm: #f472b6;
+    --text-main: #f3f6ff;
+    --text-muted: #9fb4d9;
+    --border-subtle: rgba(143, 211, 255, 0.14);
+    --border-strong: rgba(143, 211, 255, 0.32);
+    --shadow-soft: 0 40px 80px rgba(1, 3, 10, 0.85);
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 10px;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-base);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text-main);
+    background-color: var(--bg-base);
+    background-image:
+      radial-gradient(circle at 15% -10%, var(--bg-highlight-a), transparent 55%),
+      radial-gradient(circle at 80% 0%, var(--bg-highlight-b), transparent 65%),
+      radial-gradient(circle at 60% 90%, rgba(96, 176, 255, 0.12), transparent 65%),
+      linear-gradient(135deg, #01030a, #050b17 65%, #02040c);
+    min-height: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(143, 211, 255, 0.12), transparent 55%),
+      radial-gradient(circle at 80% 10%, rgba(167, 139, 250, 0.15), transparent 50%);
+    opacity: 0.6;
+    z-index: -1;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  ::selection {
+    background: rgba(143, 211, 255, 0.35);
+    color: #020305;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(143, 211, 255, 0.35);
+    border-radius: 999px;
+    border: 2px solid rgba(3, 8, 20, 0.6);
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(3, 5, 12, 0.3);
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  a {
+    color: var(--accent-primary);
+  }
+}
+
+@layer components {
+  .surface-card {
+    background: var(--bg-panel-soft);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .glass-panel {
+    background: var(--bg-panel-glass);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-subtle);
+    backdrop-filter: blur(24px);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 1rem;
+    border: 1px solid var(--border-strong);
+    color: var(--text-main);
+    background: linear-gradient(140deg, rgba(8, 12, 20, 0.95), rgba(5, 7, 12, 0.92));
+    box-shadow: 0 14px 40px rgba(143, 211, 255, 0.2);
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .btn-primary:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 18px 45px rgba(143, 211, 255, 0.35);
+    transform: translateY(-1px);
+  }
+
+  .field {
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(143, 211, 255, 0.22);
+    background: rgba(8, 12, 20, 0.75);
+    color: var(--text-main);
+    padding: 0.4rem 0.65rem;
+    min-height: 32px;
+  }
+
+  .field::placeholder {
+    color: var(--text-muted);
+  }
+}
+
+@layer base {
+  .mosaic,
+  .mosaic-root,
+  .mosaic-tile,
+  .mosaic-window {
+    background: transparent;
+  }
+
+  .mosaic-window {
+    border: 1px solid var(--border-subtle);
+    border-radius: 0;
+    overflow: hidden;
+    background: rgba(5, 8, 18, 0.9);
+    box-shadow: 0 24px 60px rgba(1, 3, 10, 0.75);
+  }
+
+  .mosaic-window-toolbar,
+  .mosaic-window > .mosaic-window-toolbar,
+  .mosaic-window .mosaic-window-toolbar.draggable {
+    background-color: #050b16 !important;
+    background-image: none !important;
+    border-bottom: 1px solid rgba(143, 211, 255, 0.18) !important;
+    color: var(--text-main) !important;
+    text-transform: uppercase;
+    font-size: 0.62rem;
+    letter-spacing: 0.24em;
+    font-weight: 600;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    padding-inline: 0.75rem 1rem;
+    box-shadow: none !important;
+  }
+
+  .mosaic-window-title {
+    color: var(--text-muted) !important;
+    letter-spacing: 0.16em;
+  }
+
+  .mosaic-split {
+    background: transparent;
+  }
+
+  .mosaic-split .mosaic-split-line {
+    background: rgba(143, 211, 255, 0.25) !important;
+  }
+
+  .mosaic-split:hover .mosaic-split-line {
+    background: rgba(143, 211, 255, 0.45) !important;
+  }
+}
+
+@layer components {
+  .vortex-flow {
+    background: linear-gradient(135deg, #040814, #08142a);
+    border-radius: var(--radius-lg);
+  }
+
+  .vortex-flow .react-flow__pane {
+    background: transparent;
+  }
+
+  .vortex-flow .react-flow__controls {
+    background: rgba(5, 9, 20, 0.85);
+    border: 1px solid rgba(143, 211, 255, 0.25);
+    border-radius: 999px;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+  }
+
+  .vortex-flow .react-flow__controls button {
+    color: var(--text-muted);
+    border: none;
+  }
+
+  .vortex-flow .react-flow__controls button:hover {
+    color: var(--accent-primary);
+    background: rgba(143, 211, 255, 0.08);
+  }
+
+  .vortex-flow .react-flow__background {
+    opacity: 0.65;
+  }
+
+  .vortex-flow-minimap {
+    border-radius: 12px;
+  }
+
+  .vortex-flow-minimap .react-flow__minimap-node {
+    stroke-width: 1;
+  }
+
+  .mosaic-window-controls {
+    display: flex !important;
+    align-items: center;
+    margin-left: auto !important;
+    gap: 0.35rem;
+  }
+
+  .mosaic-window-controls .mosaic-default-control {
+    font-size: 0 !important;
+    letter-spacing: 0.05em;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid rgba(143, 211, 255, 0.25);
+    border-radius: 999px;
+    text-transform: uppercase;
+    background: rgba(6, 10, 22, 0.94);
+    color: #fff;
+    transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .mosaic-window-controls .mosaic-default-control:hover {
+    border-color: var(--accent-primary);
+    background: rgba(10, 16, 32, 0.9);
+    color: #bfe4ff;
+  }
+
+  .mosaic-window-controls .mosaic-default-control:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-color: rgba(143, 211, 255, 0.18);
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .mosaic-window-controls .vortex-mosaic-icon {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mosaic-window-controls .vortex-mosaic-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    fill: none;
+  }
+
+  .mosaic-window-controls .mosaic-default-control::after {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translate(-50%, 4px);
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(5, 11, 22, 0.95);
+    border: 1px solid rgba(143, 211, 255, 0.25);
+    color: var(--text-main);
+    font-size: 0.55rem;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+
+  .mosaic-window-controls .mosaic-default-control:hover::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  .mosaic-window-controls .mosaic-default-control.mosaic-default-control-replace::after {
+    content: 'Replace';
+  }
+
+  .mosaic-window-controls .mosaic-default-control.mosaic-default-control-split::after {
+    content: 'Split';
+  }
+
+  .mosaic-window-controls .mosaic-default-control.mosaic-default-control-expand::after {
+    content: 'Expand';
+  }
+
+  .mosaic-window-controls .mosaic-default-control.mosaic-default-control-close::after {
+    content: 'Close';
+  }
+}

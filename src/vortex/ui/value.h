@@ -2,6 +2,7 @@
 #include <include/cef_values.h>
 #include <include/cef_v8.h>
 #include <string_view>
+#include <cmath>
 #include <vortex/util/log.h>
 #include <vortex/util/reflection.h>
 
@@ -42,12 +43,14 @@ struct value_traits<bool> {
     }
     static bool extract_value(bool& out, CefListValue& list, size_t index)
     {
-        if (list.GetType(index) != VTYPE_BOOL) {
-            return false;
+        const auto type = list.GetType(index);
+        if (type == VTYPE_BOOL) {
+            out = list.GetBool(index);
+            return true;
         }
 
-        out = list.GetBool(index);
-        return true;
+        vortex::warn("value_traits<bool> expected bool but got {}", reflect::enum_name(type));
+        return false;
     }
 };
 
@@ -75,11 +78,25 @@ struct value_traits<double> {
     }
     static bool extract_value(double& out, CefListValue& list, size_t index)
     {
-        if (list.GetType(index) != VTYPE_DOUBLE) {
-            return false;
+        const auto type = list.GetType(index);
+        if (type == VTYPE_DOUBLE) {
+            out = list.GetDouble(index);
+            return true;
         }
-        out = list.GetDouble(index);
-        return true;
+        if (type == VTYPE_INT) {
+            out = static_cast<double>(list.GetInt(index));
+            return true;
+        }
+        if (type == VTYPE_STRING) {
+            auto raw = list.GetString(index).ToString();
+            try {
+                out = std::stod(raw);
+                return true;
+            } catch (...) {
+            }
+        }
+        vortex::warn("value_traits<double> expected numeric type but got {}", reflect::enum_name(type));
+        return false;
     }
 };
 
@@ -87,15 +104,26 @@ template<>
 struct value_traits<uintptr_t> {
     static void add_value(CefListValue& list, size_t index, uintptr_t value)
     {
-        list.SetDouble(index, std::bit_cast<double>(value));
+        list.SetDouble(index, static_cast<double>(value));
     }
     static bool extract_value(uintptr_t& out, CefListValue& list, size_t index)
     {
-        if (list.GetType(index) != VTYPE_DOUBLE) {
-            return false;
+        const auto type = list.GetType(index);
+        if (type == VTYPE_DOUBLE) {
+            const double candidate = list.GetDouble(index);
+            if (!std::isfinite(candidate)) {
+                return false;
+            }
+            out = static_cast<uintptr_t>(candidate);
+            return true;
         }
-        out = std::bit_cast<uintptr_t>(list.GetDouble(index));
-        return true;
+
+        if (type == VTYPE_INT) {
+            out = static_cast<uintptr_t>(list.GetInt(index));
+            return true;
+        }
+
+        return false;
     }
 };
 

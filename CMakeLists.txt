@@ -3,6 +3,49 @@
 option(VORTEX_GENERATE_PROPERTIES "Build generator and generate properties" ON)
 option(VORTEX_BUILD_TESTS "Build tests" ON)
 
+function(vortex_try_locate_ndi_sdk)
+  if(DEFINED ENV{NDI_SDK_DIR} AND EXISTS "$ENV{NDI_SDK_DIR}/Include")
+    return()
+  endif()
+
+  if(WIN32)
+    set(_vortex_ndi_candidates
+      "C:/Program Files/NDI/NDI 6 SDK"
+      "C:/Program Files/NDI/NDI SDK for Windows"
+    )
+  elseif(APPLE)
+    set(_vortex_ndi_candidates
+      "/Library/NDI SDK for macOS"
+      "$ENV{HOME}/NDI SDK for macOS"
+    )
+  else()
+    set(_vortex_ndi_candidates
+      "/opt/NDI SDK for Linux"
+      "/usr/local/NDI SDK for Linux"
+      "/usr/lib/NDI SDK for Linux"
+    )
+  endif()
+
+  foreach(_candidate IN LISTS _vortex_ndi_candidates)
+    if(EXISTS "${_candidate}/Include")
+      set(ENV{NDI_SDK_DIR} "${_candidate}")
+      message(STATUS "Detected NDI SDK at ${_candidate}")
+      break()
+    endif()
+  endforeach()
+endfunction()
+
+set(VORTEX_WITH_NDI_DEFAULT OFF)
+if(NOT DEFINED VORTEX_WITH_NDI)
+  vortex_try_locate_ndi_sdk()
+  if(DEFINED ENV{NDI_SDK_DIR})
+    set(VORTEX_WITH_NDI_DEFAULT ON)
+    message(STATUS "Defaulting VORTEX_WITH_NDI=ON because NDI_SDK_DIR is available")
+  endif()
+endif()
+
+option(VORTEX_WITH_NDI "Build with NDI support" ${VORTEX_WITH_NDI_DEFAULT})
+
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141 AND MSVC)
   cmake_policy(SET CMP0141 NEW)
@@ -24,44 +67,38 @@ if (VORTEX_GENERATE_PROPERTIES)
   add_subdirectory(gen)
 endif()
 
-
 add_library(VortexLib STATIC)
 target_sources(VortexLib
-PUBLIC
-# "src/vortex/pch.hpp"
-
+PRIVATE
   "src/vortex/gfx/swapchain.h"
-  "src/vortex/gfx/descriptor_buffer.h" 
-  "src/vortex/gfx/descriptor_buffer.cpp" 
+  "src/vortex/gfx/descriptor_buffer.h"
+  "src/vortex/gfx/descriptor_buffer.cpp"
   "src/vortex/gfx/texture.cpp"
   "src/vortex/gfx/texture.h"
   "src/vortex/gfx/texture_pool.cpp"
   "src/vortex/gfx/texture_pool.h"
- 
-   
-  
-  "src/vortex/graph/ports.h" 
-  "src/vortex/graph/connection.h" 
-  "src/vortex/graph/interfaces.h" 
-  "src/vortex/graph/node_factory.h" 
-  "src/vortex/graph/output_scheduler.h" 
+
+  "src/vortex/graph/ports.h"
+  "src/vortex/graph/connection.h"
+  "src/vortex/graph/interfaces.h"
+  "src/vortex/graph/node_factory.h"
+  "src/vortex/graph/output_scheduler.h"
   "src/vortex/graph/output_scheduler.cpp"
- 
-  "src/vortex/util/lib/SPSC-Queue.h" 
-  "src/vortex/util/reflection.h" 
+
+  "src/vortex/util/lib/SPSC-Queue.h"
+  "src/vortex/util/reflection.h"
   "src/vortex/util/log.h"
-  "src/vortex/util/ndi/ndi_library.h"  
-  "src/vortex/util/ndi/ndi_swapchain.h" 
-  "src/vortex/util/ndi/ndi_swapchain.cpp"
+  "src/vortex/util/ndi/ndi_library.h"
+  "src/vortex/util/ndi/ndi_swapchain.h"
   "src/vortex/util/rational.h"
   "src/vortex/util/unique_any.h"
   "src/vortex/util/common.h"
- 
+
   "src/vortex/nodes/input/image_input.h"
   "src/vortex/nodes/input/image_input.cpp"
   "src/vortex/nodes/input/stream_input.h"
   "src/vortex/nodes/input/stream_input.cpp"
-  
+
   "src/vortex/nodes/filter/blend.h"
   "src/vortex/nodes/filter/blend.cpp"
   "src/vortex/nodes/filter/select.h"
@@ -70,58 +107,57 @@ PUBLIC
   "src/vortex/nodes/filter/color_correction.h"
   "src/vortex/nodes/filter/color_correction.cpp"
   "src/vortex/nodes/node_registry.h"
- 
-  "src/vortex/codec/ffmpeg/types.h" 
-  "src/vortex/codec/ffmpeg/error.h" 
-  "src/vortex/codec/ffmpeg/stream_manager.h" 
-  "src/vortex/codec/ffmpeg/stream_manager.cpp" 
-  "src/vortex/codec/ffmpeg/hw_decoder.h" 
-  "src/vortex/codec/ffmpeg/audio_resampler.h" 
+
+  "src/vortex/codec/ffmpeg/types.h"
+  "src/vortex/codec/ffmpeg/error.h"
+  "src/vortex/codec/ffmpeg/stream_manager.h"
+  "src/vortex/codec/ffmpeg/stream_manager.cpp"
+  "src/vortex/codec/ffmpeg/hw_decoder.h"
+  "src/vortex/codec/ffmpeg/audio_resampler.h"
   "src/vortex/codec/ffmpeg/audio_resampler.cpp"
-  "src/vortex/codec/ffmpeg/codec_ffmpeg.h" 
-  "src/vortex/codec/ffmpeg/codec_ffmpeg.cpp" 
- 
+  "src/vortex/codec/ffmpeg/codec_ffmpeg.h"
+  "src/vortex/codec/ffmpeg/codec_ffmpeg.cpp"
+
   "src/vortex/sync/wall_clock.h"
   
  
   "src/vortex/ui/sdl.h"
   "src/vortex/ui/sdl.cpp"
-  
-  "src/vortex/consts.h" 
-  "src/vortex/probe.h" 
-  
-  "src/vortex/platform.cpp" 
-  "src/vortex/platform.h" 
-  "src/vortex/graphics.cpp" 
-  "src/vortex/graphics.h"
-  "src/vortex/model.h" 
-  "src/vortex/model.cpp" 
-  
-  "src/vortex/util/lazy.h"  
-  "src/vortex/util/interprocess_lock.h" 
-  "src/vortex/util/interprocess_lock.cpp" 
-  "src/vortex/nodes/output/ndi_output.cpp" 
-  "src/vortex/audio/audio_buffer.h" 
-  "src/vortex/audio/audio_resampler.h" 
-  "src/vortex/util/byte_ring.h"  
-  "src/vortex/anim/animation.h" 
-  "src/vortex/anim/animation.cpp" 
-  "src/vortex/ui/message_dispatch.h" 
-  "src/vortex/util/bench_clock.h" 
 
-  "src/vortex/util/term/log_sink.h" 
+  "src/vortex/consts.h"
+  "src/vortex/probe.h"
+
+  "src/vortex/platform.cpp"
+  "src/vortex/platform.h"
+  "src/vortex/graphics.cpp"
+  "src/vortex/graphics.h"
+  "src/vortex/model.h"
+  "src/vortex/model.cpp"
+
+  "src/vortex/util/lazy.h"
+  "src/vortex/util/interprocess_lock.h"
+  "src/vortex/util/interprocess_lock.cpp"
+  "src/vortex/audio/audio_buffer.h"
+  "src/vortex/audio/audio_resampler.h"
+  "src/vortex/util/byte_ring.h"
+  "src/vortex/anim/animation.h"
+  "src/vortex/anim/animation.cpp"
+  "src/vortex/ui/message_dispatch.h"
+  "src/vortex/util/bench_clock.h"
+
+  "src/vortex/util/term/log_sink.h"
   "src/vortex/util/term/log_sink.cpp"
   "src/vortex/util/term/input.h"
-  "src/vortex/util/term/impl.win32.h" 
-  "src/vortex/util/term/impl.win32.cpp" 
-  "src/vortex/util/term/impl.posix.cpp" 
-  "src/vortex/util/term/shared.h" 
+  "src/vortex/util/term/impl.win32.h"
+  "src/vortex/util/term/impl.win32.cpp"
+  "src/vortex/util/term/impl.posix.cpp"
+  "src/vortex/util/term/shared.h"
   "src/vortex/util/term/input.cpp"
 
-  "src/vortex/util/main_args.h"   
+  "src/vortex/util/main_args.h"
   "src/vortex/nodes/output/window_output.cpp"
-  "src/vortex/util/interp/interpolation.h" 
-  "src/vortex/util/interp/easing.h" 
+  "src/vortex/util/interp/interpolation.h"
+  "src/vortex/util/interp/easing.h"
   "src/vortex/util/interp/vector.h"
  "src/vortex/anim/keyframe.h" "src/vortex/anim/keyframe.cpp" "src/vortex/anim/property_track.h" "src/vortex/anim/property_track.cpp" "src/vortex/anim/animation_clip.h" "src/vortex/anim/animation_clip.cpp" "src/vortex/util/deserialize.h" "src/vortex/nodes/filter/transform.h" "src/vortex/nodes/filter/transform.cpp" "src/vortex/nodes/node_registry.cpp" "src/vortex/util/lut_loader.cpp" "src/vortex/util/lut_loader.h")
 
@@ -131,74 +167,154 @@ set_target_properties(VortexLib PROPERTIES
   CXX_STANDARD_REQUIRED ON
   CXX_EXTENSIONS OFF
 )
-# Add the /Zc:__cplusplus flag
 target_compile_options(VortexLib PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus /wd5050>)
+
 target_link_libraries(VortexLib
   PUBLIC
     spdlog::spdlog_header_only
     SDL3::SDL3
-    NDI::NDI
     utf8cpp
     nlohmann_json::nlohmann_json
-    
     FFmpeg::FFmpeg
     frozen::frozen-headers
     DirectXMath
-
     wis::wisdom-headers
     wis::wisdom-debug-headers
     wis::wisdom-extended-allocation-headers
     wis::wisdom-platform-headers
     wis::wisdom-descriptor-buffer-headers
-
-    #x11 for linux
     $<$<BOOL:${VORTEX_LINUX}>:${X11_LIBRARIES}>
 )
-#target_compile_definitions(VortexLib PUBLIC WISDOM_FORCE_VULKAN=1)
-#target_precompile_headers(VortexLib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
 
+# ---- NDI toggle ----
+if(VORTEX_WITH_NDI)
+  message(STATUS "VORTEX_WITH_NDI=ON — enabling NDI sources and linkage")
+  target_sources(VortexLib PRIVATE
+    "src/vortex/util/ndi/ndi_swapchain.cpp"
+    "src/vortex/nodes/output/ndi_output.cpp"
+  )
+  target_compile_definitions(VortexLib PUBLIC VORTEX_HAS_NDI=1)
+
+  if(TARGET NDI::NDI)
+    target_link_libraries(VortexLib PUBLIC NDI::NDI)
+  else()
+    vortex_try_locate_ndi_sdk()
+    if(DEFINED ENV{NDI_SDK_DIR})
+      message(STATUS "Using NDI SDK at: $ENV{NDI_SDK_DIR}")
+      target_include_directories(VortexLib PRIVATE "$ENV{NDI_SDK_DIR}/Include")
+      if(EXISTS "$ENV{NDI_SDK_DIR}/Lib/Windows/x64/Processing.NDI.Lib.x64.lib")
+        target_link_directories(VortexLib PRIVATE "$ENV{NDI_SDK_DIR}/Lib/Windows/x64")
+      elseif(EXISTS "$ENV{NDI_SDK_DIR}/Lib/x64/Processing.NDI.Lib.x64.lib")
+        target_link_directories(VortexLib PRIVATE "$ENV{NDI_SDK_DIR}/Lib/x64")
+      endif()
+      target_link_libraries(VortexLib PUBLIC Processing.NDI.Lib.x64)
+    else()
+      message(FATAL_ERROR "VORTEX_WITH_NDI=ON, but NDI::NDI not found and NDI_SDK_DIR not set.")
+    endif()
+  endif()
+else()
+  message(STATUS "VORTEX_WITH_NDI=OFF — building WITHOUT NDI")
+  target_compile_definitions(VortexLib PUBLIC VORTEX_HAS_NDI=0)
+endif()
+# ---- /NDI toggle ----
+
+target_precompile_headers(VortexLib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/pch.hpp>)
 
 add_executable(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PUBLIC "src")
-target_sources(${PROJECT_NAME} 
+target_sources(${PROJECT_NAME}
 PRIVATE
   "src/entry_main.cpp"
-
-  "src/vortex/ui/client.h" 
+  "src/vortex/ui/client.h"
   "src/vortex/ui/implements.h"
   "src/vortex/ui/cef/app.h"
   "src/vortex/ui/cef/app.cpp"
   "src/vortex/ui/ui_app.h"
   "src/vortex/ui/ui_app.cpp"
-  "src/vortex/ui/value.h" 
-  "src/vortex/ui/call_handler.h"  
-
-
+  "src/vortex/ui/value.h"
+  "src/vortex/ui/call_handler.h"
   "src/vortex/app.h"
-  )
+  "rc/app_icon.rc"
+)
 target_compile_options(${PROJECT_NAME} PRIVATE
   $<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
   $<$<CXX_COMPILER_ID:Clang>:-Wno-interference-size>
 )
 
-add_custom_target(ui)
-# Copy the UI html files to the output directory
-add_custom_command(TARGET ui POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-  "${CMAKE_CURRENT_SOURCE_DIR}/rc"
-  $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui
+# --- UI: copy built frontend to runtime/ui ---
+# Support both rc/ui and rc/ directories
+set(VORTEX_UI_SRC "")
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rc/ui/index.html")
+  set(VORTEX_UI_SRC "${CMAKE_CURRENT_SOURCE_DIR}/rc/ui")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rc/index.html")
+  set(VORTEX_UI_SRC "${CMAKE_CURRENT_SOURCE_DIR}/rc")
+endif()
+
+add_custom_target(vortex_ui_copy ALL
+  COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>/ui"
+  COMMENT "Preparing UI folder..."
 )
+
+if(VORTEX_UI_SRC)
+  add_custom_command(TARGET vortex_ui_copy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VORTEX_UI_SRC}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/ui"
+    COMMENT "Copying UI from ${VORTEX_UI_SRC} -> $<TARGET_FILE_DIR:${PROJECT_NAME}>/ui"
+  )
+else()
+  add_custom_command(TARGET vortex_ui_copy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "[vortex] UI not found at rc/ or rc/ui. Build it with: cd vortex-ui-skeleton && npm run build -- --mode rc"
+  )
+endif()
+
+set(VORTEX_FAVICON_SRC "${CMAKE_CURRENT_SOURCE_DIR}/rc/favicon.ico")
+if(EXISTS "${VORTEX_FAVICON_SRC}")
+  add_custom_command(TARGET vortex_ui_copy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VORTEX_FAVICON_SRC}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/favicon.ico"
+    COMMENT "Copying favicon.ico to runtime root"
+  )
+  add_custom_command(TARGET vortex_ui_copy POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${VORTEX_FAVICON_SRC}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/ui/favicon.ico"
+    COMMENT "Copying favicon.ico into runtime/ui"
+  )
+endif()
+
+# dependencies
+add_dependencies(${PROJECT_NAME} shaders vortex_ui_copy)
+
+# Embed manifests ONCE and ONLY if files exist
+if (WIN32)
+  set(MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/rc")
+  set(APP_MAN "${MANIFEST_PATH}/${PROJECT_NAME}.exe.manifest")
+  set(COMP_MAN "${MANIFEST_PATH}/compatibility.manifest")
+  if (EXISTS "${APP_MAN}" AND EXISTS "${COMP_MAN}")
+    # CMake can know the path to mt.exe as CMAKE_MT_EXECUTABLE (in VS toolset).
+    if (NOT CMAKE_MT_EXECUTABLE)
+      set(CMAKE_MT_EXECUTABLE mt.exe)
+    endif()
+    add_custom_command(
+      TARGET ${PROJECT_NAME}
+      POST_BUILD
+      COMMAND "${CMAKE_MT_EXECUTABLE}" -nologo
+              -manifest "\"${APP_MAN}\"" "\"${COMP_MAN}\""
+              -outputresource:"$<TARGET_FILE:${PROJECT_NAME}>";#1
+      COMMENT "Embedding manifests..."
+    )
+  else()
+    message(WARNING "Manifest files not found in ${MANIFEST_PATH}; skipping mt.exe embed.")
+  endif()
+endif()
 
 if (VORTEX_GENERATE_PROPERTIES)
   add_custom_target(properties)
-  set(PROP_FILES 
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/xml/props.xml"
-  )
-  target_sources(properties
-    PRIVATE ${PROP_FILES}
-  )
-
-  # Generate the properties file
+  set(PROP_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/vortex/xml/props.xml")
+  target_sources(properties PRIVATE ${PROP_FILES})
   foreach (PROP_FILE ${PROP_FILES})
     get_filename_component(PROP_NAME ${PROP_FILE} NAME_WE)
     add_custom_command(TARGET properties PRE_BUILD
@@ -206,69 +322,69 @@ if (VORTEX_GENERATE_PROPERTIES)
       COMMENT "Generating properties for ${PROP_NAME}"
     )
   endforeach()
-  #add_dependencies(${PROJECT_NAME} properties)
 endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON
   CXX_EXTENSIONS OFF
-  # Set binary output dir to bin
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
-# Add the /Zc:__cplusplus flag
 target_compile_options(${PROJECT_NAME} PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus /wd5050>)
-target_link_libraries(${PROJECT_NAME} 
-  PUBLIC 
-    VortexLib
-    libcef_dll_wrapper
-)
-#target_compile_definitions(${PROJECT_NAME} PUBLIC WISDOM_FORCE_VULKAN=1)
-#target_precompile_headers(${PROJECT_NAME} REUSE_FROM VortexLib)
-add_dependencies(${PROJECT_NAME} shaders ui)
 
+# ---- WHOLEARCHIVE for node registration ----
+if (MSVC)
+  target_link_options(${PROJECT_NAME} PRIVATE "/WHOLEARCHIVE:VortexLib")
+  target_link_libraries(${PROJECT_NAME} PUBLIC libcef_dll_wrapper VortexLib)
+else()
+  target_link_libraries(${PROJECT_NAME}
+    PUBLIC -Wl,--whole-archive VortexLib -Wl,--no-whole-archive libcef_dll_wrapper
+  )
+endif()
+
+add_dependencies(${PROJECT_NAME} shaders vortex_ui_copy)
 WIS_INSTALL_DEPS(${PROJECT_NAME})
 
-
-
-# copy all dlls to the output directory
 if (WIN32)
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
-  COMMAND_EXPAND_LISTS
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
+    COMMAND_EXPAND_LISTS
   )
   FFMPEG_COPY_DLL(${PROJECT_NAME})
 endif()
 
-# Copy the CEF resources to the output directory
+# Copy CEF resources
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
-  "${CEF_SOURCE_DIR}/Resources"
-  $<TARGET_FILE_DIR:${PROJECT_NAME}>
+          "${CEF_SOURCE_DIR}/Resources"
+          $<TARGET_FILE_DIR:${PROJECT_NAME}>
 )
-
-# Copy the CEF DLLs to the output directory
-# only copy dlls, bin and json files
 file(GLOB CEF_DLLS "${CEF_SOURCE_DIR}/Release/*.dll" "${CEF_SOURCE_DIR}/Release/*.bin" "${CEF_SOURCE_DIR}/Release/*.json")
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-  ${CEF_DLLS}
-  $<TARGET_FILE_DIR:${PROJECT_NAME}>
+          ${CEF_DLLS}
+          $<TARGET_FILE_DIR:${PROJECT_NAME}>
 )
 
-if (WIN32)
-  set(MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/rc")
-  add_custom_command(
-    TARGET ${PROJECT_NAME}
-    POST_BUILD
-    COMMAND "mt.exe" -nologo
-            -manifest \"${MANIFEST_PATH}/${PROJECT_NAME}.exe.manifest\" \"${MANIFEST_PATH}/compatibility.manifest\"
-            -outputresource:"$<TARGET_FILE:${PROJECT_NAME}>"\;\#1
-    COMMENT "Adding manifest..."
-  )
+# Copy NDI DLL (if NDI is enabled)
+if (WIN32 AND VORTEX_WITH_NDI)
+  set(_ndi_dll "")
+  if(DEFINED ENV{NDI_SDK_DIR})
+    if(EXISTS "$ENV{NDI_SDK_DIR}/Bin/x64/Processing.NDI.Lib.x64.dll")
+      set(_ndi_dll "$ENV{NDI_SDK_DIR}/Bin/x64/Processing.NDI.Lib.x64.dll")
+    elseif(EXISTS "$ENV{NDI_SDK_DIR}/Redist/Windows/x64/Processing.NDI.Lib.x64.dll")
+      set(_ndi_dll "$ENV{NDI_SDK_DIR}/Redist/Windows/x64/Processing.NDI.Lib.x64.dll")
+    endif()
+  endif()
+  if(_ndi_dll)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_ndi_dll}" $<TARGET_FILE_DIR:${PROJECT_NAME}>
+      COMMENT "Copying NDI runtime DLL"
+    )
+  endif()
 endif()
 
 if (VORTEX_BUILD_TESTS)
-enable_testing()
-add_subdirectory(test)
+  enable_testing()
+  add_subdirectory(test)
 endif()

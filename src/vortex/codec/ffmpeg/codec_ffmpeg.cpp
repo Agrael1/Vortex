@@ -4,6 +4,162 @@
 #include <vortex/util/log.h>
 #include <vortex/codec/ffmpeg/error.h>
 
+#include <cstring>
+
+namespace {
+constexpr uint32_t kBytesPerPixelRGBA = 4;
+constexpr uint32_t kD3D12RowPitchAlignment = 256u; // D3D12_TEXTURE_DATA_PITCH_ALIGNMENT
+
+uint32_t AlignRowPitch(uint32_t value)
+{
+    return (value + (kD3D12RowPitchAlignment - 1)) & ~(kD3D12RowPitchAlignment - 1);
+}
+
+std::expected<vortex::Texture2D, std::error_code>
+UploadTextureDirect(const vortex::Graphics& gfx,
+                    const wis::TextureDesc& desc,
+                    const AVFrame* frame)
+{
+    if (!frame) {
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+    auto& allocator = gfx.GetAllocator();
+    auto& ext_alloc = gfx.GetExtendedAllocation();
+
+    wis::Result result = wis::success;
+    wis::Texture texture = ext_alloc.CreateGPUUploadTexture(result, allocator, desc);
+    if (!vortex::success(result)) {
+        vortex::error("CodecFFmpeg::LoadTextureModern: Failed to create GPU upload texture: {}",
+                      result.error);
+        return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
+    }
+
+    wis::TextureRegion region{
+        .offset = { 0, 0, 0 },
+        .size = { desc.size.width, desc.size.height, 1 },
+        .mip = 0,
+        .array_layer = 0,
+        .format = desc.format,
+    };
+
+    result = ext_alloc.WriteMemoryToSubresourceDirect(frame->data[0], texture, wis::TextureState::Common, region);
+    if (!vortex::success(result)) {
+        vortex::error("CodecFFmpeg::LoadTextureModern: Failed to write texture memory directly: {}",
+                      result.error);
+        return std::unexpected(std::make_error_code(std::errc::io_error));
+    }
+
+    return vortex::Texture2D(std::move(texture),
+                             wis::Size2D{ desc.size.width, desc.size.height },
+                             desc.format);
+}
+
+std::expected<vortex::Texture2D, std::error_code>
+UploadTextureViaCopy(const vortex::Graphics& gfx,
+                     const AVFrame* frame,
+                     wis::DataFormat format)
+{
+    if (!frame) {
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+
+    const uint32_t width = static_cast<uint32_t>(frame->width);
+    const uint32_t height = static_cast<uint32_t>(frame->height);
+    const uint32_t row_bytes = width * kBytesPerPixelRGBA;
+    const uint32_t dst_row_pitch = AlignRowPitch(row_bytes);
+    const uint64_t upload_size = static_cast<uint64_t>(dst_row_pitch) * height;
+
+    auto& allocator = gfx.GetAllocator();
+    wis::Result result = wis::success;
+
+    wis::TextureDesc desc{
+        .format = format,
+        .size = { width, height, 1 },
+        .usage = wis::TextureUsage::CopyDst | wis::TextureUsage::ShaderResource,
+    };
+
+    wis::Texture texture = allocator.CreateTexture(result, desc, wis::MemoryType::Default);
+    if (!vortex::success(result)) {
+        vortex::error("CodecFFmpeg::LoadTextureModern: Failed to create staging texture: {}",
+                      result.error);
+        return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
+    }
+
+    wis::Buffer upload_buffer = allocator.CreateUploadBuffer(result, upload_size);
+    if (!vortex::success(result)) {
+        vortex::error("CodecFFmpeg::LoadTextureModern: Failed to allocate upload buffer: {}",
+                      result.error);
+        return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
+    }
+
+    auto* dst = upload_buffer.Map<uint8_t>();
+    const uint8_t* src = frame->data[0];
+    const uint32_t src_pitch = static_cast<uint32_t>(frame->linesize[0]);
+    for (uint32_t y = 0; y < height; ++y) {
+        std::memcpy(dst + static_cast<size_t>(y) * dst_row_pitch,
+                    src + static_cast<size_t>(y) * src_pitch,
+                    row_bytes);
+    }
+    upload_buffer.Unmap();
+
+    auto command_list = gfx.GetDevice().CreateCommandList(result, wis::QueueType::Graphics);
+    if (!vortex::success(result)) {
+        vortex::error("CodecFFmpeg::LoadTextureModern: Failed to create upload command list: {}",
+                      result.error);
+        return std::unexpected(std::make_error_code(std::errc::io_error));
+    }
+
+    if (auto reset_result = command_list.Reset(); !vortex::success(reset_result)) {
+        vortex::error("CodecFFmpeg::LoadTextureModern: Failed to reset upload command list: {}",
+                      reset_result.error);
+        return std::unexpected(std::make_error_code(std::errc::io_error));
+    }
+
+    wis::TextureBarrier transition_to_copy{
+        .sync_before = wis::BarrierSync::None,
+        .sync_after = wis::BarrierSync::Copy,
+        .access_before = wis::ResourceAccess::NoAccess,
+        .access_after = wis::ResourceAccess::CopyDest,
+        .state_before = wis::TextureState::Common,
+        .state_after = wis::TextureState::CopyDest,
+    };
+    command_list.TextureBarrier(transition_to_copy, texture);
+
+    wis::BufferTextureCopyRegion copy_region{
+        .buffer_offset = 0,
+        .texture = {
+                .offset = { 0, 0, 0 },
+                .size = { width, height, 1 },
+                .mip = 0,
+                .array_layer = 0,
+                .format = format,
+        },
+    };
+
+    command_list.CopyBufferToTexture(upload_buffer, texture, &copy_region, 1);
+
+    wis::TextureBarrier transition_to_srv{
+        .sync_before = wis::BarrierSync::Copy,
+        .sync_after = wis::BarrierSync::PixelShading,
+        .access_before = wis::ResourceAccess::CopyDest,
+        .access_after = wis::ResourceAccess::ShaderResource,
+        .state_before = wis::TextureState::CopyDest,
+        .state_after = wis::TextureState::ShaderResource,
+    };
+    command_list.TextureBarrier(transition_to_srv, texture);
+
+    if (!command_list.Close()) {
+        vortex::error("CodecFFmpeg::LoadTextureModern: Failed to close upload command list");
+        return std::unexpected(std::make_error_code(std::errc::io_error));
+    }
+
+    gfx.ExecuteCommandLists({ command_list });
+    gfx.WaitForGPU();
+
+    return vortex::Texture2D(std::move(texture), wis::Size2D{ width, height }, format);
+}
+} // namespace
+
 int save_frame_as_ppm(AVFrame* frame, const char* filename)
 {
     FILE* f = fopen(filename, "wb");
@@ -175,45 +331,26 @@ vortex::codec::CodecFFmpeg::LoadTexture(const Graphics& gfx, const std::filesyst
         }
 
         // Create GPU texture
-        wis::Result result = wis::success;
-        auto& ext_alloc = gfx.GetExtendedAllocation();
+        const uint32_t frame_width = static_cast<uint32_t>(final_frame->width);
+        const uint32_t frame_height = static_cast<uint32_t>(final_frame->height);
+
         wis::TextureDesc desc{
             .format = wis::DataFormat::RGBA8Unorm,
-            .size = { static_cast<uint32_t>(final_frame->linesize[0]/4),
-                     static_cast<uint32_t>(final_frame->height) },
-            .usage = wis::TextureUsage::HostCopy | wis::TextureUsage::ShaderResource
+            .size = { frame_width, frame_height, 1 },
+            .usage = wis::TextureUsage::HostCopy | wis::TextureUsage::ShaderResource,
         };
 
-        wis::Texture texture = ext_alloc.CreateGPUUploadTexture(result, gfx.GetAllocator(), desc);
-        if (!success(result)) {
-            // Map wis::Result to std::error_code (you may want to create a specific mapping function)
-            auto ec = std::make_error_code(std::errc::not_enough_memory); // Simplified mapping
-            vortex::error("CodecFFmpeg::LoadTextureModern: Failed to create texture for file: {}. Error: {}",
-                          path.string(), result.error);
-            return std::unexpected(ec);
+        auto& ext_alloc = gfx.GetExtendedAllocation();
+        if (ext_alloc.SupportedDirectGPUUpload(desc.format)) {
+            if (auto direct_texture = UploadTextureDirect(gfx, desc, final_frame.get()); direct_texture) {
+                return direct_texture;
+            }
+            vortex::warn("CodecFFmpeg::LoadTextureModern: Direct GPU upload failed, retrying with staging copy");
+        } else {
+            vortex::info("CodecFFmpeg::LoadTextureModern: GPU upload heap not supported, using staging upload path");
         }
 
-        // Copy frame data to texture
-        wis::TextureRegion frame_region{
-            .offset = { 0, 0, 0 },
-            .size = { static_cast<uint32_t>(final_frame->linesize[0]/4),
-                       static_cast<uint32_t>(final_frame->height),
-                       1 },
-            .mip = 0,
-            .array_layer = 0,
-            .format = wis::DataFormat::RGBA8Unorm
-        };
-
-        result = ext_alloc.WriteMemoryToSubresourceDirect(final_frame->data[0], texture, wis::TextureState::Common, frame_region);
-        if (!success(result)) {
-            auto ec = std::make_error_code(std::errc::io_error); // Simplified mapping
-            vortex::error("CodecFFmpeg::LoadTextureModern: Failed to write memory to subresource for file: {}. Error: {}",
-                          path.string(), result.error);
-            return std::unexpected(ec);
-        }
-
-        // Successfully loaded the texture
-        return vortex::Texture2D(std::move(texture), wis::Size2D{ desc.size.width, desc.size.height }, desc.format);
+        return UploadTextureViaCopy(gfx, final_frame.get(), desc.format);
     }
 
     // No frames were processed

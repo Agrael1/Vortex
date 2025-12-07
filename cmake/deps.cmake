@@ -54,6 +54,17 @@ CPMAddPackage(
   GITHUB_REPOSITORY microsoft/DirectXMath
   GIT_TAG apr2025
 )
+
+# Wisdom a complete package with CMake modules
+CPMAddPackage(
+  NAME Wisdom
+  GITHUB_REPOSITORY WiseLibs/wisdom
+  VERSION 0.6.12
+  OPTIONS
+    "WISDOM_BUILD_EXAMPLES OFF"
+    "WISDOM_BUILD_TESTS OFF"
+)
+
 add_library(Sal INTERFACE)
 add_library(Sal::Sal ALIAS Sal)
 target_include_directories(Sal INTERFACE

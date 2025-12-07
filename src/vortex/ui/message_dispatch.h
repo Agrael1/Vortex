@@ -1,6 +1,7 @@
 #pragma once
 #include <concepts>
 #include <vortex/ui/value.h>
+#include <string>
 
 namespace vortex::ui {
 template<typename F>
@@ -48,7 +49,11 @@ public:
     {
         bool success = false;
         if (args.GetSize() != param_count) {
-            vortex::warn("Argument count mismatch: expected {}, got {}", param_count, args.GetSize());
+            vortex::warn("Argument count mismatch: expected {}, got {} (types: {})",
+                         param_count,
+                         args.GetSize(),
+                         DescribeArgumentTypes(args));
+            ResolveFailure(instance);
             return;
         }
 
@@ -63,7 +68,9 @@ public:
         } else {
             auto tuple = Extractor::extract_arguments(args, success);
             if (!success) {
-                vortex::warn("Failed to extract arguments for message dispatch");
+                vortex::warn("Failed to extract arguments for message dispatch (types: {})",
+                             DescribeArgumentTypes(args));
+                ResolveFailure(instance);
                 return;
             }
             if constexpr (std::is_void_v<return_type>) {
@@ -77,6 +84,26 @@ public:
                 },
                                          tuple));
             }
+        }
+    }
+
+private:
+    static std::string DescribeArgumentTypes(CefListValue& args)
+    {
+        std::string buffer;
+        for (size_t i = 0; i < args.GetSize(); ++i) {
+            if (i > 0) {
+                buffer.append(", ");
+            }
+            buffer.append(reflect::enum_name(args.GetType(i)));
+        }
+        return buffer;
+    }
+
+    static void ResolveFailure(class_type& instance)
+    {
+        if constexpr (std::is_same_v<return_type, bool>) {
+            instance.HandleUIReturn(false);
         }
     }
 };

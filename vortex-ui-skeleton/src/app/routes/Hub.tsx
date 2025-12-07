@@ -117,6 +117,8 @@ const DEFAULT_FORM: CreateFormState = {
   colorSpace: 'Rec.709',
 };
 
+const HISTORY_PAGE_SIZE = 10;
+
 
 const BUTTON_BASE =
   'inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 focus-visible:ring-offset-0';
@@ -151,6 +153,7 @@ export function Hub() {
   const [renameTarget, setRenameTarget] = useState<{ path: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [historyPage, setHistoryPage] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
   const { loadProject } = useProjectCommands();
   const { push: pushNotification } = useNotificationCenter();
@@ -174,6 +177,13 @@ export function Hub() {
 
     return filtered.sort(compareRecents);
   }, [recents, searchTerm]);
+
+  const totalHistoryPages = Math.max(1, Math.ceil(sortedRecents.length / HISTORY_PAGE_SIZE));
+  const activeHistoryPage = Math.min(historyPage, totalHistoryPages - 1);
+  const historyStartIndex = activeHistoryPage * HISTORY_PAGE_SIZE;
+  const paginatedRecents = sortedRecents.slice(historyStartIndex, historyStartIndex + HISTORY_PAGE_SIZE);
+  const historyEndIndex = Math.min(sortedRecents.length, historyStartIndex + HISTORY_PAGE_SIZE);
+  const historySummaryLabel = sortedRecents.length ? `${historyStartIndex + 1}-${historyEndIndex}` : '0-0';
 
   const projectHistory = useMemo(() => {
     const ordered = [...recents].sort(compareRecents);
@@ -204,6 +214,25 @@ export function Hub() {
       return matchingIndex >= 0 ? matchingIndex : 0;
     });
   }, [sortedRecents]);
+
+  useEffect(() => {
+    setHistoryPage((prev) => {
+      const maxPage = Math.max(0, Math.ceil(sortedRecents.length / HISTORY_PAGE_SIZE) - 1);
+      return Math.min(prev, maxPage);
+    });
+  }, [sortedRecents.length]);
+
+  useEffect(() => {
+    setHistoryPage(0);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (focusedIndex < 0) return;
+    const targetPage = Math.floor(focusedIndex / HISTORY_PAGE_SIZE);
+    if (targetPage !== activeHistoryPage) {
+      setHistoryPage(targetPage);
+    }
+  }, [activeHistoryPage, focusedIndex]);
 
   const dispatchRecents = useCallback((action: RecentsAction) => {
     setRecents((prev) => {
@@ -770,8 +799,8 @@ export function Hub() {
           </div>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[2fr,1fr]">
-          <section className="space-y-5 rounded-3xl border border-white/10 bg-black/30 p-6 shadow-[0_25px_80px_rgba(2,6,23,0.75)]">
+        <div className="grid items-start gap-8 lg:grid-cols-[1.2fr,1fr]">
+          <section className="mt-4 w-full max-w-[780px] space-y-5 rounded-3xl border border-white/10 bg-black/30 p-6 shadow-[0_25px_80px_rgba(2,6,23,0.75)] lg:mt-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
                 <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200/70">Navigator</p>
@@ -808,11 +837,11 @@ export function Hub() {
 
             <div
               ref={listRef}
-              tabIndex={sortedRecents.length ? 0 : -1}
+              tabIndex={paginatedRecents.length ? 0 : -1}
               onKeyDown={handleListKeyDown}
               role="listbox"
               aria-label="Recent projects"
-              className="glass-panel relative rounded-3xl border border-white/10 p-2 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+              className="glass-panel relative w-full max-w-[720px] rounded-3xl border border-white/10 p-2 overflow-y-auto focus:outline-none focus:ring-2 focus:ring-sky-500/40"
             >
               {isLoading && sortedRecents.length === 0 ? (
                 <div className="divide-y divide-white/5">
@@ -849,14 +878,13 @@ export function Hub() {
                   </div>
                 </div>
               ) : (
-                <div className="grid gap-4 p-4 sm:grid-cols-2">
-                  {sortedRecents.map((project, index) => {
+                <div className="space-y-1.5 p-2">
+                  {paginatedRecents.map((project, index) => {
                     const detailChips: string[] = [];
                     if (project.template) detailChips.push(project.template);
-                    if (project.width && project.height) detailChips.push(`${project.width}×${project.height}`);
-                    if (project.fps) detailChips.push(`${project.fps} fps`);
-                    if (project.colorSpace) detailChips.push(project.colorSpace);
-                    const isFocused = index === focusedIndex;
+                    const detailLabel = detailChips.join(' • ');
+                    const absoluteIndex = historyStartIndex + index;
+                    const isFocused = absoluteIndex === focusedIndex;
                     const isMenuOpen = activeMenuPath === project.path;
 
                     return (
@@ -866,99 +894,93 @@ export function Hub() {
                         aria-selected={isFocused}
                         tabIndex={-1}
                         onClick={() => openProjectByPath(project.path)}
-                        onMouseEnter={() => setFocusedIndex(index)}
-                        onFocus={() => setFocusedIndex(index)}
-                        className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-white/10 to-white/[0.03] p-4 transition cursor-pointer hover:border-sky-400/60 hover:shadow-[0_20px_50px_rgba(8,47,73,0.55)] ${
+                        onMouseEnter={() => setFocusedIndex(absoluteIndex)}
+                        onFocus={() => setFocusedIndex(absoluteIndex)}
+                        className={`group relative flex min-h-[50px] flex-nowrap items-center gap-3 overflow-hidden rounded-2xl border bg-gradient-to-br from-white/10 to-white/[0.03] px-3 py-2 text-[13px] transition cursor-pointer hover:border-sky-400/60 hover:shadow-[0_10px_28px_rgba(8,47,73,0.45)] ${
                           isFocused ? 'border-sky-500/70 ring-2 ring-sky-400/40' : 'border-white/10'
                         }`}
                       >
                         <div
                           className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100"
-                          style={{ background: 'radial-gradient(circle at top, rgba(56,189,248,0.25), transparent 70%)' }}
+                          style={{ background: 'linear-gradient(90deg, rgba(56,189,248,0.18), rgba(99,102,241,0.12))' }}
                         />
-                        <div className="relative flex items-start gap-3">
-                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-lg">
+                        <div className="relative flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-base">
                             {project.template ? <span>{project.template.slice(0, 1)}</span> : <span>🎬</span>}
                           </div>
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-100 truncate" title={project.name ?? deriveNameFromPath(project.path)}>
-                                {renderHighlight(project.name ?? deriveNameFromPath(project.path))}
-                              </span>
-                              {project.pinned && (
-                                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-200" title="Pinned" aria-label="Pinned">
-                                  ★
-                                </span>
-                              )}
-                              {project.error && (
-                                <span className="rounded bg-red-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-200" title={project.error}>
-                                  {project.error.length > 18 ? 'Issue' : project.error}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-400 truncate" title={project.path}>
-                              {renderHighlight(project.path)}
-                            </div>
-                            {detailChips.length > 0 && (
-                              <div className="text-xs text-gray-400 flex flex-wrap gap-2">
-                                {detailChips.map((chip) => (
-                                  <span key={chip} className="rounded-full bg-white/5 px-2 py-0.5">
-                                    {chip}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setActiveMenuPath((current) => (current === project.path ? null : project.path));
-                              }}
-                              className="rounded-full border border-transparent px-2 py-1 text-xs text-gray-400 hover:border-ui-border hover:text-gray-100"
-                              aria-haspopup="menu"
-                              aria-expanded={isMenuOpen}
+                          <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-hidden text-[12px] text-gray-400">
+                            <span
+                              className="max-w-[130px] truncate text-sm font-medium text-gray-100"
+                              title={project.name ?? deriveNameFromPath(project.path)}
                             >
-                              ⋮
-                            </button>
-                            {busyPath === project.path ? (
-                              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-400/70 border-t-transparent" />
-                            ) : (
-                              <span className="text-gray-500 text-xs">↗</span>
+                              {renderHighlight(project.name ?? deriveNameFromPath(project.path))}
+                            </span>
+                            {project.pinned && (
+                              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-200" title="Pinned" aria-label="Pinned">
+                                ★
+                              </span>
+                            )}
+                            {project.error && (
+                              <span className="rounded bg-red-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-200" title={project.error}>
+                                {project.error.length > 18 ? 'Issue' : project.error}
+                              </span>
+                            )}
+                            <span className="text-gray-600">•</span>
+                            <span className="max-w-[110px] truncate text-[11px] text-gray-500" title={project.path}>
+                              {renderHighlight(project.path)}
+                            </span>
+                            {detailLabel && (
+                              <span className="hidden md:inline truncate text-gray-400" title={detailLabel}>
+                                {detailLabel}
+                              </span>
                             )}
                           </div>
                         </div>
-                        <div className="relative mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-300">
-                          <span>Last opened {formatLastUsed(project.last)}</span>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleTogglePin(project.path);
-                              }}
-                              className="rounded border border-transparent px-2 py-1 transition hover:border-amber-300/60 hover:text-amber-200"
-                              aria-label={project.pinned ? 'Unpin project' : 'Pin project'}
-                            >
-                              {project.pinned ? 'Unpin' : 'Pin'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleOpenRename(project);
-                              }}
-                              className="rounded border border-transparent px-2 py-1 transition hover:border-blue-400/60 hover:text-blue-200"
-                              aria-label="Rename project"
-                            >
-                              Rename
-                            </button>
-                          </div>
+                        <div className="relative flex flex-nowrap items-center gap-2 text-xs text-gray-400 whitespace-nowrap">
+                          <span className="hidden lg:inline">Last {formatLastUsed(project.last)}</span>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleTogglePin(project.path);
+                            }}
+                            className="rounded border border-transparent px-2 py-1 transition hover:border-amber-300/60 hover:text-amber-200"
+                            aria-label={project.pinned ? 'Unpin project' : 'Pin project'}
+                          >
+                            {project.pinned ? 'Unpin' : 'Pin'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleOpenRename(project);
+                            }}
+                            className="rounded border border-transparent px-2 py-1 transition hover:border-blue-400/60 hover:text-blue-200"
+                            aria-label="Rename project"
+                          >
+                            Rename
+                          </button>
+                          {busyPath === project.path ? (
+                            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-400/70 border-t-transparent" />
+                          ) : (
+                            <span className="text-gray-500 text-xs">↗</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setActiveMenuPath((current) => (current === project.path ? null : project.path));
+                            }}
+                            className="rounded-full border border-transparent px-2 py-1 text-xs text-gray-400 hover:border-ui-border hover:text-gray-100"
+                            aria-haspopup="menu"
+                            aria-expanded={isMenuOpen}
+                          >
+                            ⋮
+                          </button>
                         </div>
 
                         {isMenuOpen && (
-                          <div className="absolute right-4 top-12 z-20 w-48 rounded-2xl border border-white/10 bg-black/80 shadow-[0_20px_45px_rgba(2,6,23,0.85)]">
+                          <div className="absolute right-4 top-14 z-20 w-48 rounded-2xl border border-white/10 bg-black/80 shadow-[0_20px_45px_rgba(2,6,23,0.85)]">
                             <button
                               type="button"
                               onClick={() => openProjectByPath(project.path)}
@@ -1002,9 +1024,37 @@ export function Hub() {
                 </div>
               )}
             </div>
+            {sortedRecents.length > HISTORY_PAGE_SIZE && (
+              <div className="flex flex-wrap items-center justify-between gap-3 px-2 pt-3 text-sm text-gray-300">
+                <span className="font-medium text-gray-200">
+                  Showing {historySummaryLabel} of {sortedRecents.length}
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryPage((prev) => Math.max(prev - 1, 0))}
+                    className="rounded-full border border-white/15 px-3.5 py-1.5 text-gray-100 transition hover:border-sky-400/60 disabled:opacity-40"
+                    disabled={activeHistoryPage === 0}
+                  >
+                    Prev
+                  </button>
+                  <span className="text-gray-400">
+                    Page {activeHistoryPage + 1} / {totalHistoryPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryPage((prev) => Math.min(prev + 1, totalHistoryPages - 1))}
+                    className="rounded-full border border-white/15 px-3.5 py-1.5 text-gray-100 transition hover:border-sky-400/60 disabled:opacity-40"
+                    disabled={activeHistoryPage >= totalHistoryPages - 1}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
-          <aside className="space-y-6">
+          <aside className="space-y-6 w-full max-w-[400px] lg:max-w-[420px]">
             <section className="space-y-5 rounded-3xl border border-white/10 bg-black/20 p-6 shadow-[0_20px_60px_rgba(2,6,23,0.65)]">
               <div className="space-y-1">
                 <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200/70">Presets</p>
@@ -1018,12 +1068,12 @@ export function Hub() {
                     key={template.name}
                     type="button"
                     onClick={() => openCreateModal(template)}
-                    className="group flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:border-sky-400/70 hover:bg-white/10"
+                    className="group flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-left transition hover:border-sky-400/70 hover:bg-white/10"
                   >
                     <span className={`flex h-12 w-12 items-center justify-center rounded-2xl text-xl ${template.accent}`}>{template.icon}</span>
                     <span className="flex-1">
                       <span className="block text-sm font-medium text-gray-100">{template.name}</span>
-                      <span className="block text-xs text-gray-500">{template.description}</span>
+                      <span className="block text-xs text-gray-400 leading-snug">{template.description}</span>
                     </span>
                     <span className="text-xs text-sky-300 transition group-hover:text-white">Configure</span>
                   </button>
@@ -1039,7 +1089,7 @@ export function Hub() {
               </div>
               <div className="space-y-3 text-sm">
                 <a
-                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-gray-200 transition hover:border-sky-400/70 hover:text-white"
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-5 py-3.5 text-gray-200 transition hover:border-sky-400/70 hover:text-white"
                   href="https://github.com/RRotoko/Vortex"
                   target="_blank"
                   rel="noreferrer"
@@ -1048,7 +1098,7 @@ export function Hub() {
                   <span className="text-xs text-gray-400">↗</span>
                 </a>
                 <a
-                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-gray-200 transition hover:border-sky-400/70 hover:text-white"
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-5 py-3.5 text-gray-200 transition hover:border-sky-400/70 hover:text-white"
                   href="https://discord.gg/"
                   target="_blank"
                   rel="noreferrer"
@@ -1059,7 +1109,7 @@ export function Hub() {
                 <button
                   type="button"
                   onClick={() => window.open('https://trello.com/', '_blank')}
-                  className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-gray-200 transition hover:border-sky-400/70 hover:text-white"
+                  className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-5 py-3.5 text-left text-gray-200 transition hover:border-sky-400/70 hover:text-white"
                 >
                   <span>📝 Roadmap</span>
                   <span className="text-xs text-gray-400">↗</span>

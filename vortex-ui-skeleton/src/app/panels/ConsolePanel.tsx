@@ -18,7 +18,9 @@ export function ConsolePanel() {
   const [filters, setFilters] = useState<Record<EngineLogEntry['level'], boolean>>({ info: true, warn: true, error: true });
   const [autoScroll, setAutoScroll] = useState(true);
   const [query, setQuery] = useState('');
+  const [isFilterVisible, setIsFilterVisible] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const filterInputRef = useRef<HTMLInputElement | null>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredEntries = useMemo(() => {
@@ -37,6 +39,12 @@ export function ConsolePanel() {
     if (!viewport) return;
     viewport.scrollTo({ top: viewport.scrollHeight });
   }, [filteredEntries, autoScroll]);
+
+  useEffect(() => {
+    if (!isFilterVisible) return;
+    const timer = window.setTimeout(() => filterInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [isFilterVisible]);
 
   const toggleLevel = useCallback((level: EngineLogEntry['level']) => {
     setFilters((prev) => ({ ...prev, [level]: !prev[level] }));
@@ -88,6 +96,23 @@ export function ConsolePanel() {
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-wide text-gray-400">
           <span>{filteredEntries.length} entries</span>
+          <button
+            type="button"
+            onClick={() => setIsFilterVisible((prev) => !prev)}
+            aria-pressed={isFilterVisible}
+            className={`rounded-full border px-3 py-1 text-[11px] transition ${
+              isFilterVisible
+                ? 'border-sky-400/60 text-sky-100'
+                : 'border-white/10 text-gray-500 hover:border-sky-400/40 hover:text-sky-200'
+            }`}
+          >
+            {isFilterVisible ? 'Hide filter' : 'Show filter'}
+            {query && !isFilterVisible && (
+              <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-gray-200">
+                {query.length > 8 ? `${query.slice(0, 8)}…` : query}
+              </span>
+            )}
+          </button>
           <button type="button" onClick={copyVisible} className="text-cyan-300 hover:text-white">
             Copy
           </button>
@@ -104,15 +129,30 @@ export function ConsolePanel() {
         </div>
       </div>
 
-      <div className="border-b border-white/10 px-4 py-2">
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Filter logs by text or scope"
-          className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-gray-200 placeholder:text-gray-500 focus:border-sky-400/60 focus:outline-none"
-        />
-      </div>
+      {isFilterVisible && (
+        <div className="border-b border-white/10 px-4 py-2">
+          <div className="relative">
+            <input
+              ref={filterInputRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Filter logs by text or scope"
+              className="w-full rounded-lg border border-white/10 bg-black/50 px-3 py-2 pr-8 text-xs text-gray-200 placeholder:text-gray-500 focus:border-sky-400/60 focus:outline-none"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 transition hover:text-gray-200"
+                aria-label="Clear filter"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div
         ref={viewportRef}

@@ -2,7 +2,49 @@
 
 option(VORTEX_GENERATE_PROPERTIES "Build generator and generate properties" ON)
 option(VORTEX_BUILD_TESTS "Build tests" ON)
-option(VORTEX_WITH_NDI "Build with NDI support" OFF)
+
+function(vortex_try_locate_ndi_sdk)
+  if(DEFINED ENV{NDI_SDK_DIR} AND EXISTS "$ENV{NDI_SDK_DIR}/Include")
+    return()
+  endif()
+
+  if(WIN32)
+    set(_vortex_ndi_candidates
+      "C:/Program Files/NDI/NDI 6 SDK"
+      "C:/Program Files/NDI/NDI SDK for Windows"
+    )
+  elseif(APPLE)
+    set(_vortex_ndi_candidates
+      "/Library/NDI SDK for macOS"
+      "$ENV{HOME}/NDI SDK for macOS"
+    )
+  else()
+    set(_vortex_ndi_candidates
+      "/opt/NDI SDK for Linux"
+      "/usr/local/NDI SDK for Linux"
+      "/usr/lib/NDI SDK for Linux"
+    )
+  endif()
+
+  foreach(_candidate IN LISTS _vortex_ndi_candidates)
+    if(EXISTS "${_candidate}/Include")
+      set(ENV{NDI_SDK_DIR} "${_candidate}")
+      message(STATUS "Detected NDI SDK at ${_candidate}")
+      break()
+    endif()
+  endforeach()
+endfunction()
+
+set(VORTEX_WITH_NDI_DEFAULT OFF)
+if(NOT DEFINED VORTEX_WITH_NDI)
+  vortex_try_locate_ndi_sdk()
+  if(DEFINED ENV{NDI_SDK_DIR})
+    set(VORTEX_WITH_NDI_DEFAULT ON)
+    message(STATUS "Defaulting VORTEX_WITH_NDI=ON because NDI_SDK_DIR is available")
+  endif()
+endif()
+
+option(VORTEX_WITH_NDI "Build with NDI support" ${VORTEX_WITH_NDI_DEFAULT})
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141 AND MSVC)
@@ -159,13 +201,7 @@ if(VORTEX_WITH_NDI)
   if(TARGET NDI::NDI)
     target_link_libraries(VortexLib PUBLIC NDI::NDI)
   else()
-    if(NOT DEFINED ENV{NDI_SDK_DIR})
-      if(EXISTS "C:/Program Files/NDI/NDI 6 SDK/Include")
-        set(ENV{NDI_SDK_DIR} "C:/Program Files/NDI/NDI 6 SDK")
-      elseif(EXISTS "C:/Program Files/NDI/NDI SDK for Windows/Include")
-        set(ENV{NDI_SDK_DIR} "C:/Program Files/NDI/NDI SDK for Windows")
-      endif()
-    endif()
+    vortex_try_locate_ndi_sdk()
     if(DEFINED ENV{NDI_SDK_DIR})
       message(STATUS "Using NDI SDK at: $ENV{NDI_SDK_DIR}")
       target_include_directories(VortexLib PRIVATE "$ENV{NDI_SDK_DIR}/Include")

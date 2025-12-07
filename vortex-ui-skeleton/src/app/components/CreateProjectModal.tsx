@@ -15,8 +15,10 @@ type Props = {
 };
 
 const MODAL_PORTAL_TARGET: HTMLElement | null = typeof document !== 'undefined' ? document.body : null;
-const FIELD_CLASS =
-  'w-full rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:border-sky-400/70 focus:outline-none backdrop-blur-sm';
+const FIELD_BASE =
+  'w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none backdrop-blur-sm';
+const FIELD_CLASS = `${FIELD_BASE} border-white/15 bg-white/5 focus:border-sky-400/70`;
+const SELECT_FIELD_CLASS = `${FIELD_BASE} border-white/25 bg-black/60 text-gray-100 focus:border-sky-300/80`;
 const SECTION_CARD = 'rounded-[24px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl shadow-[0_25px_80px_rgba(2,6,23,0.65)]';
 const GHOST_BUTTON =
   'rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:border-sky-400/60 hover:text-white';
@@ -187,7 +189,7 @@ export function CreateProjectModal({
 
             <label className="space-y-1 text-sm text-gray-400">
               <span>Color space</span>
-              <select value={form.colorSpace} onChange={(event) => onChange({ colorSpace: event.target.value })} className={FIELD_CLASS}>
+              <select value={form.colorSpace} onChange={(event) => onChange({ colorSpace: event.target.value })} className={SELECT_FIELD_CLASS}>
                 <option value="Rec.709">Rec.709</option>
                 <option value="Rec.2020">Rec.2020</option>
                 <option value="sRGB">sRGB</option>

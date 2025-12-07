@@ -1,5 +1,6 @@
 #include <vortex/nodes/output/window_output.h>
 #include <vortex/graphics.h>
+#include <algorithm>
 
 vortex::WindowOutput::WindowOutput(const vortex::Graphics& gfx, SerializedProperties props)
     : ImplClass(props)
@@ -11,6 +12,12 @@ vortex::WindowOutput::WindowOutput(const vortex::Graphics& gfx, SerializedProper
                             .size = { window_size.x, window_size.y }
 })
 {
+    // Keep the preview window small and windowed by default; cap oversized presets.
+    const uint32_t target_width = std::min<uint32_t>(window_size.x, 960);
+    const uint32_t target_height = std::min<uint32_t>(window_size.y, 540);
+    window_size = { target_width, target_height };
+    _window.SetSize(int(target_width), int(target_height));
+
     wis::Result result = wis::success;
     auto& device = gfx.GetDevice();
 
